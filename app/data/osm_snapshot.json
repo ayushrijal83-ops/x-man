@@ -1918,5 +1918,68 @@
    "Tribhuban Rajmarg": "NH01",
    "महेन्द्र राज्मार्ग्": "NH01"
   }
+ },
+ "Rolpa": {
+  "rivers": [
+   "Bagauna Khola",
+   "Chunban Khola",
+   "Fagam Khola",
+   "Gajul khola",
+   "Ghusban Khola",
+   "Lungri River",
+   "Marim Khola",
+   "माडी नदी",
+   "हापुर खोला"
+  ],
+  "roads": {}
+ },
+ "Rupandehi": {
+  "rivers": [
+   "36 khola",
+   "36 khola stream",
+   "36 mauja",
+   "Banarahawa River",
+   "Danau River",
+   "Dande River",
+   "Dano River",
+   "Godhaha Khola",
+   "Kanchan River",
+   "Rohini",
+   "Sukhaura Khola",
+   "Tinaau",
+   "Tinau River",
+   "Tinau River (Tilottama)",
+   "तिनाउ खोला",
+   "तिनाउ नदी",
+   "३६ मौजा तपाहा"
+  ],
+  "roads": {
+   "Bank Road": "NH05",
+   "Bishnupura Road": "NH52",
+   "Danabkhola bridge": "",
+   "Devdaha Marg": "49A012R",
+   "F45": "F45",
+   "Gautam Buddha Road": "NH52",
+   "Kanchan Bridge": "NH52",
+   "Khaireni Dhakdhai Road": "49A001R",
+   "Mahendra Chowk": "NH01",
+   "NH05": "NH05",
+   "NH47": "NH47",
+   "NH52": "NH52",
+   "Parasi Road": "NH05",
+   "Purano Sadak": "",
+   "Puranon Sadak": "",
+   "Siddhartha Highway": "NH47",
+   "Siddhartha Highway;Mahendra Highway": "NH01",
+   "Sidhartha Highway": "NH47",
+   "Taulihawa Road": "NH05",
+   "Vishnupura Road": "NH05",
+   "गौतम वुद्ध मार्ग": "49A017R",
+   "देवदह मार्ग": "49A012R",
+   "महेन्द्र राजमार्ग": "NH01",
+   "महेन्द्र राज्मार्ग्": "NH01",
+   "श्री गणेश पथ": "",
+   "सिद्धार्थ राजमार्ग": "NH47"
+  }
  }
 }
