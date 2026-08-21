@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Complaint {{ complaint.ticket_number }} - NepalSathi{% endblock %}
+
+{% block content %}
+<nav class="navbar">
+    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/complaints/new">File Complaint</a>
+        <a href="/complaints/">My Complaints</a>
+        <a href="/auth/logout">Logout</a>
+    </div>
+</nav>
+
+<div class="container">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h1>📋 Complaint Details</h1>
+        <span class="status-badge status-{{ complaint.status }}">{{ complaint.status|upper }}</span>
+    </div>
+    
+    <div class="card" style="margin-top: 2rem;">
+        <h2 class="card-title">Ticket: {{ complaint.ticket_number }}</h2>
+        
+        <div class="grid grid-2">
+            <div>
+                <p><strong>Category:</strong> {{ complaint.category|upper }}</p>
+                <p><strong>Urgency:</strong> {{ complaint.urgency|upper }}</p>
+                <p><strong>Location:</strong> {{ complaint.location or 'Not specified' }}</p>
+                <p><strong>Filed:</strong> {{ complaint.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+            </div>
+            <div>
+                <p><strong>District ID:</strong> {{ complaint.district_id }}</p>
+                <p><strong>Authority ID:</strong> {{ complaint.authority_id }}</p>
+                <p><strong>Last Updated:</strong> {{ complaint.updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                <p><strong>Status:</strong> <span class="status-badge status-{{ complaint.status }}">{{ complaint.status }}</span></p>
+            </div>
+        </div>
+        
+        <div style="margin-top: 1.5rem;">
+            <h3>Description</h3>
+            <p style="background: #f9fafb; padding: 1rem; border-radius: 0.5rem;">{{ complaint.description }}</p>
+        </div>
+        
+        {% if complaint.government_response %}
+        <div style="margin-top: 1.5rem;">
+            <h3>🏛️ Government Response</h3>
+            <p style="background: #f0fdf4; padding: 1rem; border-radius: 0.5rem;">{{ complaint.government_response }}</p>
+        </div>
+        {% endif %}
+        
+        {% if complaint.resolution_details %}
+        <div style="margin-top: 1.5rem;">
+            <h3>✅ Resolution Details</h3>
+            <p style="background: #eff6ff; padding: 1rem; border-radius: 0.5rem;">{{ complaint.resolution_details }}</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <div style="margin-top: 2rem;">
+        <a href="/complaints/" class="btn btn-outline">← Back to My Complaints</a>
+    </div>
+</div>
+{% endblock %}

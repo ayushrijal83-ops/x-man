@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Complaints - Authority - NepalSathi{% endblock %}
+
+{% block content %}
+<nav class="navbar" style="background: #1a1a2e;">
+    <a href="/" class="nav-brand">🏛️ {{ authority.name }}</a>
+    <div class="nav-links">
+        <a href="/authority/dashboard">Dashboard</a>
+        <a href="/authority/complaints">Complaints</a>
+        <a href="/authority/projects">Projects</a>
+        <a href="/authority/roads">Roads</a>
+        <a href="/authority/rivers">Rivers</a>
+        <a href="/auth/logout">Logout</a>
+    </div>
+</nav>
+
+<div class="container">
+    <h1>📋 Complaints</h1>
+    <p style="color: #6b7280;">All complaints filed to {{ authority.name }}</p>
+    
+    {% if complaints %}
+        <div class="grid grid-2">
+            {% for complaint in complaints %}
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3>{{ complaint.ticket_number }}</h3>
+                        <span class="status-badge status-{{ complaint.status }}">{{ complaint.status }}</span>
+                    </div>
+                    <p><strong>Category:</strong> {{ complaint.category|upper }}</p>
+                    <p><strong>Urgency:</strong> {{ complaint.urgency|upper }}</p>
+                    <p><strong>Location:</strong> {{ complaint.location }}</p>
+                    <p><strong>Description:</strong> {{ complaint.description[:100] }}...</p>
+                    <p><strong>Filed:</strong> {{ complaint.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                    <a href="/authority/complaints/{{ complaint.id }}" class="btn btn-primary">Respond</a>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="card" style="text-align: center;">
+            <p>No complaints filed.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

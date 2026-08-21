@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Authority Registration - NepalSathi{% endblock %}
+
+{% block content %}
+<div class="auth-container" style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+    <div class="auth-card" style="max-width: 500px;">
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <h2 class="auth-title">🏛️ Authority Registration</h2>
+            <p class="auth-subtitle">Register your government organization</p>
+        </div>
+        
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="form-group">
+                <label>Organization Name</label>
+                <input type="text" name="authority_name" class="form-input" required 
+                       placeholder="e.g., Sindhuli Road Division Office">
+            </div>
+            
+            <div class="form-group">
+                <label>Category</label>
+                <select name="authority_category" class="form-input" required>
+                    <option value="road">Road Division</option>
+                    <option value="police">Police</option>
+                    <option value="electricity">Electricity Authority</option>
+                    <option value="water">Water Supply</option>
+                    <option value="health">Health Office</option>
+                    <option value="municipality">Municipality</option>
+                    <option value="disaster">Disaster Management</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>District</label>
+                <select name="district_id" class="form-input" required>
+                    {% for district in districts %}
+                        <option value="{{ district.id }}">{{ district.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Phone</label>
+                <input type="text" name="phone" class="form-input" placeholder="e.g., 047-520123">
+            </div>
+            
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" name="email" class="form-input" required placeholder="Organization email">
+            </div>
+            
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" class="form-input" required placeholder="Choose username">
+            </div>
+            
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" class="form-input" required 
+                       placeholder="Create password" minlength="6">
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block" 
+                    style="background: #1a1a2e;">
+                Register Authority Account
+            </button>
+        </form>
+        
+        <div style="margin-top: 1.5rem; text-align: center;">
+            <p class="auth-footer">
+                <a href="/auth/authority/login">← Authority Login</a>
+            </p>
+            <p class="auth-footer" style="margin-top: 0.5rem;">
+                <a href="/auth/register">Citizen Registration</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

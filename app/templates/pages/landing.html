@@ -4,46 +4,78 @@
 
 {% block content %}
 <div style="min-height: 100vh; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);">
-    <nav class="navbar" style="background: transparent;">
-        <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-        <div class="nav-links">
-            <a href="/auth/login">Login</a>
-            <a href="/auth/register" class="btn btn-primary" style="background: white; color: #1e3c72;">Get Started</a>
+    <nav style="display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 3rem;">
+        <a href="/" style="font-size: 1.8rem; font-weight: bold; color: white; text-decoration: none;">
+            🇳🇵 NepalSathi
+        </a>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <a href="/auth/authority/login" style="color: white; text-decoration: none; padding: 0.5rem 1rem; border: 2px solid rgba(255,255,255,0.5); border-radius: 0.5rem;">
+                🏛️ Authority Login
+            </a>
+            <a href="/auth/login" style="color: white; text-decoration: none; padding: 0.5rem 1rem;">
+                Citizen Login
+            </a>
+            <a href="/auth/register" style="background: white; color: #1e3c72; text-decoration: none; padding: 0.5rem 1.5rem; border-radius: 0.5rem; font-weight: 600;">
+                Get Started
+            </a>
         </div>
     </nav>
     
-    <div style="text-align: center; padding: 6rem 2rem; color: white;">
-        <h1 style="font-size: 3.5rem; margin-bottom: 1rem;">🇳🇵 NepalSathi</h1>
-        <p style="font-size: 1.5rem; margin-bottom: 0.5rem;">Know your district. Know your roads. Know your Nepal.</p>
-        <p style="font-size: 1.1rem; margin-bottom: 2rem; opacity: 0.9;">
+    <div style="text-align: center; padding: 5rem 2rem; color: white;">
+        <h1 style="font-size: 4rem; margin-bottom: 1rem; font-weight: bold;">
+            🇳🇵 NepalSathi
+        </h1>
+        <p style="font-size: 1.8rem; margin-bottom: 0.5rem;">
+            Know your district. Know your roads. Know your Nepal.
+        </p>
+        <p style="font-size: 1.2rem; margin-bottom: 3rem; opacity: 0.9;">
             Nepal's AI-powered district intelligence & community platform
         </p>
-        <div style="display: flex; gap: 1rem; justify-content: center;">
-            <a href="/auth/register" class="btn btn-primary" style="background: white; color: #1e3c72; padding: 0.75rem 1.5rem; font-size: 1.1rem;">
+        
+        <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 4rem;">
+            <a href="/auth/register" style="background: white; color: #1e3c72; text-decoration: none; padding: 1rem 2rem; border-radius: 0.75rem; font-size: 1.2rem; font-weight: 600;">
                 Start Exploring
+            </a>
+            <a href="/auth/authority/register" style="background: transparent; color: white; text-decoration: none; padding: 1rem 2rem; border: 2px solid white; border-radius: 0.75rem; font-size: 1.2rem;">
+                Register as Authority
             </a>
         </div>
         
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; margin-top: 4rem; max-width: 900px; margin-left: auto; margin-right: auto;">
-            <div>
-                <div style="font-size: 2.5rem;">🛣️</div>
-                <h3>Live Road Tracking</h3>
-                <p style="opacity: 0.9;">Real-time road conditions across Nepal</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem; max-width: 1000px; margin: 0 auto;">
+            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🛣️</div>
+                <h3 style="margin-bottom: 0.5rem;">Live Road Tracking</h3>
+                <p style="opacity: 0.9;">Real-time road conditions across Nepal's highways</p>
             </div>
-            <div>
-                <div style="font-size: 2.5rem;">🌊</div>
-                <h3>River Monitoring</h3>
-                <p style="opacity: 0.9;">Track river levels and flood risks</p>
+            
+            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🌊</div>
+                <h3 style="margin-bottom: 0.5rem;">River Monitoring</h3>
+                <p style="opacity: 0.9;">Track river levels and flood risks in your district</p>
             </div>
-            <div>
-                <div style="font-size: 2.5rem;">🏗️</div>
-                <h3>Project Tracker</h3>
-                <p style="opacity: 0.9;">Follow development projects</p>
+            
+            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🏗️</div>
+                <h3 style="margin-bottom: 0.5rem;">Project Tracker</h3>
+                <p style="opacity: 0.9;">Follow development projects in real-time</p>
             </div>
-            <div>
-                <div style="font-size: 2.5rem;">🤖</div>
-                <h3>AI Intelligence</h3>
-                <p style="opacity: 0.9;">Smart insights for better decisions</p>
+            
+            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🏛️</div>
+                <h3 style="margin-bottom: 0.5rem;">Government Directory</h3>
+                <p style="opacity: 0.9;">Connect with local authorities directly</p>
+            </div>
+            
+            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🚗</div>
+                <h3 style="margin-bottom: 0.5rem;">Travel Planner</h3>
+                <p style="opacity: 0.9;">Plan safe journeys with live intelligence</p>
+            </div>
+            
+            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🤖</div>
+                <h3 style="margin-bottom: 0.5rem;">AI Assistant</h3>
+                <p style="opacity: 0.9;">Smart insights powered by local AI</p>
             </div>
         </div>
     </div>

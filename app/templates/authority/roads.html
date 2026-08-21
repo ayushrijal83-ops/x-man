@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Roads - Authority - NepalSathi{% endblock %}
+
+{% block content %}
+<nav class="navbar" style="background: #1a1a2e;">
+    <a href="/" class="nav-brand">🏛️ {{ authority.name }}</a>
+    <div class="nav-links">
+        <a href="/authority/dashboard">Dashboard</a>
+        <a href="/authority/complaints">Complaints</a>
+        <a href="/authority/projects">Projects</a>
+        <a href="/authority/roads">Roads</a>
+        <a href="/authority/rivers">Rivers</a>
+        <a href="/auth/logout">Logout</a>
+    </div>
+</nav>
+
+<div class="container">
+    <h1>🛣️ Road Management</h1>
+    <p style="color: #6b7280;">Update road status in your district</p>
+    
+    {% if roads %}
+        <div class="grid grid-2">
+            {% for road in roads %}
+                <div class="card">
+                    <h3>{{ road.name }}</h3>
+                    <p style="color: #6b7280;">{{ road.highway }}</p>
+                    
+                    <div style="margin: 1rem 0;">
+                        <span class="status-badge status-{{ road.status }}">{{ road.status }}</span>
+                        <span class="status-badge status-{{ road.traffic_level }}">{{ road.traffic_level }}</span>
+                    </div>
+                    
+                    <form method="POST" action="/authority/roads/{{ road.id }}/update">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="form-group">
+                            <label>Road Status</label>
+                            <select name="status" class="form-input">
+                                <option value="open" {% if road.status == 'open' %}selected{% endif %}>Open</option>
+                                <option value="partial" {% if road.status == 'partial' %}selected{% endif %}>Partially Open</option>
+                                <option value="restricted" {% if road.status == 'restricted' %}selected{% endif %}>Restricted</option>
+                                <option value="blocked" {% if road.status == 'blocked' %}selected{% endif %}>Blocked</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Traffic Level</label>
+                            <select name="traffic_level" class="form-input">
+                                <option value="low" {% if road.traffic_level == 'low' %}selected{% endif %}>Low</option>
+                                <option value="moderate" {% if road.traffic_level == 'moderate' %}selected{% endif %}>Moderate</option>
+                                <option value="heavy" {% if road.traffic_level == 'heavy' %}selected{% endif %}>Heavy</option>
+                                <option value="severe" {% if road.traffic_level == 'severe' %}selected{% endif %}>Severe</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Update Description</label>
+                            <textarea name="description" class="form-input" rows="2" placeholder="Describe the update..."></textarea>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Update Road</button>
+                    </form>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="card" style="text-align: center;">
+            <p>No roads in your district.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

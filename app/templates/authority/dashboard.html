@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Authority Dashboard - NepalSathi{% endblock %}
+
+{% block content %}
+<nav class="navbar" style="background: #1a1a2e;">
+    <a href="/" class="nav-brand">🏛️ {{ authority.name }}</a>
+    <div class="nav-links">
+        <a href="/authority/dashboard">Dashboard</a>
+        <a href="/authority/complaints">Complaints</a>
+        <a href="/authority/projects">Projects</a>
+        <a href="/authority/roads">Roads</a>
+        <a href="/authority/rivers">Rivers</a>
+        <a href="/auth/logout">Logout</a>
+    </div>
+</nav>
+
+<div class="container">
+    <h1>🏛️ Authority Dashboard</h1>
+    <p style="color: #6b7280;">{{ authority.name }} | {{ authority.category|upper }}</p>
+    
+    <div class="grid grid-4" style="margin: 2rem 0;">
+        <div class="stat-card">
+            <div class="stat-value">{{ total_complaints }}</div>
+            <div class="stat-label">Total Complaints</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" style="color: #f59e0b;">{{ pending }}</div>
+            <div class="stat-label">Pending</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" style="color: #3b82f6;">{{ in_progress }}</div>
+            <div class="stat-label">In Progress</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" style="color: #10b981;">{{ resolved }}</div>
+            <div class="stat-label">Resolved</div>
+        </div>
+    </div>
+    
+    <div class="grid grid-2">
+        <div class="card">
+            <h2 class="card-title">📋 Recent Complaints</h2>
+            {% if complaints %}
+                {% for complaint in complaints[:5] %}
+                    <div style="padding: 0.75rem 0; border-bottom: 1px solid #e5e7eb;">
+                        <strong>{{ complaint.ticket_number }}</strong>
+                        <span class="status-badge status-{{ complaint.status }}">{{ complaint.status }}</span>
+                        <p style="font-size: 0.875rem;">{{ complaint.description[:80] }}...</p>
+                    </div>
+                {% endfor %}
+                <a href="/authority/complaints" class="btn btn-outline btn-block" style="margin-top: 1rem;">View All</a>
+            {% else %}
+                <p>No complaints.</p>
+            {% endif %}
+        </div>
+        
+        <div class="card">
+            <h2 class="card-title">🏗️ Projects</h2>
+            {% if projects %}
+                {% for project in projects %}
+                    <div style="padding: 0.75rem 0; border-bottom: 1px solid #e5e7eb;">
+                        <strong>{{ project.name }}</strong>
+                        <div class="progress-bar" style="margin: 0.5rem 0;">
+                            <div class="progress-fill" style="width: {{ project.progress_percent }}%;"></div>
+                        </div>
+                        <small>{{ project.progress_percent }}% complete</small>
+                    </div>
+                {% endfor %}
+                <a href="/authority/projects" class="btn btn-outline btn-block" style="margin-top: 1rem;">Manage Projects</a>
+            {% else %}
+                <p>No projects assigned.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

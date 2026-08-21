@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Rivers - Authority - NepalSathi{% endblock %}
+
+{% block content %}
+<nav class="navbar" style="background: #1a1a2e;">
+    <a href="/" class="nav-brand">🏛️ {{ authority.name }}</a>
+    <div class="nav-links">
+        <a href="/authority/dashboard">Dashboard</a>
+        <a href="/authority/complaints">Complaints</a>
+        <a href="/authority/projects">Projects</a>
+        <a href="/authority/roads">Roads</a>
+        <a href="/authority/rivers">Rivers</a>
+        <a href="/auth/logout">Logout</a>
+    </div>
+</nav>
+
+<div class="container">
+    <h1>🌊 River Management</h1>
+    <p style="color: #6b7280;">Update river levels and issue warnings</p>
+    
+    {% if rivers %}
+        <div class="grid grid-2">
+            {% for river in rivers %}
+                <div class="card">
+                    <h3>{{ river.name }}</h3>
+                    
+                    <div style="margin: 1rem 0;">
+                        <span class="status-badge status-{{ river.status }}">{{ river.status }}</span>
+                    </div>
+                    
+                    <p><strong>Current Level:</strong> {{ river.current_level }}m</p>
+                    <p><strong>Danger Level:</strong> {{ river.danger_level }}m</p>
+                    
+                    <form method="POST" action="/authority/rivers/{{ river.id }}/update" style="margin-top: 1rem;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="form-group">
+                            <label>Water Level (m)</label>
+                            <input type="number" name="water_level" class="form-input" step="0.1" value="{{ river.current_level }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select name="status" class="form-input">
+                                <option value="normal" {% if river.status == 'normal' %}selected{% endif %}>Normal</option>
+                                <option value="rising" {% if river.status == 'rising' %}selected{% endif %}>Rising</option>
+                                <option value="high" {% if river.status == 'high' %}selected{% endif %}>High</option>
+                                <option value="flooding" {% if river.status == 'flooding' %}selected{% endif %}>Flooding</option>
+                            </select>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Update River</button>
+                    </form>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="card" style="text-align: center;">
+            <p>No rivers in your district.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

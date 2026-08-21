@@ -1,7 +1,6 @@
 from flask import Flask
 import os
 from dotenv import load_dotenv
-from app.routes.ai_routes import ai_bp
 
 load_dotenv()
 
@@ -35,6 +34,8 @@ def create_app(config_name=None):
     from app.routes.projects import projects_bp
     from app.routes.authorities import authorities_bp
     from app.routes.travel import travel_bp
+    from app.routes.ai_routes import ai_bp
+    from app.routes.authority_panel import authority_panel_bp
     
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -47,6 +48,7 @@ def create_app(config_name=None):
     app.register_blueprint(authorities_bp, url_prefix='/authorities')
     app.register_blueprint(travel_bp, url_prefix='/travel')
     app.register_blueprint(ai_bp, url_prefix='/ai')
+    app.register_blueprint(authority_panel_bp, url_prefix='/authority')
     
     @app.after_request
     def add_security_headers(response):
