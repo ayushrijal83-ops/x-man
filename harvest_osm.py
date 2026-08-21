@@ -8,6 +8,15 @@ import json, os, sys, time
 import requests
 
 OVERPASS = 'https://overpass-api.de/api/interpreter'
+
+# OpenStreetMap labels some districts differently from the district table, so
+# a plain name:en lookup silently matched nothing and returned no roads/rivers.
+# Reuse the same mapping the importer uses, inverted (db name -> OSM name).
+try:
+    from import_nepal_data import DISTRICT_ALIASES
+    OSM_NAME = {v: k for k, v in DISTRICT_ALIASES.items()}
+except Exception:      # importer not importable (e.g. no app context) -- degrade
+    OSM_NAME = {}
 # Overpass returns 406 without a real User-Agent.
 HEADERS = {'User-Agent': 'NepalSathi/1.0 (district intelligence; contact: ayushruchal83@gmail.com)'}
 OUT = os.path.join('app', 'data', 'osm_snapshot.json')
@@ -26,6 +35,7 @@ out tags;
 
 
 def fetch(district, attempt=1):
+    district = OSM_NAME.get(district, district)
     try:
         r = requests.post(OVERPASS, data={'data': QUERY % {'d': district}},
                           headers=HEADERS, timeout=180)
@@ -57,7 +67,13 @@ def main():
         with open(OUT, encoding='utf-8') as f:
             snap = json.load(f)
 
-    todo = [n for n in names if n not in snap]
+    # An entry with neither roads nor rivers means the area lookup found
+    # nothing, not that the district is genuinely empty -- retry those.
+    def harvested(n):
+        e = snap.get(n)
+        return bool(e) and (e.get('roads') or e.get('rivers'))
+
+    todo = [n for n in names if not harvested(n)]
     print('%d districts total, %d already harvested, %d to go'
           % (len(names), len(snap), len(todo)))
 

@@ -33,7 +33,7 @@
 
 | Feature | Description |
 | --- | --- |
-| **Road status** | Segment-level conditions across 17 highways, with closure and traffic state per district |
+| **Road status** | Segment-level conditions across 34 highways, with closure and traffic state per district |
 | **River monitoring** | Water levels against danger marks, with `normal` / `rising` / `flooding` derived from the ratio |
 | **Project tracking** | Public works with budget, spend, contractor, and completion percentage |
 | **Complaints** | File an issue against the responsible authority and track it to a response |
@@ -165,8 +165,8 @@ python harvest_osm.py                 # resumable; writes app/data/osm_snapshot.
 | Table | Rows |
 | --- | --- |
 | Districts | 77 (all with population, 74 with area) |
-| Road segments | 72 across 46 districts, 17 highways |
-| Rivers | 94 across 63 districts |
+| Road segments | 97 across 56 districts, 34 highways |
+| Rivers | 115 across 66 districts |
 
 ---
 

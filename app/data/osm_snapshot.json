@@ -442,8 +442,32 @@
   }
  },
  "Darchula": {
-  "rivers": [],
-  "roads": {}
+  "rivers": [
+   "Baku Gad",
+   "Bhartola Gad",
+   "Budhi Gad",
+   "Chamaliya",
+   "Chamlia River",
+   "Darma Yankti",
+   "Kalapani River",
+   "Lali Gad",
+   "Lima Gad",
+   "Mahakali River",
+   "Nampa",
+   "Nau Gad",
+   "Naugarh Gad",
+   "Phatan Gad",
+   "Rithe Gad",
+   "Sharda",
+   "Tampa Khola",
+   "Thali Gad",
+   "Tinkar Khola",
+   "Tinkar Nadi",
+   "चमेलिया नदी"
+  ],
+  "roads": {
+   "Mahakali Highway": "NH66"
+  }
  },
  "Dhading": {
   "rivers": [
@@ -657,6 +681,28 @@
    "Khaireni-Gorkha Highway": "NH44"
   }
  },
+ "Gulmi": {
+  "rivers": [
+   "Badi Gad River",
+   "Chhalli Khola",
+   "Daram Khola",
+   "Ghamir khola",
+   "Hugdi Khola",
+   "Nisti Khola",
+   "Pana Gad",
+   "Ridi Khola",
+   "कालीगण्डकी नदी"
+  ],
+  "roads": {
+   "Bal Mandir Road": "NH19",
+   "Balkot-Khariyang-Ridi": "NH09",
+   "Chidi Chaur Road": "NH19",
+   "Jeep park road": "NH19",
+   "Khanigaun road": "NH19",
+   "Purano Bazar Road": "NH19",
+   "Tansen-Ridi Highway": "NH19"
+  }
+ },
  "Humla": {
   "rivers": [
    "Chua Khola",
@@ -683,8 +729,29 @@
   "roads": {}
  },
  "Ilam": {
-  "rivers": [],
-  "roads": {}
+  "rivers": [
+   "Biring",
+   "Buwa Khola",
+   "Garuwa Khola",
+   "Ingala Kola",
+   "Jogmai Khola",
+   "Kankai Mai",
+   "Lawa Khola",
+   "Mai Khola",
+   "Mawa Khola",
+   "Nunsari Khola",
+   "Puwa Khola",
+   "Ratua Khola",
+   "Rikhuwa Khola",
+   "Tangting",
+   "Timai Khola",
+   "kankai mai"
+  ],
+  "roads": {
+   "Mirik Road": "SH12",
+   "Phikkal Pashupatinagar Road": "F38",
+   "मेची राजमार्ग": "NH02"
+  }
  },
  "Jajarkot": {
   "rivers": [
@@ -825,8 +892,32 @@
   }
  },
  "Kanchanpur": {
-  "rivers": [],
-  "roads": {}
+  "rivers": [
+   "Bhingri Gad",
+   "Bhujela Khola",
+   "Chaundhar Nadi",
+   "Donda River",
+   "Gauji Khola",
+   "Jogbuda Nadi",
+   "Mahakali River",
+   "Manahara Khola",
+   "Mohana",
+   "Mohana River",
+   "Rangun River(jogbuda)",
+   "Sharda",
+   "Suheli",
+   "Sunbara",
+   "Sunbora Nadi",
+   "Syali Nadi"
+  ],
+  "roads": {
+   "Bedkot Road": "F151",
+   "Daijee- Jogbuda Road": "F151",
+   "Mohana Bridge": "NH05",
+   "NH05": "NH05",
+   "NH109D": "NH109D",
+   "महेन्द्र राज्मार्ग्": "NH01"
+  }
  },
  "Kapilvastu": {
   "rivers": [
@@ -1702,8 +1793,41 @@
   }
  },
  "Nawalpur": {
-  "rivers": [],
-  "roads": {}
+  "rivers": [
+   "Arun Khola",
+   "Bad Khola",
+   "Ban Khola",
+   "Beldiya Khola",
+   "Bhoti Khola",
+   "Binai",
+   "Girwari Khola",
+   "Jharahi Khola",
+   "Kakarsot Khola",
+   "Kali Gandaki",
+   "Lokaha Khola",
+   "Mukunde Khola",
+   "Narayani",
+   "Phirdi Khola",
+   "Phulmadi Khola",
+   "Trisuli",
+   "amrasa khola",
+   "pathar khola"
+  ],
+  "roads": {
+   "Dedgaun - Ghumarighat Road": "NH09",
+   "Dedgaun Road": "NH09",
+   "Gaindakot - Rampur Road": "",
+   "Kaligandaki Corridor": "NH09",
+   "Lokaha Bridge": "NH01",
+   "Mahendra Highway": "NH01",
+   "Mahendra Rajmarg": "NH01",
+   "Manpur - Ghumarighat Road": "F163",
+   "NH09": "NH09",
+   "Ratnapur Sadak": "NH09",
+   "daldale-dhobadi road": "NH45",
+   "pathar khola bridge": "NH01",
+   "महेन्द्र राज्मार्ग्": "NH01"
+  }
  },
  "Nuwakot": {
   "rivers": [
@@ -1808,8 +1932,22 @@
   }
  },
  "Parasi": {
-  "rivers": [],
-  "roads": {}
+  "rivers": [
+   "Narayani",
+   "fedi khola"
+  ],
+  "roads": {
+   "Khaireni Dhakdhai Road": "49A001R",
+   "Madhan Bhandari Road": "F9",
+   "Mahendra Rajmarg": "NH01",
+   "Malahpokhari Road": "",
+   "NH05": "NH05",
+   "Parasi Road": "NH05",
+   "Pratappur Bridge": "F8",
+   "Pratappur to Triveni Road": "F8",
+   "Tribeni Road": "F8",
+   "महेन्द्र राज्मार्ग्": "NH01"
+  }
  },
  "Parbat": {
   "rivers": [
@@ -2110,8 +2248,39 @@
   }
  },
  "Sindhupalchok": {
-  "rivers": [],
-  "roads": {}
+  "rivers": [
+   "Balephi Khola",
+   "Bhote Koshi",
+   "Hadi Khola",
+   "Indrawati Nadi",
+   "Indrawati River",
+   "Indrawati river",
+   "Larke Khola",
+   "Melamchi Khola",
+   "Melamchi River",
+   "Pheda Khola",
+   "Sun Koshi",
+   "Sun Kosi",
+   "Yangri Khola",
+   "波曲",
+   "波达柯西河 Bhote Koshi"
+  ],
+  "roads": {
+   "Ambathan road": "F30",
+   "Araniko Highway": "NH34",
+   "Araniko Rajmarg": "NH34",
+   "Arniko Highway": "NH34",
+   "Arniko Rajmarg": "H03",
+   "Chautara - Dolalghat Highway": "NH31",
+   "Helambu Road": "F30",
+   "Helambu Trek": "NH03",
+   "Melamchi Road": "F30",
+   "NH23": "NH23",
+   "NH34": "NH34",
+   "Phatkeshwor Sakhu Highway": "23DR046",
+   "Sindu Road": "NH03",
+   "Sino-Nepal Friendship Bridge": "NH34"
+  }
  },
  "Siraha": {
   "rivers": [
@@ -2291,7 +2460,63 @@
   }
  },
  "Terhathum": {
-  "rivers": [],
-  "roads": {}
+  "rivers": [
+   "Kansuwa Khola",
+   "Khorunga Khola",
+   "LAMBU KHOLA",
+   "Tamor Nadi"
+  ],
+  "roads": {
+   "Midhill Pushpalal Lokmarga": "NH03",
+   "NH03": "NH03",
+   "Sangranti": "NH03"
+  }
+ },
+ "Udayapur": {
+  "rivers": [
+   "Bahadura Khola",
+   "Bakuwa River",
+   "Ghumi Khola",
+   "Kakur Khola",
+   "Kali Khola",
+   "Kamala River",
+   "Koriya Khola",
+   "Koshi",
+   "Koshi River",
+   "Laikhu Khola",
+   "Sorung Khola",
+   "Sun Kosi",
+   "Tawa Khola",
+   "Tawa River",
+   "Triyuga",
+   "Triyuga Nadi"
+  ],
+  "roads": {
+   "Baruwa Bridge": "NH09",
+   "F57": "F57",
+   "Koshi Bridge": "NH09",
+   "NH03": "NH03",
+   "NH09": "NH09",
+   "NH20": "NH20"
+  }
+ },
+ "Western Rukum": {
+  "rivers": [
+   "Bheri",
+   "Jagadulla River",
+   "Jahari Khola",
+   "Thuli Bheri Nadi",
+   "भेरी खोला",
+   "शाहीकुरी गाड"
+  ],
+  "roads": {
+   "Kaildeu Road": "",
+   "Mid Hilly Highway": "",
+   "NH03": "NH03",
+   "NH55": "NH55",
+   "mid hill highway": "",
+   "मुसिकोट सडक": "",
+   "राप्ती राजमार्ग": "NH55"
+  }
  }
 }

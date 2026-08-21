@@ -40,10 +40,31 @@ DISTRICT_ALIASES = {
 # OSM spelling variants that would otherwise duplicate a seeded highway.
 HIGHWAY_ALIASES = {
     'Tribhuban Highway': 'Tribhuvan Highway',
+    'NH41: Tribhuvan Highway': 'Tribhuvan Highway',
     'Mahendra Rajmarg': 'Mahendra Highway',
     'Prithivi Highway': 'Prithvi Highway',
     'Araniko Rajmarg': 'Araniko Highway',
+    'Arniko Highway': 'Araniko Highway',
+    'Sidhartha Highway': 'Siddhartha Highway',
+    'Mid Hill Highway': 'Mid-Hill Highway',
+    'Mid Hilly Highway': 'Mid-Hill Highway',
+    'Pushpalal Highway': 'Mid-Hill Highway',        # Pushpalal is its official name
+    'Bardibas Jaleshwor Highway': 'Bardibas Jaleshwar Highway',
+    'Bhimdatta Panta Highway': 'Bhim Datta Panta Highway',
+    'Pokhara Baglung Highway': 'Pokhara - Baglung Highway',
+    'Khaireni-Gorkha Highway': 'Abukhaireni-Gorkha Highway',
+    'Pasang Lhamu Highway-Tadi bridge': 'Pasang Lhamu Highway',
 }
+
+
+def clean_highway(name):
+    """Normalise an OSM highway name.
+
+    OSM packs multiple values into one tag with semicolons, and spells the
+    same road several ways across districts.
+    """
+    name = (name or '').split(';')[0].strip()
+    return HIGHWAY_ALIASES.get(name, name)
 
 # "Nadi"/"Khola"/"Gad" already mean river/stream in Nepali, so OSM names like
 # "Lohare Nadi" must not become "Lohare Nadi River".
@@ -136,7 +157,7 @@ def import_roads(dmap, osm):
         for road_name, ref in (payload.get('roads') or {}).items():
             if not road_name or 'Highway' not in road_name:
                 continue
-            road_name = HIGHWAY_ALIASES.get(road_name, road_name)
+            road_name = clean_highway(road_name)
             if road_name in HIGHWAYS:
                 continue          # already covered by a seeded corridor
             label = '%s (%s)' % (road_name, district)
