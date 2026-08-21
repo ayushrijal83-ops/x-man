@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}HackForge - Build Faster{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <nav class="navbar">
+        <a href="/" class="nav-brand">HackForge</a>
+        <div class="nav-links">
+            <a href="/auth/login" class="btn btn-outline">Login</a>
+            <a href="/auth/register" class="btn btn-primary">Get Started</a>
+        </div>
+    </nav>
+    
+    <div class="hero-section">
+        <h1 class="hero-title">Build Amazing Projects Faster</h1>
+        <p class="hero-subtitle">
+            Your reusable foundation for rapid development. 
+            Focus on innovation, not infrastructure.
+        </p>
+        <div class="hero-actions">
+            <a href="/auth/register" class="btn btn-primary btn-lg">
+                Start Building
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - HackForge{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <nav class="navbar">
+        <a href="/" class="nav-brand">HackForge</a>
+        <div class="nav-links">
+            <span>{{ current_user.username }}</span>
+            <a href="/auth/logout" class="btn btn-outline btn-sm">Logout</a>
+        </div>
+    </nav>
+    
+    <div class="dashboard-content">
+        <h1 class="dashboard-title">Dashboard</h1>
+        <p class="dashboard-welcome">Welcome back, {{ current_user.username }}!</p>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Projects</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Features</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">0</div>
+                <div class="stat-label">AI Requests</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
