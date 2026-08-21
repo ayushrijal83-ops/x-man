@@ -3,22 +3,11 @@
 {% block title %}Project Tracker - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/districts">Districts</a>
-        <a href="/roads/status">Road Status</a>
-        <a href="/rivers/status">River Status</a>
-        <a href="/projects/tracker">Projects</a>
-        <a href="/travel/planner">Travel Planner</a>
-        <a href="/auth/logout">Logout</a>
-    </div>
-</nav>
+{% include "components/navbar.html" %}
 
 <div class="container">
-    <h1>🏗️ Development Project Tracker</h1>
-    <p style="color: #6b7280; margin-bottom: 2rem;">Track development projects across Nepal</p>
+    <h1><i data-lucide="building-2"></i> Development Project Tracker</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Track development projects across Nepal</p>
     
     <div class="card" style="margin-bottom: 2rem;">
         <form method="GET" style="display: flex; gap: 1rem; align-items: center;">
@@ -39,7 +28,7 @@
         {% for project in projects %}
             <div class="card">
                 <h3>{{ project.name }}</h3>
-                <p style="color: #6b7280;">{{ project.category|upper }} | {{ project.location }}</p>
+                <p style="color: var(--text-muted);">{{ project.category|upper }} | {{ project.location }}</p>
                 
                 <div style="margin: 1rem 0;">
                     <span class="status-badge status-{{ project.status }}">{{ project.status|upper }}</span>

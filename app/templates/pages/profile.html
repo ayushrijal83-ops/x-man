@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}{{ user.username }} - NepalSathi{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <!-- Profile Header -->
+    <div class="card" style="text-align: center; margin-bottom: 2rem; padding: 2rem;">
+        <div style="font-size: 4rem; margin-bottom: 1rem;">
+            {% if user.role == 'authority' %}
+                <i data-lucide="landmark"></i> {% elif user.role == 'admin' %}
+                <i data-lucide="badge-check"></i>
+            {% else %}
+                <i data-lucide="user"></i> {% endif %}
+        </div>
+        
+        <h1 style="margin-bottom: 0.5rem;">{{ user.username }}</h1>
+        
+        <div style="margin-bottom: 0.5rem;">
+            {% if user.role == 'authority' %}
+                <span class="status-badge status-open"><i data-lucide="check"></i> VERIFIED AUTHORITY</span>
+            {% elif user.is_verified %}
+                <span class="status-badge status-open"><i data-lucide="check"></i> VERIFIED</span>
+            {% else %}
+                <span class="status-badge">CITIZEN</span>
+            {% endif %}
+        </div>
+        
+        {% if district %}
+            <p style="margin-bottom: 0.25rem;"><i data-lucide="map-pin"></i> {{ district.name }}, {{ district.province }} Province</p>
+        {% endif %}
+        
+        <p style="color: var(--text-muted); margin-bottom: 0.25rem;"><i data-lucide="mail"></i> {{ user.email }}</p>
+        
+        {% if user.phone %}
+            <p style="color: var(--text-muted); margin-bottom: 0.25rem;"><i data-lucide="phone"></i> {{ user.phone }}</p>
+        {% endif %}
+        
+        <p style="color: var(--text-muted); margin-bottom: 0.5rem;"><i data-lucide="calendar"></i> Joined: {{ user.created_at.strftime('%B %Y') if user.created_at else 'N/A' }}</p>
+        
+        {% if user.bio %}
+            <div style="max-width: 500px; margin: 1rem auto; padding: 1rem; background: var(--bg-surface); border-radius: 0.5rem;">
+                <p style="font-style: italic;">"{{ user.bio }}"</p>
+            </div>
+        {% endif %}
+        
+        {% if badges %}
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-top: 1rem;">
+                {% for badge in badges %}
+                    <span class="status-badge status-open" style="font-size: 0.9rem;">{{ badge }}</span>
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        {% if user.role == 'authority' %}
+            <div style="margin-top: 1rem;">
+                <a href="/authority/dashboard" class="btn btn-primary">Go to Authority Dashboard</a>
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Stats -->
+    <div class="grid grid-4" style="margin-bottom: 2rem;">
+        <div class="stat-card">
+            <div class="stat-value">{{ total_posts }}</div>
+            <div class="stat-label">Posts</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ total_complaints }}</div>
+            <div class="stat-label">Complaints</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ resolved_complaints }}</div>
+            <div class="stat-label">Resolved</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ reputation }}</div>
+            <div class="stat-label">Reputation</div>
+        </div>
+    </div>
+    
+    <div class="grid grid-2">
+        <!-- Recent Posts -->
+        <div class="card">
+            <h2 class="card-title"><i data-lucide="file-text"></i> Recent Posts</h2>
+            {% if posts %}
+                {% for post in posts %}
+                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
+                        <p>{{ post.content[:100] }}{% if post.content|length > 100 %}...{% endif %}</p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.5rem;">
+                            <span class="status-badge status-{{ post.category or 'general' }}">{{ post.category or 'general' }}</span>
+                            {% if post.is_ai_classified %}
+                                <span class="status-badge status-open"><i data-lucide="bot"></i> AI</span>
+                            {% endif %}
+                            {% if post.severity %}
+                                <span class="status-badge status-{{ post.severity }}">{{ post.severity }}</span>
+                            {% endif %}
+                        </div>
+                        <small style="color: var(--text-muted);">{{ post.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                    </div>
+                {% endfor %}
+                {% if total_posts > 10 %}
+                    <p style="margin-top: 1rem; color: var(--text-muted);">Showing 10 of {{ total_posts }} posts</p>
+                {% endif %}
+            {% else %}
+                <p>No posts yet. <a href="/posts/create">Create your first post</a></p>
+            {% endif %}
+        </div>
+        
+        <!-- Recent Complaints -->
+        <div class="card">
+            <h2 class="card-title"><i data-lucide="clipboard-list"></i> Recent Complaints</h2>
+            {% if complaints %}
+                {% for complaint in complaints %}
+                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong>{{ complaint.ticket_number }}</strong>
+                            <span class="status-badge status-{{ complaint.status }}">{{ complaint.status }}</span>
+                        </div>
+                        <p style="font-size: 0.875rem; margin-top: 0.25rem;">{{ complaint.description[:80] }}...</p>
+                        <small style="color: var(--text-muted);">{{ complaint.created_at.strftime('%Y-%m-%d') }}</small>
+                    </div>
+                {% endfor %}
+                {% if total_complaints > 5 %}
+                    <p style="margin-top: 1rem; color: var(--text-muted);">Showing 5 of {{ total_complaints }} complaints</p>
+                {% endif %}
+            {% else %}
+                <p>No complaints filed. <a href="/complaints/new">File a complaint</a></p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .status-open { background: var(--success-bg); color: var(--success-text); }
+    .status-partial { background: var(--warning-bg); color: var(--warning-text); }
+    .status-blocked { background: var(--danger-bg); color: var(--danger-text); }
+    .status-normal { background: var(--success-bg); color: var(--success-text); }
+    .status-rising { background: var(--warning-bg); color: var(--warning-text); }
+    .status-flooding { background: var(--danger-bg); color: var(--danger-text); }
+    .status-low { background: var(--success-bg); color: var(--success-text); }
+    .status-medium { background: var(--warning-bg); color: var(--warning-text); }
+    .status-high { background: var(--danger-bg); color: var(--danger-text); }
+    .status-critical { background: var(--danger); color: white; }
+    .status-traffic { background: var(--warning-bg); color: var(--warning-text); }
+    .status-road_condition { background: var(--info-bg); color: var(--info-text); }
+    .status-weather { background: var(--info-bg); color: var(--info-text); }
+    .status-landslide { background: var(--danger-bg); color: var(--danger-text); }
+    .status-flood { background: var(--info-bg); color: var(--info-text); }
+    .status-emergency { background: var(--danger); color: white; }
+    .status-development { background: var(--success-bg); color: var(--success-text); }
+    .status-news { background: var(--bg-surface-hover); color: var(--text-secondary); }
+    .status-announcement { background: var(--warning-bg); color: var(--warning-text); }
+    .status-general { background: var(--bg-surface-hover); color: var(--text-secondary); }
+    .status-on_schedule { background: var(--success-bg); color: var(--success-text); }
+    .status-delayed { background: var(--warning-bg); color: var(--warning-text); }
+    .status-completed { background: var(--success-bg); color: var(--success-text); }
+    .status-pending { background: var(--warning-bg); color: var(--warning-text); }
+    .status-in_progress { background: var(--info-bg); color: var(--info-text); }
+    .status-resolved { background: var(--success-bg); color: var(--success-text); }
+    .status-rejected { background: var(--danger-bg); color: var(--danger-text); }
+</style>
+{% endblock %}

@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Community Feed - NepalSathi{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <div>
+            <h1><i data-lucide="newspaper"></i> Community Feed</h1>
+            <p style="color: var(--text-muted);">
+                {% if active_hashtag %}
+                    Posts tagged with #{{ active_hashtag }}
+                {% elif selected_district %}
+                    Posts from selected district
+                {% else %}
+                    Latest updates from your community
+                {% endif %}
+            </p>
+        </div>
+        <a href="/posts/create" class="btn btn-primary">+ Create Post</a>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card" style="margin-bottom: 2rem;">
+        <form method="GET" style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
+            <select name="district_id" class="form-input" style="max-width: 200px;">
+                <option value="">All Districts</option>
+                {% for district in districts %}
+                    <option value="{{ district.id }}" {% if selected_district == district.id|string %}selected{% endif %}>
+                        {{ district.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            
+            <select name="category" class="form-input" style="max-width: 200px;">
+                <option value="">All Categories</option>
+                <option value="traffic" {% if selected_category == 'traffic' %}selected{% endif %}>Traffic</option>
+                <option value="road_condition" {% if selected_category == 'road_condition' %}selected{% endif %}>Road Condition</option>
+                <option value="landslide" {% if selected_category == 'landslide' %}selected{% endif %}>Landslide</option>
+                <option value="flood" {% if selected_category == 'flood' %}selected{% endif %}>Flood</option>
+                <option value="weather" {% if selected_category == 'weather' %}selected{% endif %}>Weather</option>
+                <option value="development" {% if selected_category == 'development' %}selected{% endif %}>Development</option>
+                <option value="emergency" {% if selected_category == 'emergency' %}selected{% endif %}>Emergency</option>
+                <option value="news" {% if selected_category == 'news' %}selected{% endif %}>News</option>
+            </select>
+            
+            <button type="submit" class="btn btn-primary">Filter</button>
+        </form>
+    </div>
+    
+    <!-- Trending Topics -->
+    {% if trending %}
+    <div class="card" style="margin-bottom: 2rem;">
+        <h3 style="margin-bottom: 0.5rem;"><i data-lucide="flame"></i> Trending Topics</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+            {% for category, count in trending %}
+                <a href="/social/feed?category={{ category }}" class="status-badge status-{{ category }}" style="text-decoration: none;">
+                    #{{ category }} ({{ count }})
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Posts Feed -->
+    <div class="grid" style="gap: 1.5rem; max-width: 800px; margin: 0 auto;">
+        {% if posts %}
+            {% for post in posts %}
+                <div class="card">
+                    <!-- Post Header -->
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                        <div>
+                            <strong>
+                                {% if users.get(post.user_id) %}
+                                    <i data-lucide="user"></i> {{ users[post.user_id].username }}
+                                {% else %}
+                                    <i data-lucide="user"></i> User #{{ post.user_id }}
+                                {% endif %}
+                            </strong>
+                            {% if post.location %}
+                                <span style="color: var(--text-muted);"><i data-lucide="map-pin"></i> {{ post.location }}</span>
+                            {% endif %}
+                        </div>
+                        <small style="color: var(--text-muted);">{{ post.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                    </div>
+                    
+                    <!-- Post Content -->
+                    <p style="margin: 0.5rem 0; font-size: 1.05rem;">{{ post.content }}</p>
+                    
+                    <!-- Post Photo -->
+                    {% if post.photo_path %}
+                        <div style="margin: 0.75rem 0;">
+                            <img src="{{ url_for('static', filename=post.photo_path) }}" 
+                                 alt="Post photo" 
+                                 style="max-width: 100%; max-height: 350px; border-radius: 0.5rem; cursor: pointer; object-fit: cover;"
+                                 onclick="window.open(this.src, '_blank')">
+                        </div>
+                    {% endif %}
+                    
+                    <!-- AI Tags -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.5rem 0;">
+                        <span class="status-badge status-{{ post.category or 'general' }}">{{ post.category or 'general' }}</span>
+                        
+                        {% if post.is_ai_classified %}
+                            <span class="status-badge status-open" title="Classified by AI"><i data-lucide="bot"></i> AI</span>
+                        {% endif %}
+                        
+                        {% if post.severity %}
+                            <span class="status-badge status-{{ post.severity }}">{{ post.severity }}</span>
+                        {% endif %}
+                        
+                        {% if post.language == 'ne' %}
+                            <span class="status-badge"><i data-lucide="mountain-snow"></i> नेपाली</span>
+                        {% elif post.language == 'en' %}
+                            <span class="status-badge">English</span>
+                        {% endif %}
+                        
+                        {% if post.photo_path %}
+                            <span class="status-badge"><i data-lucide="camera"></i> Photo</span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Post Actions -->
+                    <div style="display: flex; gap: 1rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border);">
+                        <form method="POST" action="/social/post/{{ post.id }}/like" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline btn-sm"><i data-lucide="thumbs-up"></i> Like</button>
+                        </form>
+                        <a href="/social/post/{{ post.id }}" class="btn btn-outline btn-sm"><i data-lucide="message-circle"></i> Comment</a>
+                        <button class="btn btn-outline btn-sm" onclick="sharePost('{{ post.id }}')"><i data-lucide="share-2"></i> Share</button>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="card" style="text-align: center; padding: 3rem;">
+                {% if scope_district %}
+                    <h3>No posts in {{ scope_district.name }} yet</h3>
+                    <p style="color: var(--text-muted); margin: 1rem 0;">
+                        The feed is showing your district. Be the first to share something here,
+                        or browse posts from across Nepal.
+                    </p>
+                    <a href="/posts/create" class="btn btn-primary">Create Post</a>
+                    <a href="/social/feed?district_id=all" class="btn btn-secondary">View all districts</a>
+                {% else %}
+                    <h3>No posts found</h3>
+                    <p style="color: var(--text-muted); margin: 1rem 0;">Be the first to share something!</p>
+                    <a href="/posts/create" class="btn btn-primary">Create Post</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function sharePost(postId) {
+    const url = window.location.origin + '/social/post/' + postId;
+    
+    if (navigator.share) {
+        navigator.share({
+            title: 'NepalSathi Post',
+            url: url
+        }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Post link copied to clipboard!');
+        });
+    }
+}
+</script>
+
+<style>
+    .status-open { background: var(--success-bg); color: var(--success-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-partial { background: var(--warning-bg); color: var(--warning-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-low { background: var(--success-bg); color: var(--success-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-medium { background: var(--warning-bg); color: var(--warning-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-high { background: var(--danger-bg); color: var(--danger-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-critical { background: var(--danger); color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-traffic { background: var(--warning-bg); color: var(--warning-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-road_condition { background: var(--info-bg); color: var(--info-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-weather { background: var(--info-bg); color: var(--info-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-landslide { background: var(--danger-bg); color: var(--danger-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-flood { background: var(--info-bg); color: var(--info-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-emergency { background: var(--danger); color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-development { background: var(--success-bg); color: var(--success-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-news { background: var(--bg-surface-hover); color: var(--text-secondary); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-general { background: var(--bg-surface-hover); color: var(--text-secondary); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+</style>
+{% endblock %}

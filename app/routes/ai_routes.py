@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request, render_template
 from flask_login import login_required, current_user
 from app.services.ai_service import AIService
+from app.models import Post, District, RoadSegment, River, Project, Incident
 
 ai_bp = Blueprint('ai', __name__)
 ai_service = AIService()
@@ -29,8 +30,10 @@ def health():
     """Check AI service health."""
     is_healthy = ai_service.health_check()
     return jsonify({
-        'status': 'healthy' if is_healthy else 'unavailable',
-        'model': ai_service.model
+        'status': 'healthy' if is_healthy else 'fallback',
+        'provider': ai_service.provider,
+        'model': ai_service.model,
+        'message': 'Ollama connected' if is_healthy else 'Using fallback classification'
     })
 
 @ai_bp.route('/generate', methods=['POST'])
@@ -44,3 +47,28 @@ def generate():
     
     response = ai_service.generate(prompt)
     return jsonify({'response': response})
+
+@ai_bp.route('/test-classify')
+@login_required
+def test_classify():
+    """Test classification page."""
+    return render_template('pages/test_classify.html')
+
+@ai_bp.route('/district-summary/<int:district_id>')
+@login_required
+def district_summary(district_id):
+    """Generate district summary."""
+    district = District.query.get_or_404(district_id)
+    roads = RoadSegment.query.filter_by(district_id=district_id).all()
+    rivers = River.query.filter_by(district_id=district_id).all()
+    projects = Project.query.filter_by(district_id=district_id).all()
+    incidents = Incident.query.filter_by(district_id=district_id, status='active').all()
+    
+    summary = ai_service.summarize_district(
+        district.name, roads, rivers, projects, incidents
+    )
+    
+    return jsonify({
+        'district': district.name,
+        'summary': summary
+    })

@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Login - HackForge{% endblock %}
+{% block title %}Sign in - NepalSathi{% endblock %}
 
 {% block content %}
 <div class="auth-container">
     <div class="auth-card">
+        <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:1rem;">{% include "components/lang_selector.html" %}<button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false"><i data-lucide="moon"></i></button></div>
         <h2 class="auth-title">Welcome Back</h2>
         <p class="auth-subtitle">Login to continue to your dashboard</p>
         

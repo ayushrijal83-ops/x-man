@@ -3,19 +3,11 @@
 {% block title %}{{ project.name }} - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/projects/tracker">Projects</a>
-        <a href="/travel/planner">Travel Planner</a>
-        <a href="/auth/logout">Logout</a>
-    </div>
-</nav>
+{% include "components/navbar.html" %}
 
 <div class="container">
     <h1>{{ project.name }}</h1>
-    <p style="color: #6b7280;">{{ project.category|upper }} | {{ project.location }}</p>
+    <p style="color: var(--text-muted);">{{ project.category|upper }} | {{ project.location }}</p>
     
     <div class="grid grid-3" style="margin: 2rem 0;">
         <div class="stat-card">
@@ -42,10 +34,10 @@
     </div>
     
     <div class="card">
-        <h2 class="card-title">📊 Progress Updates</h2>
+        <h2 class="card-title"><i data-lucide="bar-chart-3"></i> Progress Updates</h2>
         {% if updates %}
             {% for update in updates %}
-                <div style="padding: 1rem 0; border-bottom: 1px solid #e5e7eb;">
+                <div style="padding: 1rem 0; border-bottom: 1px solid var(--border);">
                     <p><strong>{{ update.update_type|upper }}</strong> - {{ update.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
                     <p>{{ update.description }}</p>
                     {% if update.progress_percent %}

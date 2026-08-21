@@ -3,20 +3,11 @@
 {% block title %}Authority Directory - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/districts">Districts</a>
-        <a href="/authorities/directory">Authorities</a>
-        <a href="/complaints/new">File Complaint</a>
-        <a href="/auth/logout">Logout</a>
-    </div>
-</nav>
+{% include "components/navbar.html" %}
 
 <div class="container">
-    <h1>🏛️ Authority Directory</h1>
-    <p style="color: #6b7280; margin-bottom: 2rem;">Government authorities in your district</p>
+    <h1><i data-lucide="landmark"></i> Authority Directory</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Government authorities in your district</p>
     
     <div class="card" style="margin-bottom: 2rem;">
         <form method="GET" style="display: flex; gap: 1rem; align-items: center;">
@@ -37,12 +28,12 @@
         {% for authority in authorities %}
             <div class="card">
                 <h3>{{ authority.name }}</h3>
-                <span class="status-badge status-open">✓ VERIFIED</span>
+                <span class="status-badge status-open"><i data-lucide="check"></i> VERIFIED</span>
                 <div style="margin-top: 1rem;">
-                    <p><strong>📞 Phone:</strong> {{ authority.phone }}</p>
-                    <p><strong>✉️ Email:</strong> {{ authority.email }}</p>
-                    <p><strong>📍 Address:</strong> {{ authority.address }}</p>
-                    <p><strong>🕐 Hours:</strong> {{ authority.office_hours }}</p>
+                    <p><strong><i data-lucide="phone"></i> Phone:</strong> {{ authority.phone }}</p>
+                    <p><strong><i data-lucide="mail"></i> Email:</strong> {{ authority.email }}</p>
+                    <p><strong><i data-lucide="map-pin"></i> Address:</strong> {{ authority.address }}</p>
+                    <p><strong><i data-lucide="clock"></i> Hours:</strong> {{ authority.office_hours }}</p>
                     <p><strong>Category:</strong> {{ authority.category|upper }}</p>
                 </div>
                 <a href="/complaints/new" class="btn btn-primary" style="margin-top: 1rem;">File Complaint</a>

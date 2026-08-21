@@ -6,19 +6,45 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class AIService:
-    """AI Service for Ollama integration."""
+    """AI Service for NepalSathi with Ollama and fallback."""
     
     def __init__(self):
         self.base_url = os.getenv('OLLAMA_URL', 'http://localhost:11434')
         self.model = os.getenv('AI_MODEL', 'qwen2.5:0.5b')
+        self.provider = os.getenv('AI_PROVIDER', 'ollama')
     
     def generate(self, prompt, system_prompt=None):
-        """Generate response from Ollama."""
+        """Generate response from AI with Nepal context."""
+        nepal_context = """You are NepalSathi AI Assistant for Nepal. Answer briefly about:
+- Roads: BP Highway partially open near Dhulikhel
+- Rivers: Kamala River rising (3.2m), Sunkoshi normal, Bagmati normal
+- Projects: Kamala Bridge 65% complete, BP Highway Expansion 80%
+- Travel: Early morning best for most routes
+- Emergency: Police 100, Fire 101, Ambulance 102
+
+Keep answer SHORT (1-2 sentences)."""
+        
+        full_prompt = f"{nepal_context}\n\nQuestion: {prompt}\n\nAnswer:"
+        
+        if self.provider == 'ollama':
+            response = self._generate_ollama(full_prompt, system_prompt)
+            if response:
+                return response.strip()
+        
+        return self._generate_fallback(prompt)
+    
+    def _generate_ollama(self, prompt, system_prompt=None):
+        """Generate using Ollama with optimized settings."""
         try:
             payload = {
                 'model': self.model,
                 'prompt': prompt,
-                'stream': False
+                'stream': False,
+                'options': {
+                    'temperature': 0.3,
+                    'max_tokens': 80,
+                    'top_p': 0.9,
+                }
             }
             
             if system_prompt:
@@ -27,49 +53,91 @@ class AIService:
             response = requests.post(
                 f'{self.base_url}/api/generate',
                 json=payload,
-                timeout=30
+                timeout=20
             )
             
             if response.status_code == 200:
                 return response.json().get('response', '')
-            else:
-                return None
         except Exception as e:
-            print(f'AI Service Error: {e}')
-            return None
+            print(f'Ollama Error: {e}')
+        
+        return None
+    
+    def _generate_fallback(self, prompt):
+        """Fallback rule-based responses."""
+        prompt_lower = prompt.lower()
+        
+        if any(word in prompt_lower for word in ['road', 'highway', 'बाटो', 'सडक']):
+            return "BP Highway has some sections under construction near Dhulikhel. Check Road Status page for live updates."
+        
+        elif any(word in prompt_lower for word in ['river', 'flood', 'बाढी', 'नदी']):
+            return "Kamala River is rising (3.2m). Sunkoshi River is normal. Check River Status page for details."
+        
+        elif any(word in prompt_lower for word in ['project', 'development', 'आयोजना']):
+            return "Active projects: Kamala Bridge (65% complete) and BP Highway Expansion (80% complete)."
+        
+        elif any(word in prompt_lower for word in ['travel', 'journey', 'यात्रा']):
+            return "Use Travel Planner to analyze your route. Early morning is recommended."
+        
+        elif any(word in prompt_lower for word in ['complaint', 'report', 'उजुरी']):
+            return "File a complaint through Complaint page. Select authority and describe the issue."
+        
+        elif any(word in prompt_lower for word in ['emergency', 'sos', 'आपतकाल']):
+            return "Emergency: Police 100, Fire 101, Ambulance 102, Disaster 1149."
+        
+        elif any(word in prompt_lower for word in ['hello', 'hi', 'hey', 'नमस्ते']):
+            return "Namaste! I'm NepalSathi AI. Ask me about roads, rivers, projects, or travel in Nepal."
+        
+        else:
+            return "I can help with: road conditions, river status, projects, travel planning, complaints, and emergency numbers."
     
     def classify_post(self, content):
-        """Classify a post using AI."""
-        prompt = f"""Classify this post about Nepal road/community information.
+        """Classify a post using AI with better prompts."""
+        prompt = f"""Classify this Nepal post into ONE category.
 
 Post: {content}
 
-Return JSON with these fields:
-- category: traffic, road_condition, weather, landslide, emergency, development, news, announcement, general
-- severity: low, medium, high, critical
-- language: ne (Nepali) or en (English)
+Categories:
+- landslide: पहिरो, landslide, land slide
+- traffic: जाम, traffic, congestion, ट्राफिक
+- flood: बाढी, flood, flooding
+- road_condition: बाटो, सडक, road, pothole, construction, खाल्डो
+- weather: मौसम, weather, rain, पानी
+- emergency: accident, दुर्घटना, emergency
+- development: विकास, development, project
+- general: anything else
 
-Return ONLY JSON."""
+Severity:
+- critical: life-threatening
+- high: major disruption
+- medium: moderate issue
+- low: minor
+
+Language: ne (if Devanagari script) or en
+
+Return ONLY JSON:
+{{"category": "traffic", "severity": "medium", "language": "en"}}"""
         
-        response = self.generate(prompt)
+        if self.provider == 'ollama':
+            response = self._generate_ollama(prompt)
+            if response:
+                try:
+                    start = response.find('{')
+                    end = response.rfind('}') + 1
+                    if start >= 0 and end > start:
+                        result = json.loads(response[start:end])
+                        # Validate category
+                        valid_categories = ['landslide', 'traffic', 'flood', 'road_condition', 
+                                           'weather', 'emergency', 'development', 'general']
+                        if result.get('category') in valid_categories:
+                            return result
+                except:
+                    pass
         
-        if response:
-            try:
-                # Try to parse JSON from response
-                start = response.find('{')
-                end = response.rfind('}') + 1
-                if start >= 0 and end > start:
-                    json_str = response[start:end]
-                    return json.loads(json_str)
-            except:
-                pass
-        
-        # Fallback classification
         return self._fallback_classify(content)
     
     def detect_language(self, text):
-        """Detect if text is Nepali or English."""
-        # Simple heuristic: Check for Devanagari characters
+        """Detect Nepali or English."""
         devanagari_range = range(0x0900, 0x097F)
         nepali_chars = sum(1 for char in text if ord(char) in devanagari_range)
         
@@ -78,51 +146,76 @@ Return ONLY JSON."""
         return 'en'
     
     def _fallback_classify(self, content):
-        """Fallback classification without AI."""
+        """Fallback keyword-based classification."""
+        language = self.detect_language(content)
         content_lower = content.lower()
         
-        # Simple keyword matching
-        if any(word in content_lower for word in ['landslide', 'पहिरो']):
-            return {'category': 'landslide', 'severity': 'high', 'language': self.detect_language(content)}
-        elif any(word in content_lower for word in ['traffic', 'जाम', 'ट्राफिक']):
-            return {'category': 'traffic', 'severity': 'medium', 'language': self.detect_language(content)}
-        elif any(word in content_lower for word in ['flood', 'बाढी']):
-            return {'category': 'emergency', 'severity': 'critical', 'language': self.detect_language(content)}
-        elif any(word in content_lower for word in ['road', 'बाटो', 'सडक']):
-            return {'category': 'road_condition', 'severity': 'medium', 'language': self.detect_language(content)}
-        elif any(word in content_lower for word in ['weather', 'मौसम', 'पानी']):
-            return {'category': 'weather', 'severity': 'low', 'language': self.detect_language(content)}
+        # Traffic keywords (check first to avoid confusion)
+        if any(word in content for word in ['जाम', 'ट्राफिक']) or any(word in content_lower for word in ['traffic', 'congestion']):
+            return {'category': 'traffic', 'severity': 'medium', 'language': language}
+        
+        # Landslide
+        elif any(word in content for word in ['पहिरो']) or any(word in content_lower for word in ['landslide']):
+            return {'category': 'landslide', 'severity': 'high', 'language': language}
+        
+        # Flood
+        elif any(word in content for word in ['बाढी']) or any(word in content_lower for word in ['flood', 'flooding']):
+            return {'category': 'flood', 'severity': 'critical', 'language': language}
+        
+        # Road condition
+        elif any(word in content for word in ['बाटो', 'सडक', 'खाल्डो']) or any(word in content_lower for word in ['road', 'pothole', 'construction']):
+            return {'category': 'road_condition', 'severity': 'medium', 'language': language}
+        
+        # Weather
+        elif any(word in content for word in ['मौसम', 'पानी']) or any(word in content_lower for word in ['weather', 'rain']):
+            return {'category': 'weather', 'severity': 'low', 'language': language}
+        
+        # Development
+        elif any(word in content for word in ['विकास', 'आयोजना']) or any(word in content_lower for word in ['development', 'project']):
+            return {'category': 'development', 'severity': 'low', 'language': language}
+        
+        # Emergency
+        elif any(word in content for word in ['दुर्घटना']) or any(word in content_lower for word in ['accident', 'emergency']):
+            return {'category': 'emergency', 'severity': 'critical', 'language': language}
+        
+        # Default
         else:
-            return {'category': 'general', 'severity': 'low', 'language': self.detect_language(content)}
+            return {'category': 'general', 'severity': 'low', 'language': language}
     
     def health_check(self):
-        """Check if Ollama is available."""
-        try:
-            response = requests.get(f'{self.base_url}/api/tags', timeout=5)
-            return response.status_code == 200
-        except:
-            return False
+        """Check AI service health."""
+        if self.provider == 'ollama':
+            try:
+                response = requests.get(f'{self.base_url}/api/tags', timeout=5)
+                return response.status_code == 200
+            except:
+                pass
+        return False
     
-    def summarize_district(self, district_name, roads, rivers, projects):
+    def summarize_district(self, district_name, roads, rivers, projects, incidents):
         """Generate district summary."""
-        prompt = f"""Summarize the current status of {district_name} district.
+        road_status = ', '.join([r.name + ' (' + r.status + ')' for r in roads[:3]]) if roads else 'No roads'
+        river_status = ', '.join([r.name + ' (' + r.status + ')' for r in rivers[:3]]) if rivers else 'No rivers'
+        project_status = ', '.join([p.name + ' (' + str(p.progress_percent) + '%)' for p in projects[:3]]) if projects else 'No projects'
+        
+        prompt = f"""Summarize the current status of {district_name} district in Nepal.
 
-Roads: {len(roads)} segments
-Rivers: {len(rivers)} rivers
-Projects: {len(projects)} active projects
+Roads: {road_status}
+Rivers: {river_status}
+Projects: {project_status}
+Active Incidents: {len(incidents) if incidents else 0}
 
 Provide a brief 2-3 sentence summary for residents."""
         
         return self.generate(prompt)
     
-    def travel_recommendation(self, from_location, to_location, risk_score, warnings):
+    def travel_recommendation(self, from_location, to_location, risk_score, warnings_count):
         """Generate travel recommendation."""
         prompt = f"""Based on current conditions:
-From: {from_location}
-To: {to_location}
+Route: {from_location} to {to_location}
 Risk Score: {risk_score}/100
-Warnings: {len(warnings)} active warnings
+Active Warnings: {warnings_count}
 
-Provide a brief travel recommendation in simple English."""
+Provide a brief travel recommendation for Nepal."""
         
         return self.generate(prompt)

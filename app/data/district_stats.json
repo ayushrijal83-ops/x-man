@@ -1,0 +1,310 @@
+{
+ "Achham": {
+  "area_sq_km": 1692.0,
+  "population": 257477
+ },
+ "Arghakhanchi": {
+  "area_sq_km": 1193.0,
+  "population": 197632
+ },
+ "Baglung": {
+  "area_sq_km": 1784.0,
+  "population": 268613
+ },
+ "Baitadi": {
+  "area_sq_km": 1519.0,
+  "population": 250898
+ },
+ "Bajhang": {
+  "area_sq_km": 3422.0,
+  "population": 195159
+ },
+ "Bajura": {
+  "area_sq_km": 2188.0,
+  "population": 134912
+ },
+ "Banke": {
+  "area_sq_km": 2337.0,
+  "population": 491313
+ },
+ "Bara": {
+  "area_sq_km": 1190.0,
+  "population": 687708
+ },
+ "Bardiya": {
+  "area_sq_km": 2025.0,
+  "population": 426576
+ },
+ "Bhaktapur": {
+  "area_sq_km": 119.0,
+  "population": 304651
+ },
+ "Bhojpur": {
+  "area_sq_km": 1507.0,
+  "population": 182459
+ },
+ "Chitwan": {
+  "area_sq_km": 2238.39,
+  "population": 579984
+ },
+ "Dadeldhura": {
+  "area_sq_km": 1538.0,
+  "population": 142094
+ },
+ "Dailekh": {
+  "area_sq_km": 1505.0,
+  "population": 261770
+ },
+ "Dang": {
+  "area_sq_km": null,
+  "population": 552583
+ },
+ "Darchula District (Nepal)": {
+  "area_sq_km": 2322.0,
+  "population": 133274
+ },
+ "Dhading": {
+  "area_sq_km": 1926.0,
+  "population": 336067
+ },
+ "Dhankuta": {
+  "area_sq_km": 892.0,
+  "population": 163412
+ },
+ "Dhanusha": {
+  "area_sq_km": 1180.0,
+  "population": 754777
+ },
+ "Dolakha": {
+  "area_sq_km": 2191.0,
+  "population": 186557
+ },
+ "Dolpa": {
+  "area_sq_km": 7889.0,
+  "population": 36700
+ },
+ "Doti": {
+  "area_sq_km": 2025.0,
+  "population": 211746
+ },
+ "Eastern Rukum": {
+  "area_sq_km": null,
+  "population": 53184
+ },
+ "Gorkha": {
+  "area_sq_km": 3610.0,
+  "population": 271061
+ },
+ "Gulmi": {
+  "area_sq_km": 1149.0,
+  "population": 280160
+ },
+ "Humla": {
+  "area_sq_km": 5655.0,
+  "population": 50858
+ },
+ "Ilam District": {
+  "area_sq_km": 1703.0,
+  "population": 290254
+ },
+ "Jajarkot": {
+  "area_sq_km": 2230.0,
+  "population": 171304
+ },
+ "Jhapa": {
+  "area_sq_km": 1606.0,
+  "population": 812650
+ },
+ "Jumla": {
+  "area_sq_km": 2531.0,
+  "population": 108921
+ },
+ "Kailali": {
+  "area_sq_km": 3235.0,
+  "population": 775709
+ },
+ "Kalikot": {
+  "area_sq_km": 1741.0,
+  "population": 136948
+ },
+ "Kanchanpur District": {
+  "area_sq_km": 1610.0,
+  "population": 451248
+ },
+ "Kapilvastu": {
+  "area_sq_km": 1738.0,
+  "population": 571936
+ },
+ "Kaski": {
+  "area_sq_km": 2017.0,
+  "population": 492098
+ },
+ "Kathmandu": {
+  "area_sq_km": 433.61,
+  "population": 1744240
+ },
+ "Kavrepalanchok": {
+  "area_sq_km": 1396.0,
+  "population": 381937
+ },
+ "Khotang": {
+  "area_sq_km": 1591.0,
+  "population": 206312
+ },
+ "Lalitpur": {
+  "area_sq_km": 350.0,
+  "population": 468132
+ },
+ "Lamjung": {
+  "area_sq_km": 1692.0,
+  "population": 167724
+ },
+ "Mahottari": {
+  "area_sq_km": 1002.0,
+  "population": 627580
+ },
+ "Makwanpur": {
+  "area_sq_km": 2426.0,
+  "population": 420477
+ },
+ "Manang": {
+  "area_sq_km": 2246.0,
+  "population": 6538
+ },
+ "Morang": {
+  "area_sq_km": 1855.0,
+  "population": 965370
+ },
+ "Mugu": {
+  "area_sq_km": 3535.0,
+  "population": 55286
+ },
+ "Mustang": {
+  "area_sq_km": 3573.0,
+  "population": 13452
+ },
+ "Myagdi": {
+  "area_sq_km": 2297.0,
+  "population": 113641
+ },
+ "Nawalparasi W": {
+  "area_sq_km": 2162.0,
+  "population": 643508
+ },
+ "Nawalpur District": {
+  "area_sq_km": null,
+  "population": 311604
+ },
+ "Nuwakot": {
+  "area_sq_km": 1121.0,
+  "population": 277471
+ },
+ "Okhaldhunga": {
+  "area_sq_km": 1074.0,
+  "population": 147984
+ },
+ "Palpa": {
+  "area_sq_km": 1373.0,
+  "population": 261180
+ },
+ "Panchthar": {
+  "area_sq_km": 1241.0,
+  "population": 191817
+ },
+ "Parbat": {
+  "area_sq_km": 494.0,
+  "population": 146590
+ },
+ "Parsa": {
+  "area_sq_km": 1353.0,
+  "population": 601017
+ },
+ "Pyuthan": {
+  "area_sq_km": 1309.0,
+  "population": 228102
+ },
+ "Ramechhap": {
+  "area_sq_km": 1546.0,
+  "population": 202646
+ },
+ "Rasuwa": {
+  "area_sq_km": 1544.0,
+  "population": 45454
+ },
+ "Rautahat": {
+  "area_sq_km": 1126.0,
+  "population": 686722
+ },
+ "Rolpa": {
+  "area_sq_km": 1879.0,
+  "population": 224506
+ },
+ "Rupandehi": {
+  "area_sq_km": 1360.0,
+  "population": 880196
+ },
+ "Salyan": {
+  "area_sq_km": 1462.0,
+  "population": 242444
+ },
+ "Sankhuwasabha": {
+  "area_sq_km": 3480.0,
+  "population": 158742
+ },
+ "Saptari": {
+  "area_sq_km": 1363.0,
+  "population": 639284
+ },
+ "Sarlahi": {
+  "area_sq_km": 1259.0,
+  "population": 769729
+ },
+ "Sindhuli": {
+  "area_sq_km": 2491.0,
+  "population": 296192
+ },
+ "Sindhupalchowk": {
+  "area_sq_km": 2542.0,
+  "population": 287798
+ },
+ "Siraha": {
+  "area_sq_km": 1188.0,
+  "population": 637328
+ },
+ "Solukhumbu": {
+  "area_sq_km": 3312.0,
+  "population": 105886
+ },
+ "Sunsari": {
+  "area_sq_km": 1257.0,
+  "population": 763487
+ },
+ "Surkhet": {
+  "area_sq_km": 2451.0,
+  "population": 350804
+ },
+ "Syangja": {
+  "area_sq_km": 1164.0,
+  "population": 289148
+ },
+ "Tanahun": {
+  "area_sq_km": 1546.0,
+  "population": 323288
+ },
+ "Taplejung": {
+  "area_sq_km": 3646.0,
+  "population": 127461
+ },
+ "Tehrathum": {
+  "area_sq_km": 679.0,
+  "population": 101577
+ },
+ "Udayapur": {
+  "area_sq_km": 2063.0,
+  "population": 317532
+ },
+ "Western Rukum District": {
+  "area_sq_km": 1213.49,
+  "population": 155383
+ }
+}

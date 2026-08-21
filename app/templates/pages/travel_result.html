@@ -3,19 +3,12 @@
 {% block title %}Travel Analysis - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/travel/planner">Travel Planner</a>
-        <a href="/auth/logout">Logout</a>
-    </div>
-</nav>
+{% include "components/navbar.html" %}
 
 <div class="container">
-    <h1>🚗 Travel Analysis</h1>
-    <p style="color: #6b7280; margin-bottom: 2rem;">
-        {{ from_location }} → {{ to_location }}
+    <h1><i data-lucide="car"></i> Travel Analysis</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">
+        {{ from_location }} <i data-lucide="move-right" class="icon-sm"></i> {{ to_location }}
         {% if travel_date %} | Date: {{ travel_date }}{% endif %}
         {% if travel_time %} | Time: {{ travel_time }}{% endif %}
     </p>
@@ -42,9 +35,9 @@
     
     {% if warnings %}
         <div class="card">
-            <h2 class="card-title">⚠️ Active Warnings</h2>
+            <h2 class="card-title"><i data-lucide="alert-triangle"></i> Active Warnings</h2>
             {% for warning in warnings %}
-                <div style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
+                <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
                     {{ warning }}
                 </div>
             {% endfor %}
@@ -53,9 +46,9 @@
     
     <div class="grid grid-2">
         <div class="card">
-            <h2 class="card-title">🛣️ Road Conditions</h2>
+            <h2 class="card-title"><i data-lucide="route"></i> Road Conditions</h2>
             {% for road in roads %}
-                <div style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
+                <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
                     <strong>{{ road.name }}</strong>
                     <span class="status-badge status-{{ road.status }}">{{ road.status }}</span>
                 </div>
@@ -63,12 +56,12 @@
         </div>
         
         <div class="card">
-            <h2 class="card-title">🌊 River Conditions</h2>
+            <h2 class="card-title"><i data-lucide="waves"></i> River Conditions</h2>
             {% for river in rivers %}
-                <div style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
+                <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
                     <strong>{{ river.name }}</strong>
                     <span class="status-badge status-{{ river.status }}">{{ river.status }}</span>
-                    <p>Level: {{ river.current_level }}m</p>
+                    <p>Level: {{ river.current_level|metres }}</p>
                 </div>
             {% endfor %}
         </div>

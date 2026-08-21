@@ -1,4 +1,5 @@
 from flask import Flask
+from flask_login import current_user
 import os
 from dotenv import load_dotenv
 
@@ -36,6 +37,9 @@ def create_app(config_name=None):
     from app.routes.travel import travel_bp
     from app.routes.ai_routes import ai_bp
     from app.routes.authority_panel import authority_panel_bp
+    from app.routes.profile import profile_bp
+    from app.routes.social import social_bp
+    from app.routes.language import language_bp
     
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -49,7 +53,38 @@ def create_app(config_name=None):
     app.register_blueprint(travel_bp, url_prefix='/travel')
     app.register_blueprint(ai_bp, url_prefix='/ai')
     app.register_blueprint(authority_panel_bp, url_prefix='/authority')
+    app.register_blueprint(profile_bp, url_prefix='/profile')
+    app.register_blueprint(social_bp, url_prefix='/social')
+    app.register_blueprint(language_bp, url_prefix='/language')
     
+    from app.services.translation_service import TranslationService
+    translation_service = TranslationService()
+
+    @app.template_filter('metres')
+    def _metres(value):
+        """Render a water level, or a dash when it is unknown.
+
+        Rivers confirmed by OpenStreetMap have no gauge reading, and
+        '{{ none }}m' was rendering as 'Nonem' on the dashboard.
+        """
+        if value is None:
+            return '—'
+        return '%.1fm' % value
+
+    @app.context_processor
+    def inject_translations():
+        """Expose t() / current_lang / languages to every template."""
+        from flask import session
+        lang = session.get('language')
+        if not lang and current_user.is_authenticated:
+            lang = current_user.language
+        lang = lang or 'ne'
+        return {
+            't': lambda key: translation_service.get_translation(lang, key),
+            'current_lang': lang,
+            'languages': translation_service.get_supported_languages(),
+        }
+
     @app.after_request
     def add_security_headers(response):
         response.headers['X-Content-Type-Options'] = 'nosniff'

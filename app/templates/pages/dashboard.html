@@ -3,24 +3,11 @@
 {% block title %}Dashboard - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/districts">Districts</a>
-        <a href="/roads/status">Road Status</a>
-        <a href="/rivers/status">River Status</a>
-        <a href="/projects/tracker">Projects</a>
-        <a href="/authorities/directory">Authorities</a>
-        <a href="/complaints/new">File Complaint</a>
-        <a href="/travel/planner">Travel Planner</a>
-        <a href="/auth/logout">Logout</a>
-    </div>
-</nav>
+{% include "components/navbar.html" %}
 
 <div class="container">
-    <h1>Welcome, {{ current_user.username }}! 🇳🇵</h1>
-    <p style="color: #6b7280; margin-bottom: 2rem;">
+    <h1>Welcome, {{ current_user.username }}! <i data-lucide="mountain-snow"></i></h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">
         {% if user_district %}
             Your District: <strong>{{ user_district.name }}</strong> ({{ user_district.province }} Province)
         {% else %}
@@ -28,6 +15,7 @@
         {% endif %}
     </p>
     
+    <!-- Stats Grid -->
     <div class="grid grid-4" style="margin-bottom: 2rem;">
         <div class="stat-card">
             <div class="stat-value">{{ roads|length }}</div>
@@ -48,14 +36,20 @@
     </div>
     
     <div class="grid grid-2">
+        <!-- Road Status -->
         <div class="card">
-            <h2 class="card-title">🛣️ Road Status</h2>
+            <h2 class="card-title"><i data-lucide="route"></i> Road Status{% if roads_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">Nationwide</span>{% endif %}</h2>
             {% if roads %}
                 {% for road in roads %}
-                    <div style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
-                        <strong>{{ road.name }}</strong>
-                        <span class="status-badge status-{{ road.status }}">{{ road.status }}</span>
-                        <span class="status-badge status-{{ road.traffic_level }}">{{ road.traffic_level }} traffic</span>
+                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong>{{ road.name }}</strong>
+                            <div>
+                                <span class="status-badge status-{{ road.status }}">{{ road.status }}</span>
+                                <span class="status-badge status-{{ road.traffic_level }}">{{ road.traffic_level }}</span>
+                            </div>
+                        </div>
+                        <small style="color: var(--text-muted);">{{ road.from_location }} <i data-lucide="move-right" class="icon-sm"></i> {{ road.to_location }}</small>
                     </div>
                 {% endfor %}
                 <a href="/roads/status" class="btn btn-outline btn-block" style="margin-top: 1rem;">View All Roads</a>
@@ -64,14 +58,17 @@
             {% endif %}
         </div>
         
+        <!-- River Status -->
         <div class="card">
-            <h2 class="card-title">🌊 River Status</h2>
+            <h2 class="card-title"><i data-lucide="waves"></i> River Status{% if rivers_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">Nationwide</span>{% endif %}</h2>
             {% if rivers %}
                 {% for river in rivers %}
-                    <div style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
-                        <strong>{{ river.name }}</strong>
-                        <span class="status-badge status-{{ river.status }}">{{ river.status }}</span>
-                        <span>Level: {{ river.current_level }}m</span>
+                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong>{{ river.name }}</strong>
+                            <span class="status-badge status-{{ river.status }}">{{ river.status }}</span>
+                        </div>
+                        <small style="color: var(--text-muted);">Level: {{ river.current_level|metres }} | Danger: {{ river.danger_level|metres }}</small>
                     </div>
                 {% endfor %}
                 <a href="/rivers/status" class="btn btn-outline btn-block" style="margin-top: 1rem;">View All Rivers</a>
@@ -80,14 +77,17 @@
             {% endif %}
         </div>
         
+        <!-- Development Projects -->
         <div class="card">
-            <h2 class="card-title">🏗️ Development Projects</h2>
+            <h2 class="card-title"><i data-lucide="building-2"></i> Development Projects{% if projects_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">Nationwide</span>{% endif %}</h2>
             {% if projects %}
                 {% for project in projects %}
-                    <div style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
-                        <strong>{{ project.name }}</strong>
-                        <span class="status-badge status-{{ project.status }}">{{ project.status }}</span>
-                        <div class="progress-bar" style="margin-top: 0.5rem;">
+                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <strong>{{ project.name }}</strong>
+                            <span class="status-badge status-{{ project.status }}">{{ project.status }}</span>
+                        </div>
+                        <div class="progress-bar" style="margin: 0.5rem 0;">
                             <div class="progress-fill" style="width: {{ project.progress_percent }}%;"></div>
                         </div>
                         <small>{{ project.progress_percent }}% complete</small>
@@ -99,20 +99,83 @@
             {% endif %}
         </div>
         
+        <!-- Community Feed with AI Tags -->
         <div class="card">
-            <h2 class="card-title">📰 Recent Posts</h2>
+            <h2 class="card-title"><i data-lucide="newspaper"></i> Community Feed</h2>
             {% if recent_posts %}
                 {% for post in recent_posts %}
-                    <div style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;">
-                        <strong>User {{ post.user_id }}</strong>
-                        <p>{{ post.content[:100] }}...</p>
-                        <small>Category: {{ post.category }}</small>
+                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <strong><i data-lucide="user"></i> User #{{ post.user_id }}</strong>
+                            <small style="color: var(--text-muted);">{{ post.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                        </div>
+                        
+                        <p style="margin: 0.5rem 0;">{{ post.content[:100] }}{% if post.content|length > 100 %}...{% endif %}</p>
+                        
+                        <!-- AI Tags -->
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.5rem;">
+                            <span class="status-badge status-{{ post.category or 'general' }}">{{ post.category or 'general' }}</span>
+                            
+                            {% if post.is_ai_classified %}
+                                <span class="status-badge status-open" title="Classified by AI"><i data-lucide="bot"></i> AI</span>
+                            {% endif %}
+                            
+                            {% if post.severity %}
+                                <span class="status-badge status-{{ post.severity }}">{{ post.severity }}</span>
+                            {% endif %}
+                            
+                            {% if post.language == 'ne' %}
+                                <span class="status-badge" title="Nepali"><i data-lucide="mountain-snow"></i> नेपाली</span>
+                            {% elif post.language == 'en' %}
+                                <span class="status-badge" title="English">English</span>
+                            {% endif %}
+                            
+                            {% if post.location %}
+                                <span class="status-badge" title="Location"><i data-lucide="map-pin"></i> {{ post.location }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div style="margin-top: 0.5rem;">
+                            <a href="/posts/{{ post.id }}" style="color: var(--brand-primary); text-decoration: none;">View Post <i data-lucide="arrow-right" class="icon-sm"></i></a>
+                        </div>
                     </div>
                 {% endfor %}
+                <a href="/posts/create" class="btn btn-primary btn-block" style="margin-top: 1rem;">Create Post</a>
             {% else %}
-                <p>No posts yet. <a href="/posts/create">Create first post</a></p>
+                <p>No posts yet.</p>
+                <a href="/posts/create" class="btn btn-primary" style="margin-top: 0.5rem;">Create First Post</a>
             {% endif %}
         </div>
     </div>
 </div>
+
+<style>
+    .status-open { background: var(--success-bg); color: var(--success-text); }
+    .status-partial { background: var(--warning-bg); color: var(--warning-text); }
+    .status-blocked { background: var(--danger-bg); color: var(--danger-text); }
+    .status-normal { background: var(--success-bg); color: var(--success-text); }
+    .status-rising { background: var(--warning-bg); color: var(--warning-text); }
+    .status-flooding { background: var(--danger-bg); color: var(--danger-text); }
+    .status-low { background: var(--success-bg); color: var(--success-text); }
+    .status-medium { background: var(--warning-bg); color: var(--warning-text); }
+    .status-high { background: var(--danger-bg); color: var(--danger-text); }
+    .status-critical { background: var(--danger); color: white; }
+    .status-traffic { background: var(--warning-bg); color: var(--warning-text); }
+    .status-road_condition { background: var(--info-bg); color: var(--info-text); }
+    .status-weather { background: var(--info-bg); color: var(--info-text); }
+    .status-landslide { background: var(--danger-bg); color: var(--danger-text); }
+    .status-flood { background: var(--info-bg); color: var(--info-text); }
+    .status-emergency { background: var(--danger); color: white; }
+    .status-development { background: var(--success-bg); color: var(--success-text); }
+    .status-news { background: var(--bg-surface-hover); color: var(--text-secondary); }
+    .status-announcement { background: var(--warning-bg); color: var(--warning-text); }
+    .status-general { background: var(--bg-surface-hover); color: var(--text-secondary); }
+    .status-on_schedule { background: var(--success-bg); color: var(--success-text); }
+    .status-delayed { background: var(--warning-bg); color: var(--warning-text); }
+    .status-completed { background: var(--success-bg); color: var(--success-text); }
+    .status-pending { background: var(--warning-bg); color: var(--warning-text); }
+    .status-in_progress { background: var(--info-bg); color: var(--info-text); }
+    .status-resolved { background: var(--success-bg); color: var(--success-text); }
+    .status-rejected { background: var(--danger-bg); color: var(--danger-text); }
+</style>
 {% endblock %}

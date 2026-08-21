@@ -22,11 +22,24 @@ def dashboard():
     
     recent_posts = Post.query.order_by(Post.created_at.desc()).limit(10).all()
     active_incidents = Incident.query.filter_by(status='active').limit(5).all()
-    road_segments = RoadSegment.query.limit(5).all()
-    rivers = River.query.limit(5).all()
-    projects = Project.query.limit(5).all()
+
+    def local_first(model, limit=5):
+        """Prefer the user's own district; fall back to nationwide if it has none.
+
+        Without the district filter the page claimed 'Your District: X' while
+        listing another district's roads.
+        """
+        if user_district:
+            rows = model.query.filter_by(district_id=user_district.id).limit(limit).all()
+            if rows:
+                return rows, True
+        return model.query.limit(limit).all(), False
+
+    road_segments, roads_local = local_first(RoadSegment)
+    rivers, rivers_local = local_first(River)
+    projects, projects_local = local_first(Project)
     authorities = Authority.query.limit(5).all()
-    
+
     return render_template('pages/dashboard.html',
                          user_district=user_district,
                          recent_posts=recent_posts,
@@ -34,7 +47,10 @@ def dashboard():
                          roads=road_segments,
                          rivers=rivers,
                          projects=projects,
-                         authorities=authorities)
+                         authorities=authorities,
+                         roads_local=roads_local,
+                         rivers_local=rivers_local,
+                         projects_local=projects_local)
 
 @main_bp.route('/select-district', methods=['POST'])
 @login_required

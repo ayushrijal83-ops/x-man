@@ -3,8 +3,8 @@
 {% block title %}Rivers - Authority - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar" style="background: #1a1a2e;">
-    <a href="/" class="nav-brand">🏛️ {{ authority.name }}</a>
+<nav class="navbar" style="background: var(--bg-dark);">
+    <a href="/" class="nav-brand"><i data-lucide="landmark"></i> {{ authority.name }}</a>
     <div class="nav-links">
         <a href="/authority/dashboard">Dashboard</a>
         <a href="/authority/complaints">Complaints</a>
@@ -12,12 +12,13 @@
         <a href="/authority/roads">Roads</a>
         <a href="/authority/rivers">Rivers</a>
         <a href="/auth/logout">Logout</a>
+        {% include "components/lang_selector.html" %}
     </div>
 </nav>
 
 <div class="container">
-    <h1>🌊 River Management</h1>
-    <p style="color: #6b7280;">Update river levels and issue warnings</p>
+    <h1><i data-lucide="waves"></i> River Management</h1>
+    <p style="color: var(--text-muted);">Update river levels and issue warnings</p>
     
     {% if rivers %}
         <div class="grid grid-2">
@@ -29,8 +30,8 @@
                         <span class="status-badge status-{{ river.status }}">{{ river.status }}</span>
                     </div>
                     
-                    <p><strong>Current Level:</strong> {{ river.current_level }}m</p>
-                    <p><strong>Danger Level:</strong> {{ river.danger_level }}m</p>
+                    <p><strong>Current Level:</strong> {{ river.current_level|metres }}</p>
+                    <p><strong>Danger Level:</strong> {{ river.danger_level|metres }}</p>
                     
                     <form method="POST" action="/authority/rivers/{{ river.id }}/update" style="margin-top: 1rem;">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

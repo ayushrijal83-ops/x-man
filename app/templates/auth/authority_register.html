@@ -3,10 +3,10 @@
 {% block title %}Authority Registration - NepalSathi{% endblock %}
 
 {% block content %}
-<div class="auth-container" style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+<div class="auth-container" style="background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-dark) 100%);">
     <div class="auth-card" style="max-width: 500px;">
         <div style="text-align: center; margin-bottom: 2rem;">
-            <h2 class="auth-title">🏛️ Authority Registration</h2>
+            <h2 class="auth-title"><i data-lucide="landmark"></i> Authority Registration</h2>
             <p class="auth-subtitle">Register your government organization</p>
         </div>
         
@@ -64,14 +64,14 @@
             </div>
             
             <button type="submit" class="btn btn-primary btn-block" 
-                    style="background: #1a1a2e;">
+                    style="background: var(--bg-dark);">
                 Register Authority Account
             </button>
         </form>
         
         <div style="margin-top: 1.5rem; text-align: center;">
             <p class="auth-footer">
-                <a href="/auth/authority/login">← Authority Login</a>
+                <a href="/auth/authority/login"><i data-lucide="arrow-left"></i> Authority Login</a>
             </p>
             <p class="auth-footer" style="margin-top: 0.5rem;">
                 <a href="/auth/register">Citizen Registration</a>

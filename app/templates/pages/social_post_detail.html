@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Post - NepalSathi{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div class="card" style="max-width: 700px; margin: 0 auto;">
+        <!-- Post Header -->
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+            <div>
+                <h2>
+                    {% if user %}
+                        <i data-lucide="user"></i> {{ user.username }}
+                    {% else %}
+                        <i data-lucide="user"></i> User #{{ post.user_id }}
+                    {% endif %}
+                </h2>
+                {% if post.location %}
+                    <p style="color: var(--text-muted);"><i data-lucide="map-pin"></i> {{ post.location }}</p>
+                {% endif %}
+            </div>
+            <small style="color: var(--text-muted);">{{ post.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+        </div>
+        
+        <!-- Post Content -->
+        <p style="font-size: 1.2rem; margin: 1rem 0;">{{ post.content }}</p>
+        
+        <!-- Post Photo -->
+        {% if post.photo_path %}
+            <div style="margin: 1rem 0; text-align: center;">
+                <img src="{{ url_for('static', filename=post.photo_path) }}" 
+                     alt="Post photo" 
+                     style="max-width: 100%; max-height: 400px; border-radius: 0.75rem; cursor: pointer;"
+                     onclick="window.open(this.src, '_blank')">
+                <p style="margin-top: 0.5rem;">
+                    <small style="color: var(--text-muted);"><i data-lucide="camera"></i> Click to view full size</small>
+                </p>
+            </div>
+        {% endif %}
+        
+        <!-- AI Tags -->
+        <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 1rem 0;">
+            <span class="status-badge status-{{ post.category or 'general' }}">{{ post.category or 'general' }}</span>
+            
+            {% if post.is_ai_classified %}
+                <span class="status-badge status-open"><i data-lucide="bot"></i> AI Classified</span>
+            {% endif %}
+            
+            {% if post.severity %}
+                <span class="status-badge status-{{ post.severity }}">{{ post.severity }}</span>
+            {% endif %}
+            
+            {% if post.language == 'ne' %}
+                <span class="status-badge"><i data-lucide="mountain-snow"></i> नेपाली</span>
+            {% elif post.language == 'en' %}
+                <span class="status-badge">English</span>
+            {% endif %}
+            
+            {% if post.photo_path %}
+                <span class="status-badge"><i data-lucide="camera"></i> Has Photo</span>
+            {% endif %}
+        </div>
+        
+        <!-- Actions -->
+        <div style="display: flex; gap: 1rem; margin: 1rem 0; padding: 1rem 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+            <form method="POST" action="/social/post/{{ post.id }}/like" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline"><i data-lucide="thumbs-up"></i> Like ({{ likes_count }})</button>
+            </form>
+            <span class="btn btn-outline"><i data-lucide="message-circle"></i> Comments ({{ comments|length }})</span>
+            <button class="btn btn-outline" onclick="sharePost()"><i data-lucide="share-2"></i> Share</button>
+        </div>
+        
+        <!-- Comments Section -->
+        <h3><i data-lucide="message-circle"></i> Comments</h3>
+        
+        {% if comments %}
+            {% for comment in comments %}
+                <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
+                    <strong><i data-lucide="user"></i> User #{{ comment.user_id }}</strong>
+                    <p style="margin: 0.25rem 0;">{{ comment.content }}</p>
+                    <small style="color: var(--text-muted);">{{ comment.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p style="color: var(--text-muted); margin: 1rem 0;">No comments yet. Be the first to comment!</p>
+        {% endif %}
+        
+        <!-- Add Comment Form -->
+        <form method="POST" action="/social/post/{{ post.id }}/comment" style="margin-top: 1rem;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <textarea name="content" class="form-input" rows="3" placeholder="Write a comment..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Add Comment</button>
+        </form>
+        
+        <div style="margin-top: 1rem;">
+            <a href="/social/feed" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Feed</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function sharePost() {
+    const url = window.location.href;
+    
+    if (navigator.share) {
+        navigator.share({
+            title: 'NepalSathi Post',
+            url: url
+        }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Post link copied to clipboard!');
+        });
+    }
+}
+</script>
+
+<style>
+    .status-open { background: var(--success-bg); color: var(--success-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-partial { background: var(--warning-bg); color: var(--warning-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-low { background: var(--success-bg); color: var(--success-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-medium { background: var(--warning-bg); color: var(--warning-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-high { background: var(--danger-bg); color: var(--danger-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-critical { background: var(--danger); color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-traffic { background: var(--warning-bg); color: var(--warning-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-road_condition { background: var(--info-bg); color: var(--info-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-weather { background: var(--info-bg); color: var(--info-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-landslide { background: var(--danger-bg); color: var(--danger-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-flood { background: var(--info-bg); color: var(--info-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-emergency { background: var(--danger); color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-development { background: var(--success-bg); color: var(--success-text); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-news { background: var(--bg-surface-hover); color: var(--text-secondary); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+    .status-general { background: var(--bg-surface-hover); color: var(--text-secondary); padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; }
+</style>
+{% endblock %}

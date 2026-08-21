@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Profile - NepalSathi{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <h1><i data-lucide="pencil"></i> Edit Profile</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Update your profile information</p>
+    
+    <div class="card" style="max-width: 600px; margin: 0 auto;">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" class="form-input" value="{{ current_user.username }}" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" name="email" class="form-input" value="{{ current_user.email }}" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Phone (optional)</label>
+                <input type="text" name="phone" class="form-input" value="{{ current_user.phone or '' }}" placeholder="e.g., 98XXXXXXXX">
+            </div>
+            
+            <div class="form-group">
+                <label>District</label>
+                <select name="district_id" class="form-input">
+                    <option value="">Select District</option>
+                    {% for district in districts %}
+                        <option value="{{ district.id }}" {% if current_user.district_id == district.id %}selected{% endif %}>
+                            {{ district.name }} ({{ district.province }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Bio (optional)</label>
+                <textarea name="bio" class="form-input" rows="3" placeholder="Tell us about yourself...">{{ current_user.bio or '' }}</textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
+        </form>
+        
+        <hr style="margin: 2rem 0;">
+        
+        <a href="/profile/change-password" class="btn btn-outline btn-block">Change Password</a>
+    </div>
+</div>
+{% endblock %}

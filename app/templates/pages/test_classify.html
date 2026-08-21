@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}AI Test - NepalSathi{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <h1><i data-lucide="bot"></i> AI Classification Test</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Test AI post classification</p>
+    
+    <div class="card" style="max-width: 800px; margin: 0 auto;">
+        <h2 class="card-title">Test Posts</h2>
+        
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0;">
+            <button onclick="testClassify('पहिरोले बाटो बन्द भएको छ')" class="btn btn-primary">Landslide (Nepali)</button>
+            <button onclick="testClassify('Traffic is heavy near Dhulikhel')" class="btn btn-primary">Traffic (English)</button>
+            <button onclick="testClassify('बाढी आएको छ गाउँमा')" class="btn btn-primary">Flood (Nepali)</button>
+            <button onclick="testClassify('Road construction at KM 45')" class="btn btn-primary">Road Work</button>
+            <button onclick="testClassify('Weather is clear today')" class="btn btn-primary">Weather</button>
+        </div>
+        
+        <div id="classification-result" style="margin-top: 1rem; padding: 1rem; background: var(--bg-surface); border-radius: 0.5rem;">
+            <p>Results will appear here...</p>
+        </div>
+    </div>
+    
+    <div class="card" style="max-width: 800px; margin: 1rem auto;">
+        <h2 class="card-title">Custom Post</h2>
+        <textarea id="custom-post" class="form-input" rows="3" placeholder="Enter your own post..."></textarea>
+        <button onclick="testCustomPost()" class="btn btn-primary" style="margin-top: 0.5rem;">Classify Custom Post</button>
+    </div>
+</div>
+
+<script>
+function testClassify(content) {
+    const resultDiv = document.getElementById('classification-result');
+    resultDiv.innerHTML = '<p>Classifying: "' + content + '"...</p>';
+    
+    fetch('/ai/classify', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({content: content})
+    })
+    .then(response => response.json())
+    .then(data => {
+        resultDiv.innerHTML = '<h3>Result:</h3>' +
+            '<p><strong>Post:</strong> ' + content + '</p>' +
+            '<p><strong>Category:</strong> ' + (data.category || 'N/A') + '</p>' +
+            '<p><strong>Severity:</strong> ' + (data.severity || 'N/A') + '</p>' +
+            '<p><strong>Language:</strong> ' + (data.language || 'N/A') + '</p>';
+    })
+    .catch(error => {
+        resultDiv.innerHTML = '<p style="color: var(--danger);">Error classifying post.</p>';
+    });
+}
+
+function testCustomPost() {
+    const content = document.getElementById('custom-post').value;
+    if (content) {
+        testClassify(content);
+    }
+}
+</script>
+{% endblock %}

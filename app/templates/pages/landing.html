@@ -1,83 +1,176 @@
 {% extends "base.html" %}
 
-{% block title %}NepalSathi - Know Your Nepal{% endblock %}
+{% block title %}NepalSathi — District Intelligence for Nepal{% endblock %}
 
 {% block content %}
-<div style="min-height: 100vh; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);">
-    <nav style="display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 3rem;">
-        <a href="/" style="font-size: 1.8rem; font-weight: bold; color: white; text-decoration: none;">
-            🇳🇵 NepalSathi
+<header class="lp-nav">
+    <a href="/" class="nav-brand" style="color: var(--text-primary);">
+        <span class="sidebar-mark" aria-hidden="true"><i data-lucide="mountain-snow"></i></span>
+        NepalSathi
+    </a>
+    <nav style="display: flex; gap: var(--space-2); align-items: center;" aria-label="Account">
+        {% include "components/lang_selector.html" %}
+        <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+            <i data-lucide="moon"></i>
+        </button>
+        <a href="/auth/authority/login" class="btn btn-ghost">
+            <i data-lucide="landmark"></i> Authority
         </a>
-        <div style="display: flex; gap: 1rem; align-items: center;">
-            <a href="/auth/authority/login" style="color: white; text-decoration: none; padding: 0.5rem 1rem; border: 2px solid rgba(255,255,255,0.5); border-radius: 0.5rem;">
-                🏛️ Authority Login
-            </a>
-            <a href="/auth/login" style="color: white; text-decoration: none; padding: 0.5rem 1rem;">
-                Citizen Login
-            </a>
-            <a href="/auth/register" style="background: white; color: #1e3c72; text-decoration: none; padding: 0.5rem 1.5rem; border-radius: 0.5rem; font-weight: 600;">
-                Get Started
-            </a>
-        </div>
+        <a href="/auth/login" class="btn btn-secondary">Sign in</a>
+        <a href="/auth/register" class="btn btn-primary">Get started</a>
     </nav>
-    
-    <div style="text-align: center; padding: 5rem 2rem; color: white;">
-        <h1 style="font-size: 4rem; margin-bottom: 1rem; font-weight: bold;">
-            🇳🇵 NepalSathi
-        </h1>
-        <p style="font-size: 1.8rem; margin-bottom: 0.5rem;">
-            Know your district. Know your roads. Know your Nepal.
-        </p>
-        <p style="font-size: 1.2rem; margin-bottom: 3rem; opacity: 0.9;">
-            Nepal's AI-powered district intelligence & community platform
-        </p>
-        
-        <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 4rem;">
-            <a href="/auth/register" style="background: white; color: #1e3c72; text-decoration: none; padding: 1rem 2rem; border-radius: 0.75rem; font-size: 1.2rem; font-weight: 600;">
-                Start Exploring
-            </a>
-            <a href="/auth/authority/register" style="background: transparent; color: white; text-decoration: none; padding: 1rem 2rem; border: 2px solid white; border-radius: 0.75rem; font-size: 1.2rem;">
-                Register as Authority
-            </a>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem; max-width: 1000px; margin: 0 auto;">
-            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🛣️</div>
-                <h3 style="margin-bottom: 0.5rem;">Live Road Tracking</h3>
-                <p style="opacity: 0.9;">Real-time road conditions across Nepal's highways</p>
+</header>
+
+<section class="lp-hero">
+    <span class="lp-eyebrow">
+        <i data-lucide="radio" class="icon-sm"></i> Live across 77 districts
+    </span>
+    <h1 class="lp-title">Know your district. <em>Before you travel.</em></h1>
+    <div class="lp-rule" aria-hidden="true"></div>
+    <p class="lp-lede">
+        Road closures, river levels, and infrastructure projects for every district in
+        Nepal — reported by the people who live there, verified by the authorities who
+        maintain them.
+    </p>
+    <div class="lp-actions">
+        <a href="/auth/register" class="btn btn-primary btn-lg">
+            Create free account <i data-lucide="arrow-right"></i>
+        </a>
+        <a href="/auth/login" class="btn btn-secondary btn-lg">
+            <i data-lucide="log-in"></i> Sign in
+        </a>
+    </div>
+</section>
+
+<section class="lp-section" style="padding-top: var(--space-12); padding-bottom: var(--space-12);">
+    <div class="lp-wrap">
+        <div class="lp-stats">
+            <div>
+                <div class="lp-stat-value">77</div>
+                <div class="lp-stat-label">Districts covered</div>
             </div>
-            
-            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🌊</div>
-                <h3 style="margin-bottom: 0.5rem;">River Monitoring</h3>
-                <p style="opacity: 0.9;">Track river levels and flood risks in your district</p>
+            <div>
+                <div class="lp-stat-value">7</div>
+                <div class="lp-stat-label">Provinces</div>
             </div>
-            
-            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🏗️</div>
-                <h3 style="margin-bottom: 0.5rem;">Project Tracker</h3>
-                <p style="opacity: 0.9;">Follow development projects in real-time</p>
+            <div>
+                <div class="lp-stat-value">4</div>
+                <div class="lp-stat-label">Languages</div>
             </div>
-            
-            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🏛️</div>
-                <h3 style="margin-bottom: 0.5rem;">Government Directory</h3>
-                <p style="opacity: 0.9;">Connect with local authorities directly</p>
-            </div>
-            
-            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🚗</div>
-                <h3 style="margin-bottom: 0.5rem;">Travel Planner</h3>
-                <p style="opacity: 0.9;">Plan safe journeys with live intelligence</p>
-            </div>
-            
-            <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🤖</div>
-                <h3 style="margin-bottom: 0.5rem;">AI Assistant</h3>
-                <p style="opacity: 0.9;">Smart insights powered by local AI</p>
+            <div>
+                <div class="lp-stat-value">24/7</div>
+                <div class="lp-stat-label">Community reporting</div>
             </div>
         </div>
     </div>
-</div>
+</section>
+
+<section class="lp-section" style="padding-top: 0;">
+    <div class="lp-wrap">
+        <div class="lp-section-head">
+            <h2>Everything about your district, in one place</h2>
+            <p>Built for people who need to know whether the road is open before they set out.</p>
+        </div>
+
+        <div class="grid grid-3">
+            <article class="lp-feature">
+                <div class="lp-feature-icon"><i data-lucide="route"></i></div>
+                <h3>Road status</h3>
+                <p>Segment-level conditions across highways and feeder roads, with closures and
+                   construction flagged as they happen.</p>
+            </article>
+            <article class="lp-feature">
+                <div class="lp-feature-icon"><i data-lucide="waves"></i></div>
+                <h3>River monitoring</h3>
+                <p>Water levels and flood warnings for the rivers that cut through your district,
+                   updated through the monsoon.</p>
+            </article>
+            <article class="lp-feature">
+                <div class="lp-feature-icon"><i data-lucide="building-2"></i></div>
+                <h3>Project tracking</h3>
+                <p>Follow bridges, roads, and public works from budget to completion — with real
+                   progress, not press releases.</p>
+            </article>
+            <article class="lp-feature">
+                <div class="lp-feature-icon"><i data-lucide="megaphone"></i></div>
+                <h3>Direct complaints</h3>
+                <p>File an issue against the responsible authority and track its status until
+                   somebody answers for it.</p>
+            </article>
+            <article class="lp-feature">
+                <div class="lp-feature-icon"><i data-lucide="car"></i></div>
+                <h3>Travel planning</h3>
+                <p>Check a route end to end before you leave, with a risk score built from current
+                   road and river conditions.</p>
+            </article>
+            <article class="lp-feature">
+                <div class="lp-feature-icon"><i data-lucide="bot"></i></div>
+                <h3>AI assistant</h3>
+                <p>Ask about conditions in plain Nepali or English and get an answer drawn from
+                   live district data.</p>
+            </article>
+        </div>
+    </div>
+</section>
+
+<section class="lp-section" style="background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="lp-wrap">
+        <div class="lp-section-head">
+            <h2>How it works</h2>
+            <p>Three steps from signing up to knowing what is happening on the ground.</p>
+        </div>
+        <div class="grid grid-3">
+            <div>
+                <div class="lp-step-num">I</div>
+                <h3 style="margin-bottom: var(--space-2);">Pick your district</h3>
+                <p style="font-size: 14.5px;">Choose where you live or where you are heading. Everything
+                   you see is filtered to that district.</p>
+            </div>
+            <div>
+                <div class="lp-step-num">II</div>
+                <h3 style="margin-bottom: var(--space-2);">See live conditions</h3>
+                <p style="font-size: 14.5px;">Roads, rivers, and projects on one dashboard, combining
+                   community reports with authority updates.</p>
+            </div>
+            <div>
+                <div class="lp-step-num">III</div>
+                <h3 style="margin-bottom: var(--space-2);">Report and follow up</h3>
+                <p style="font-size: 14.5px;">Post what you see, file complaints, and track them
+                   through to a response.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="lp-section">
+    <div class="lp-wrap" style="text-align: center;">
+        <h2 style="font-size: clamp(24px, 3vw, 32px);">Start with your district</h2>
+        <div class="lp-rule" aria-hidden="true"></div>
+        <p style="max-width: 48ch; margin: 0 auto var(--space-6); font-size: 16px;">
+            Free to use, in Nepali, Newari, Maithili, and English.
+        </p>
+        <a href="/auth/register" class="btn btn-primary btn-lg">
+            Create account <i data-lucide="arrow-right"></i>
+        </a>
+    </div>
+</section>
+
+<footer class="lp-footer">
+    <div class="lp-wrap" style="display: flex; justify-content: space-between; gap: var(--space-6); flex-wrap: wrap; align-items: center;">
+        <div style="display: flex; align-items: center; gap: var(--space-3);">
+            <span class="sidebar-mark" aria-hidden="true"><i data-lucide="mountain-snow"></i></span>
+            <div>
+                <div style="font-family: var(--font-serif); font-weight: 600; font-size: 16px; color: var(--on-dark);">NepalSathi</div>
+                <div style="color: var(--brand-accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.11em;">District intelligence for Nepal</div>
+            </div>
+        </div>
+        <nav style="display: flex; gap: var(--space-5); flex-wrap: wrap;" aria-label="Footer">
+            <a href="/districts">Districts</a>
+            <a href="/roads/status">Roads</a>
+            <a href="/rivers/status">Rivers</a>
+            <a href="/projects/tracker">Projects</a>
+            <a href="/authorities/directory">Authorities</a>
+        </nav>
+    </div>
+</footer>
 {% endblock %}

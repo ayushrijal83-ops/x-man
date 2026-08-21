@@ -3,22 +3,11 @@
 {% block title %}Travel Planner - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/districts">Districts</a>
-        <a href="/roads/status">Road Status</a>
-        <a href="/rivers/status">River Status</a>
-        <a href="/projects/tracker">Projects</a>
-        <a href="/travel/planner">Travel Planner</a>
-        <a href="/auth/logout">Logout</a>
-    </div>
-</nav>
+{% include "components/navbar.html" %}
 
 <div class="container">
-    <h1>🚗 Travel Planner</h1>
-    <p style="color: #6b7280; margin-bottom: 2rem;">Plan your journey with live road and river information</p>
+    <h1><i data-lucide="car"></i> Travel Planner</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Plan your journey with live road and river information</p>
     
     <div class="card" style="max-width: 600px; margin: 0 auto;">
         <h2 class="card-title">Plan Your Journey</h2>

@@ -15,6 +15,9 @@ class User(UserMixin, db.Model):
     district_id = db.Column(db.Integer, db.ForeignKey('districts.id'), nullable=True)
     is_verified = db.Column(db.Boolean, default=False)
     reputation = db.Column(db.Integer, default=0)
+    language = db.Column(db.String(10), default='ne')
+    bio = db.Column(db.Text)
+    phone = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def set_password(self, password):

@@ -3,8 +3,8 @@
 {% block title %}Complaints - Authority - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar" style="background: #1a1a2e;">
-    <a href="/" class="nav-brand">🏛️ {{ authority.name }}</a>
+<nav class="navbar" style="background: var(--bg-dark);">
+    <a href="/" class="nav-brand"><i data-lucide="landmark"></i> {{ authority.name }}</a>
     <div class="nav-links">
         <a href="/authority/dashboard">Dashboard</a>
         <a href="/authority/complaints">Complaints</a>
@@ -12,12 +12,13 @@
         <a href="/authority/roads">Roads</a>
         <a href="/authority/rivers">Rivers</a>
         <a href="/auth/logout">Logout</a>
+        {% include "components/lang_selector.html" %}
     </div>
 </nav>
 
 <div class="container">
-    <h1>📋 Complaints</h1>
-    <p style="color: #6b7280;">All complaints filed to {{ authority.name }}</p>
+    <h1><i data-lucide="clipboard-list"></i> Complaints</h1>
+    <p style="color: var(--text-muted);">All complaints filed to {{ authority.name }}</p>
     
     {% if complaints %}
         <div class="grid grid-2">

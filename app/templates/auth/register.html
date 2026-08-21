@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Register - HackForge{% endblock %}
+{% block title %}Create account - NepalSathi{% endblock %}
 
 {% block content %}
 <div class="auth-container">
     <div class="auth-card">
+        <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:1rem;">{% include "components/lang_selector.html" %}<button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false"><i data-lucide="moon"></i></button></div>
         <h2 class="auth-title">Create Account</h2>
-        <p class="auth-subtitle">Start building with HackForge</p>
+        <p class="auth-subtitle">Join your district on NepalSathi</p>
         
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

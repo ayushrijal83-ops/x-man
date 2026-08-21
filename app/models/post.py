@@ -16,6 +16,7 @@ class Post(db.Model):
     longitude = db.Column(db.Float)
     severity = db.Column(db.String(20))
     is_ai_classified = db.Column(db.Boolean, default=False)
+    photo_path = db.Column(db.String(255))  # NEW: Photo file path
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):

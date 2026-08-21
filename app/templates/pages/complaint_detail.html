@@ -3,19 +3,11 @@
 {% block title %}Complaint {{ complaint.ticket_number }} - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/complaints/new">File Complaint</a>
-        <a href="/complaints/">My Complaints</a>
-        <a href="/auth/logout">Logout</a>
-    </div>
-</nav>
+{% include "components/navbar.html" %}
 
 <div class="container">
     <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h1>📋 Complaint Details</h1>
+        <h1><i data-lucide="clipboard-list"></i> Complaint Details</h1>
         <span class="status-badge status-{{ complaint.status }}">{{ complaint.status|upper }}</span>
     </div>
     
@@ -39,26 +31,26 @@
         
         <div style="margin-top: 1.5rem;">
             <h3>Description</h3>
-            <p style="background: #f9fafb; padding: 1rem; border-radius: 0.5rem;">{{ complaint.description }}</p>
+            <p style="background: var(--bg-surface); padding: 1rem; border-radius: 0.5rem;">{{ complaint.description }}</p>
         </div>
         
         {% if complaint.government_response %}
         <div style="margin-top: 1.5rem;">
-            <h3>🏛️ Government Response</h3>
-            <p style="background: #f0fdf4; padding: 1rem; border-radius: 0.5rem;">{{ complaint.government_response }}</p>
+            <h3><i data-lucide="landmark"></i> Government Response</h3>
+            <p style="background: var(--success-bg); padding: 1rem; border-radius: 0.5rem;">{{ complaint.government_response }}</p>
         </div>
         {% endif %}
         
         {% if complaint.resolution_details %}
         <div style="margin-top: 1.5rem;">
-            <h3>✅ Resolution Details</h3>
-            <p style="background: #eff6ff; padding: 1rem; border-radius: 0.5rem;">{{ complaint.resolution_details }}</p>
+            <h3><i data-lucide="check-circle"></i> Resolution Details</h3>
+            <p style="background: var(--info-bg); padding: 1rem; border-radius: 0.5rem;">{{ complaint.resolution_details }}</p>
         </div>
         {% endif %}
     </div>
     
     <div style="margin-top: 2rem;">
-        <a href="/complaints/" class="btn btn-outline">← Back to My Complaints</a>
+        <a href="/complaints/" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to My Complaints</a>
     </div>
 </div>
 {% endblock %}

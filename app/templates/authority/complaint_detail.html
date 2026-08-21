@@ -3,17 +3,18 @@
 {% block title %}Complaint Detail - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar" style="background: #1a1a2e;">
-    <a href="/" class="nav-brand">🏛️ Authority Panel</a>
+<nav class="navbar" style="background: var(--bg-dark);">
+    <a href="/" class="nav-brand"><i data-lucide="landmark"></i> Authority Panel</a>
     <div class="nav-links">
         <a href="/authority/dashboard">Dashboard</a>
         <a href="/authority/complaints">Complaints</a>
         <a href="/auth/logout">Logout</a>
+        {% include "components/lang_selector.html" %}
     </div>
 </nav>
 
 <div class="container">
-    <h1>📋 {{ complaint.ticket_number }}</h1>
+    <h1><i data-lucide="clipboard-list"></i> {{ complaint.ticket_number }}</h1>
     
     <div class="card" style="margin: 2rem 0;">
         <h2 class="card-title">Complaint Details</h2>
@@ -34,15 +35,15 @@
         
         <div style="margin-top: 1.5rem;">
             <h3>Description</h3>
-            <p style="background: #f9fafb; padding: 1rem; border-radius: 0.5rem;">{{ complaint.description }}</p>
+            <p style="background: var(--bg-surface); padding: 1rem; border-radius: 0.5rem;">{{ complaint.description }}</p>
         </div>
     </div>
     
     <div class="card" style="margin: 2rem 0;">
-        <h2 class="card-title">💬 Previous Responses</h2>
+        <h2 class="card-title"><i data-lucide="message-circle"></i> Previous Responses</h2>
         {% if responses %}
             {% for response in responses %}
-                <div style="padding: 0.75rem 0; border-bottom: 1px solid #e5e7eb;">
+                <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
                     <p><strong>Response:</strong> {{ response.message }}</p>
                     <p><strong>Status:</strong> {{ response.status_update }}</p>
                     <small>{{ response.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
@@ -54,7 +55,7 @@
     </div>
     
     <div class="card">
-        <h2 class="card-title">📝 Send Response</h2>
+        <h2 class="card-title"><i data-lucide="file-text"></i> Send Response</h2>
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             

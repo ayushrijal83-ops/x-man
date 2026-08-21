@@ -3,11 +3,12 @@
 {% block title %}Authority Login - NepalSathi{% endblock %}
 
 {% block content %}
-<div class="auth-container" style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+<div class="auth-container" style="background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-dark) 100%);">
     <div class="auth-card" style="max-width: 450px;">
+        <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:1rem;">{% include "components/lang_selector.html" %}<button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false"><i data-lucide="moon"></i></button></div>
         <div style="text-align: center; margin-bottom: 2rem;">
-            <div style="font-size: 3rem; margin-bottom: 1rem;">🏛️</div>
-            <h2 class="auth-title" style="color: #1a1a2e;">Authority Login</h2>
+            <div style="font-size: 3rem; margin-bottom: 1rem;"><i data-lucide="landmark"></i></div>
+            <h2 class="auth-title" style="color: var(--bg-dark);">Authority Login</h2>
             <p class="auth-subtitle">Government & Organization Access</p>
         </div>
         
@@ -18,14 +19,14 @@
                 <label for="username" style="font-weight: 600;">Username</label>
                 <input type="text" id="username" name="username" required 
                        class="form-input" placeholder="Enter authority username"
-                       style="border: 2px solid #1a1a2e;">
+                       style="border: 2px solid var(--bg-dark);">
             </div>
             
             <div class="form-group">
                 <label for="password" style="font-weight: 600;">Password</label>
                 <input type="password" id="password" name="password" required 
                        class="form-input" placeholder="Enter password"
-                       style="border: 2px solid #1a1a2e;">
+                       style="border: 2px solid var(--bg-dark);">
             </div>
             
             <div class="form-check">
@@ -34,20 +35,20 @@
             </div>
             
             <button type="submit" class="btn btn-block" 
-                    style="background: #1a1a2e; color: white; padding: 0.75rem; font-size: 1.1rem; font-weight: 600;">
+                    style="background: var(--bg-dark); color: white; padding: 0.75rem; font-size: 1.1rem; font-weight: 600;">
                 Login to Authority Panel
             </button>
         </form>
         
         <div style="margin-top: 1.5rem; text-align: center;">
             <p style="margin-bottom: 0.5rem;">
-                <a href="/auth/authority/register" style="color: #1a1a2e; font-weight: 600; text-decoration: none;">
+                <a href="/auth/authority/register" style="color: var(--bg-dark); font-weight: 600; text-decoration: none;">
                     Register as Authority
                 </a>
             </p>
             <p style="margin-top: 0.5rem;">
-                <a href="/auth/login" style="color: #6b7280; text-decoration: none;">
-                    ← Citizen Login
+                <a href="/auth/login" style="color: var(--text-muted); text-decoration: none;">
+                    <i data-lucide="arrow-left"></i> Citizen Login
                 </a>
             </p>
         </div>

@@ -1,0 +1,9 @@
+{% set short = {'en': 'EN', 'ne': 'ने', 'newari': 'नेवा', 'maithili': 'मै'} %}
+<div class="lang-selector" role="group" aria-label="Select language">
+    {% for lang in languages %}
+    <a href="/language/set/{{ lang.code }}"
+       class="lang-option {% if lang.code == current_lang %}active{% endif %}"
+       {% if lang.code == current_lang %}aria-current="true"{% endif %}
+       title="{{ lang.name }}">{{ short.get(lang.code, lang.code|upper) }}</a>
+    {% endfor %}
+</div>

@@ -1,15 +1,47 @@
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/districts">Districts</a>
-        <a href="/roads/status">Road Status</a>
-        <a href="/rivers/status">River Status</a>
-        <a href="/projects/tracker">Projects</a>
-        <a href="/authorities/directory">Authorities</a>
-        <a href="/complaints/new">File Complaint</a>
-        <a href="/travel/planner">Travel Planner</a>
-        <a href="/ai/assistant">AI Assistant</a>
-        <a href="/auth/logout">Logout</a>
+<button class="sidebar-toggle" aria-label="Toggle navigation" aria-controls="app-sidebar">
+    <i data-lucide="menu"></i>
+</button>
+<div class="sidebar-scrim" aria-hidden="true"></div>
+
+<aside class="sidebar" id="app-sidebar">
+    <a href="/dashboard" class="sidebar-brand">
+        <span class="sidebar-mark" aria-hidden="true"><i data-lucide="mountain-snow"></i></span>
+        <span>
+            <span class="sidebar-name">{{ t('app_name') }}</span><br>
+            <span class="sidebar-sub">District Intelligence</span>
+        </span>
+    </a>
+
+    <nav class="nav-links" aria-label="Main">
+        <div class="sidebar-label">Overview</div>
+        <a href="/dashboard"><i data-lucide="layout-dashboard"></i>{{ t('dashboard') }}</a>
+        <a href="/districts"><i data-lucide="map"></i>{{ t('districts') }}</a>
+
+        <div class="sidebar-label">Infrastructure</div>
+        <a href="/roads/status"><i data-lucide="route"></i>{{ t('road_status') }}</a>
+        <a href="/rivers/status"><i data-lucide="waves"></i>{{ t('river_status') }}</a>
+        <a href="/projects/tracker"><i data-lucide="building-2"></i>{{ t('projects') }}</a>
+        <a href="/travel/planner"><i data-lucide="car"></i>{{ t('travel_planner') }}</a>
+
+        <div class="sidebar-label">Community</div>
+        <a href="/social/feed"><i data-lucide="newspaper"></i>{{ t('community_feed') }}</a>
+        <a href="/ai/assistant"><i data-lucide="bot"></i>{{ t('ai_assistant') }}</a>
+
+        <div class="sidebar-label">Civic</div>
+        <a href="/authorities/directory"><i data-lucide="landmark"></i>{{ t('authorities') }}</a>
+        <a href="/complaints/new"><i data-lucide="megaphone"></i>{{ t('file_complaint') }}</a>
+    </nav>
+
+    <div class="sidebar-foot">
+        <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+            <i data-lucide="moon" id="theme-icon"></i>
+            <span class="theme-label">Dark mode</span>
+        </button>
+        <nav class="nav-links" aria-label="Account">
+            <a href="/profile/me"><i data-lucide="user"></i>{{ t('my_profile') }}</a>
+            <a href="/auth/logout"><i data-lucide="log-out"></i>{{ t('logout') }}</a>
+        </nav>
+        <div class="sidebar-label">{{ t('language') if t('language') != 'language' else 'Language' }}</div>
+        {% include "components/lang_selector.html" %}
     </div>
-</nav>
+</aside>

@@ -3,22 +3,11 @@
 {% block title %}Districts - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/districts">Districts</a>
-        <a href="/roads/status">Road Status</a>
-        <a href="/rivers/status">River Status</a>
-        <a href="/projects/tracker">Projects</a>
-        <a href="/travel/planner">Travel Planner</a>
-        <a href="/auth/logout">Logout</a>
-    </div>
-</nav>
+{% include "components/navbar.html" %}
 
 <div class="container">
-    <h1>🇳🇵 Nepal's 77 Districts</h1>
-    <p style="color: #6b7280; margin-bottom: 2rem;">Select your district to see local information</p>
+    <h1><i data-lucide="mountain-snow"></i> Nepal's 77 Districts</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Select your district to see local information</p>
     
     {% for province, district_list in provinces.items() %}
         <div class="card">
@@ -28,7 +17,7 @@
                     <a href="/district/{{ district.id }}" style="text-decoration: none; color: inherit;">
                         <div class="stat-card">
                             <strong>{{ district.name }}</strong>
-                            <p style="font-size: 0.875rem; color: #6b7280;">{{ district.headquarters }}</p>
+                            <p style="font-size: 0.875rem; color: var(--text-muted);">{{ district.headquarters }}</p>
                         </div>
                     </a>
                 {% endfor %}

@@ -3,8 +3,8 @@
 {% block title %}Projects - Authority - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar" style="background: #1a1a2e;">
-    <a href="/" class="nav-brand">🏛️ {{ authority.name }}</a>
+<nav class="navbar" style="background: var(--bg-dark);">
+    <a href="/" class="nav-brand"><i data-lucide="landmark"></i> {{ authority.name }}</a>
     <div class="nav-links">
         <a href="/authority/dashboard">Dashboard</a>
         <a href="/authority/complaints">Complaints</a>
@@ -12,19 +12,20 @@
         <a href="/authority/roads">Roads</a>
         <a href="/authority/rivers">Rivers</a>
         <a href="/auth/logout">Logout</a>
+        {% include "components/lang_selector.html" %}
     </div>
 </nav>
 
 <div class="container">
-    <h1>🏗️ Projects</h1>
-    <p style="color: #6b7280;">Manage your development projects</p>
+    <h1><i data-lucide="building-2"></i> Projects</h1>
+    <p style="color: var(--text-muted);">Manage your development projects</p>
     
     {% if projects %}
         <div class="grid grid-2">
             {% for project in projects %}
                 <div class="card">
                     <h3>{{ project.name }}</h3>
-                    <p style="color: #6b7280;">{{ project.category|upper }} | {{ project.location }}</p>
+                    <p style="color: var(--text-muted);">{{ project.category|upper }} | {{ project.location }}</p>
                     
                     <div style="margin: 1rem 0;">
                         <span class="status-badge status-{{ project.status }}">{{ project.status }}</span>

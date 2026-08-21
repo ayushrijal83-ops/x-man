@@ -3,22 +3,11 @@
 {% block title %}Road Status - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/districts">Districts</a>
-        <a href="/roads/status">Road Status</a>
-        <a href="/rivers/status">River Status</a>
-        <a href="/projects/tracker">Projects</a>
-        <a href="/travel/planner">Travel Planner</a>
-        <a href="/auth/logout">Logout</a>
-    </div>
-</nav>
+{% include "components/navbar.html" %}
 
 <div class="container">
-    <h1>🛣️ Live Road Status</h1>
-    <p style="color: #6b7280; margin-bottom: 2rem;">Real-time road conditions across Nepal</p>
+    <h1><i data-lucide="route"></i> Live Road Status</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Real-time road conditions across Nepal</p>
     
     <div class="card" style="margin-bottom: 2rem;">
         <form method="GET" style="display: flex; gap: 1rem; align-items: center;">
@@ -39,12 +28,12 @@
         {% for road in roads %}
             <div class="card">
                 <h3>{{ road.name }}</h3>
-                <p style="color: #6b7280;">{{ road.highway }}</p>
+                <p style="color: var(--text-muted);">{{ road.highway }}</p>
                 <div style="margin: 1rem 0;">
                     <span class="status-badge status-{{ road.status }}">{{ road.status|upper }}</span>
                     <span class="status-badge status-{{ road.traffic_level }}">{{ road.traffic_level|upper }} Traffic</span>
                 </div>
-                <p><strong>Route:</strong> {{ road.from_location }} → {{ road.to_location }}</p>
+                <p><strong>Route:</strong> {{ road.from_location }} <i data-lucide="move-right" class="icon-sm"></i> {{ road.to_location }}</p>
                 <p><strong>Distance:</strong> {{ road.distance_km }} km</p>
                 <p><strong>Last Updated:</strong> {{ road.last_updated.strftime('%Y-%m-%d %H:%M') }}</p>
             </div>

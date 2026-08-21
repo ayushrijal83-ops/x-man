@@ -3,18 +3,11 @@
 {% block title %}File Complaint - NepalSathi{% endblock %}
 
 {% block content %}
-<nav class="navbar">
-    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
-    <div class="nav-links">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/complaints/new">File Complaint</a>
-        <a href="/auth/logout">Logout</a>
-    </div>
-</nav>
+{% include "components/navbar.html" %}
 
 <div class="container">
-    <h1>📢 File a Complaint</h1>
-    <p style="color: #6b7280; margin-bottom: 2rem;">Report issues to the right authority</p>
+    <h1><i data-lucide="megaphone"></i> File a Complaint</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Report issues to the right authority</p>
     
     <div class="card" style="max-width: 600px; margin: 0 auto;">
         <form method="POST">
