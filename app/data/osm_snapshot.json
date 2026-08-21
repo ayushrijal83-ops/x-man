@@ -1981,5 +1981,317 @@
    "श्री गणेश पथ": "",
    "सिद्धार्थ राजमार्ग": "NH47"
   }
+ },
+ "Salyan": {
+  "rivers": [
+   "Babai Khola",
+   "Bheri River",
+   "Jahari Khola",
+   "Sarda Khola",
+   "सारदा खोला"
+  ],
+  "roads": {
+   "NH55": "NH55",
+   "Rapti Highway": "NH55",
+   "राप्ती राजमार्ग": "NH55"
+  }
+ },
+ "Sankhuwasabha": {
+  "rivers": [
+   "Apsuwa Khola",
+   "Barun River",
+   "Hinwan Khola",
+   "Isuwa Khola",
+   "Lunsun Khola",
+   "Medokchheje Khola",
+   "Piluwa Khola",
+   "Sabha Khola",
+   "Sisuwa Khola",
+   "अरुण नदी",
+   "अरुण नदी - 朋曲",
+   "बरुण नदी",
+   "ཁ་དམར་ཆུ 甘玛藏布",
+   "澍曲 अरुण नदी"
+  ],
+  "roads": {
+   "NH08": "NH08",
+   "Piluwa Bridge": "NH10"
+  }
+ },
+ "Saptari": {
+  "rivers": [
+   "Balan Nadi",
+   "Balan River",
+   "Chapin Khola Khadak-5",
+   "Kali Khola",
+   "Khadak River",
+   "Khando River(Nadi)",
+   "Koriya Khola",
+   "Koshi",
+   "Koshi Pump Nahar",
+   "SUNDARI RIVER",
+   "koshi river"
+  ],
+  "roads": {
+   "Adalat Marg": "NH05",
+   "Bhaluwahi Bridge": "F3",
+   "Chapin Bridge": "NH01",
+   "F3": "F3",
+   "F4": "F4",
+   "Hanuman Nagar Marg": "NH14",
+   "Hanuman Nagar Road(Way to Rajbiraj)": "F3",
+   "Kanchanpur Marg": "NH05",
+   "Kunauli Road(Way To Rajbiraj)": "NH14",
+   "NH05": "NH05",
+   "NH14": "NH14",
+   "Nagarpalika Road": "",
+   "Rajdevi Marg": "",
+   "Rajdevi Road": "",
+   "Rupni road": "F4",
+   "Sagarmatha Rajmarg": "NH16",
+   "Shirakha Marg (Hulaki Marg)": "NH05",
+   "Tribhuvan Chowk Road": "",
+   "rupani road": "F4",
+   "महेन्द्र राज्मार्ग्": "H01"
+  }
+ },
+ "Sarlahi": {
+  "rivers": [
+   "Bagmati River (बागमती नदी)",
+   "Chandi River",
+   "Daini Khola",
+   "Hardi Nadi",
+   "Hariaun Khola",
+   "Jhanjha Khola",
+   "Jhim Nadi",
+   "Lakhandei Khola",
+   "Lokhandeni Khola",
+   "Phuljor Khola"
+  ],
+  "roads": {
+   "Mahendra Rajmarg": "NH01",
+   "Malangawa Road": "NH32",
+   "NH05": "NH05",
+   "NH32": "NH32",
+   "महेन्द्र राज्मार्ग्": "NH01"
+  }
+ },
+ "Sindhuli": {
+  "rivers": [
+   "Bagmati River (बागमती नदी)",
+   "Barun Khola",
+   "Chandaha Khola",
+   "Gadauli Khola",
+   "Gaghar Khola",
+   "Gwang (Gaumati) Khola",
+   "Kakur Khola",
+   "Kamala River",
+   "Khanjhani Khola",
+   "Kokhajor Khola",
+   "Kyan Khola",
+   "Marin Khola",
+   "Phulbari Khola",
+   "Rancha Khola",
+   "Roshi Khola",
+   "Sun Kosi",
+   "Tawa Khola",
+   "Thakur Khola",
+   "sun kosi"
+  ],
+  "roads": {
+   "BP Highway": "NH13",
+   "Dharan Chatara Highway": "NH09",
+   "Dhura Bazar Road": "NH09",
+   "F57": "F57",
+   "Gawang Bridge": "NH09",
+   "Hospital Road": "NH09",
+   "NH03": "NH03",
+   "NH09": "NH09"
+  }
+ },
+ "Sindhupalchok": {
+  "rivers": [],
+  "roads": {}
+ },
+ "Siraha": {
+  "rivers": [
+   "Balan Nadi",
+   "Balan River",
+   "Chure River",
+   "Ghumi Khola",
+   "Kamala River",
+   "Sarre Khole",
+   "कमला नदि"
+  ],
+  "roads": {
+   "Choharwa Siraha Madar Road": "NH20",
+   "Ghurmi Bridge": "NH01",
+   "Hulaki Sadak": "NH05",
+   "Hulaki sadak": "NH05",
+   "Madar - Siraha - Choharwa": "NH20",
+   "Madar-siraha Road": "NH20",
+   "NH05": "NH05",
+   "NH16": "NH16",
+   "NH20": "NH20",
+   "Ramesh Mahato Chowk": "NH01",
+   "Siraha - Choharwa Road": "NH20",
+   "Zeromile-Bariyarpatti-Road": "F67",
+   "महेन्द्र राज्मार्ग्": "NH01"
+  }
+ },
+ "Solukhumbu": {
+  "rivers": [
+   "Bhote Koshi",
+   "Dudh Koshi",
+   "Dudh Kosi",
+   "Dudhkund Khola",
+   "Hinku Drangka",
+   "Hunku Drangka",
+   "Imja Khola",
+   "Junbesi Khola",
+   "Likhu Khola",
+   "Lobuche",
+   "Sisa Khola",
+   "Solu Khola",
+   "Thado Koshi Khola",
+   "Thame Khola"
+  ],
+  "roads": {
+   "NH20": "NH20",
+   "Salme -Tingla Bridge": "NH20"
+  }
+ },
+ "Sunsari": {
+  "rivers": [
+   "Budhi Khola",
+   "Burhi",
+   "Jaulaha Khola",
+   "Keshaliya River",
+   "Khahare Khola",
+   "Koshi",
+   "Seuti River",
+   "Sunsari Nadi",
+   "Tengra Khola",
+   "koshi river"
+  ],
+  "roads": {
+   "Dhankuta Road": "NH09",
+   "Dhankute Road": "NH09",
+   "Dharan Marg": "NH08",
+   "Dharan-Chatara Road": "NH09",
+   "F57": "F57",
+   "H17": "H17",
+   "Koshi Bridge": "NH09",
+   "Koshi Rajmarg": "NH08",
+   "Koshi Rajmarga": "NH08",
+   "NH08": "NH08",
+   "NH09": "NH09",
+   "महेन्द्र राज्मार्ग्": "NH01"
+  }
+ },
+ "Surkhet": {
+  "rivers": [
+   "Bheri River",
+   "Goche Khola",
+   "Khulli Khola",
+   "Thuli Gad",
+   "कर्णाली",
+   "गोचेखोला"
+  ],
+  "roads": {
+   "Dailekha Rajmarg": "NH60",
+   "Karnali Rajmarg": "NH58",
+   "NH09": "NH09",
+   "NH58": "NH58",
+   "Ratna Rajmarg": "NH58",
+   "Ratna Rajmarga": "NH58"
+  }
+ },
+ "Syangja": {
+  "rivers": [
+   "Asurey Khola",
+   "Badhkhola",
+   "Jarekhola river",
+   "Kaalikhola",
+   "Kaligandaki river",
+   "Lubdi Khola",
+   "Mausuli Khola",
+   "Suraudi Khola",
+   "khadi khola",
+   "कालीगण्डकी नदी"
+  ],
+  "roads": {
+   "Bad Khola Pul": "NH47",
+   "Badhkhola-Pawai-Dulegaunda Rd": "39DR030",
+   "Badhkhola-Pawai-Dulegaunda Road": "39DR030",
+   "Badhkhola-Pawai-Dulegaunda road": "39DR030",
+   "Badhkhola-Pawai-Taksar-Dulegaunda Road": "39DR030",
+   "Chapakot - Damachaur Road": "NH69",
+   "Chapakot Highway": "NH69",
+   "Kaligandaki Bridge": "NH68",
+   "Keladi Majuwa Road": "39DR010",
+   "NH47": "NH47",
+   "Putalikhet-Setidovan road": "NH70",
+   "Sankhar - Damachaur Road": "NH69",
+   "Siddhartha Highway": "NH47",
+   "Siddhartha Rajmarg": "NH47",
+   "Sidhartha Highway": "NH47"
+  }
+ },
+ "Tanahun": {
+  "rivers": [
+   "Daraudi Khola",
+   "Kali Gandaki",
+   "Kumle Khola",
+   "Kyangdi Khola",
+   "Madi Khola",
+   "Marsyangdi",
+   "SURAUDI RIVER",
+   "Seti Khola",
+   "Seti River",
+   "Trisuli",
+   "Ziddi Khola",
+   "chudi river"
+  ],
+  "roads": {
+   "Bhimad - Baidi Road": "NH45",
+   "Chundi Bridge": "NH25",
+   "Dumre-Bandipur Road": "F127",
+   "Dumre-Besishahar": "NH25",
+   "Khaireni - Bhimad Road": "NH45",
+   "Khaireni-Gorkha Highway": "NH44",
+   "Madi Bridge": "NH17",
+   "Manpur - Ghumarighat Road": "F163",
+   "Marshyangdi Bridge": "",
+   "Naya Khola Bridge": "NH17",
+   "Phaundi Bridge": "NH25",
+   "Prithvi Highway": "NH17",
+   "Trishuli Bridge": "",
+   "डुम्रे-बेसीसहर राजमार्ग": "NH25"
+  }
+ },
+ "Taplejung": {
+  "rivers": [
+   "Ghunsa",
+   "Ghunsa Khola",
+   "Ghunse Khola",
+   "Iwa",
+   "Kabeli",
+   "Mewa",
+   "Pabuk Khola",
+   "Simbuwa Khola",
+   "Tamor Nadi",
+   "Tamor River",
+   "Tawa Khola",
+   "Yangma Khola"
+  ],
+  "roads": {
+   "Mechi Highway": "NH02",
+   "NH02": "NH02"
+  }
+ },
+ "Terhathum": {
+  "rivers": [],
+  "roads": {}
  }
 }
