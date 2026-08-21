@@ -1,32 +1,66 @@
-# CLAUDE.md - HackForge Development Guide
+# \# CLAUDE.md - NepalSathi Development Guide
 
-## CRITICAL RULES
+# 
 
-1. READ THIS FILE COMPLETELY before starting any work
-2. CHECK docs/PROJECT_PROGRESS.md for current project state
-3. REUSE existing components - Do NOT rebuild navigation, cards, forms
-4. FOLLOW the existing architecture
-5. RUN TESTS after implementation: pytest tests/
-6. UPDATE docs/PROJECT_PROGRESS.md before stopping
-7. DO NOT expose secrets - Use .env file
-8. DO NOT add dependencies without justification
-9. USE Git branches - Never work directly on main
-10. COMMIT frequently with descriptive messages
+# \## Project Overview
 
-## Architecture Summary
+# NepalSathi is an AI-powered district intelligence platform for Nepal. It connects citizens, travelers, and government authorities through roads, rivers, projects, and community information.
 
-- Stack: Flask + SQLAlchemy + Jinja2 + Vanilla JS
-- AI: Ollama (local) with cloud fallback
-- Frontend: Server-rendered with reusable components
-- Database: SQLite (dev) / PostgreSQL (production)
-- Authentication: Flask-Login with password hashing
+# 
 
-## Key Directories
+# \## Tech Stack
 
-app/models/          - Database models
-app/routes/          - Route handlers
-app/services/        - Business logic
-app/templates/       - Jinja2 templates
-app/static/          - Static files (CSS, JS)
-docs/                - Documentation
-tests/               - Test files
+# \- Flask + SQLAlchemy + SQLite
+
+# \- Jinja2 Templates
+
+# \- Vanilla JS + CSS
+
+# \- Ollama (local LLM) - optional
+
+# 
+
+# \## Current Status
+
+# \- 17 database models created
+
+# \- 77 districts seeded
+
+# \- All core routes working
+
+# \- Templates complete
+
+# \- AI service has fallback (Ollama optional)
+
+# 
+
+# \## Key Files
+
+# \- `app/\_\_init\_\_.py` - Application factory
+
+# \- `app/models/` - Database models
+
+# \- `app/routes/` - Route handlers
+
+# \- `app/services/ai\_service.py` - AI integration
+
+# \- `app/templates/` - HTML templates
+
+# \- `init\_db.py` - Reset database
+
+# \- `seed\_data.py` - Seed districts
+
+# \- `add\_demo\_data.py` - Add demo content
+
+# 
+
+# \## Database Reset
+
+# ```bash
+
+# python init\_db.py
+
+# python seed\_data.py
+
+# python add\_demo\_data.py
+
