@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}River Status - NepalSathi{% endblock %}
+
+{% block content %}
+<nav class="navbar">
+    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/districts">Districts</a>
+        <a href="/roads/status">Road Status</a>
+        <a href="/rivers/status">River Status</a>
+        <a href="/projects/tracker">Projects</a>
+        <a href="/travel/planner">Travel Planner</a>
+        <a href="/auth/logout">Logout</a>
+    </div>
+</nav>
+
+<div class="container">
+    <h1>🌊 River Status</h1>
+    <p style="color: #6b7280; margin-bottom: 2rem;">Monitor river levels and flood risks</p>
+    
+    <div class="card" style="margin-bottom: 2rem;">
+        <form method="GET" style="display: flex; gap: 1rem; align-items: center;">
+            <label>Filter by District:</label>
+            <select name="district_id" class="form-input" style="max-width: 300px;">
+                <option value="">All Districts</option>
+                {% for district in districts %}
+                    <option value="{{ district.id }}" {% if selected_district == district.id|string %}selected{% endif %}>
+                        {{ district.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary">Filter</button>
+        </form>
+    </div>
+    
+    <div class="grid grid-2">
+        {% for river in rivers %}
+            <div class="card">
+                <h3>{{ river.name }}</h3>
+                <div style="margin: 1rem 0;">
+                    <span class="status-badge status-{{ river.status }}">{{ river.status|upper }}</span>
+                </div>
+                <p><strong>Current Level:</strong> {{ river.current_level }}m</p>
+                <p><strong>Danger Level:</strong> {{ river.danger_level }}m</p>
+                
+                {% if river.current_level and river.danger_level %}
+                    {% set percentage = (river.current_level / river.danger_level * 100)|round %}
+                    <div class="progress-bar" style="margin: 1rem 0;">
+                        <div class="progress-fill" style="width: {{ percentage }}%; {% if percentage > 80 %}background: #ef4444;{% elif percentage > 60 %}background: #f59e0b;{% else %}background: #10b981;{% endif %}"></div>
+                    </div>
+                    <small>{{ percentage }}% of danger level</small>
+                {% endif %}
+                
+                <p style="margin-top: 1rem;"><strong>Last Updated:</strong> {{ river.last_updated.strftime('%Y-%m-%d %H:%M') }}</p>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

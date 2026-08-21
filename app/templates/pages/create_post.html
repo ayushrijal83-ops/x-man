@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Create Post - NepalSathi{% endblock %}
+
+{% block content %}
+<nav class="navbar">
+    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/auth/logout">Logout</a>
+    </div>
+</nav>
+
+<div class="container">
+    <h1>📝 Create Post</h1>
+    <p style="color: #6b7280; margin-bottom: 2rem;">Share information with your community</p>
+    
+    <div class="card" style="max-width: 600px; margin: 0 auto;">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="form-group">
+                <label>District</label>
+                <select name="district_id" class="form-input" required>
+                    {% for district in districts %}
+                        <option value="{{ district.id }}" {% if current_user.district_id == district.id %}selected{% endif %}>
+                            {{ district.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Category</label>
+                <select name="category" class="form-input">
+                    <option value="general">General</option>
+                    <option value="traffic">Traffic</option>
+                    <option value="road_condition">Road Condition</option>
+                    <option value="weather">Weather</option>
+                    <option value="landslide">Landslide</option>
+                    <option value="emergency">Emergency</option>
+                    <option value="development">Development</option>
+                    <option value="news">Local News</option>
+                    <option value="announcement">Announcement</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Location (optional)</label>
+                <input type="text" name="location" class="form-input" placeholder="e.g., Kamalamai, Sindhuli">
+            </div>
+            
+            <div class="form-group">
+                <label>Content</label>
+                <textarea name="content" class="form-input" rows="5" required placeholder="What's happening?"></textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block">Post</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

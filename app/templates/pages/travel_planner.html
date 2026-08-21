@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Travel Planner - NepalSathi{% endblock %}
+
+{% block content %}
+<nav class="navbar">
+    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/districts">Districts</a>
+        <a href="/roads/status">Road Status</a>
+        <a href="/rivers/status">River Status</a>
+        <a href="/projects/tracker">Projects</a>
+        <a href="/travel/planner">Travel Planner</a>
+        <a href="/auth/logout">Logout</a>
+    </div>
+</nav>
+
+<div class="container">
+    <h1>🚗 Travel Planner</h1>
+    <p style="color: #6b7280; margin-bottom: 2rem;">Plan your journey with live road and river information</p>
+    
+    <div class="card" style="max-width: 600px; margin: 0 auto;">
+        <h2 class="card-title">Plan Your Journey</h2>
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="form-group">
+                <label>From</label>
+                <input type="text" name="from_location" class="form-input" required placeholder="e.g., Sindhuli">
+            </div>
+            
+            <div class="form-group">
+                <label>To</label>
+                <input type="text" name="to_location" class="form-input" required placeholder="e.g., Kathmandu">
+            </div>
+            
+            <div class="form-group">
+                <label>Travel Date</label>
+                <input type="date" name="travel_date" class="form-input">
+            </div>
+            
+            <div class="form-group">
+                <label>Preferred Time</label>
+                <select name="travel_time" class="form-input">
+                    <option value="flexible">Flexible</option>
+                    <option value="morning">Morning (6AM - 10AM)</option>
+                    <option value="afternoon">Afternoon (10AM - 4PM)</option>
+                    <option value="evening">Evening (4PM - 8PM)</option>
+                </select>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block">Analyze Route</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

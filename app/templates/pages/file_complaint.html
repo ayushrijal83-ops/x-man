@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}File Complaint - NepalSathi{% endblock %}
+
+{% block content %}
+<nav class="navbar">
+    <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/complaints/new">File Complaint</a>
+        <a href="/auth/logout">Logout</a>
+    </div>
+</nav>
+
+<div class="container">
+    <h1>📢 File a Complaint</h1>
+    <p style="color: #6b7280; margin-bottom: 2rem;">Report issues to the right authority</p>
+    
+    <div class="card" style="max-width: 600px; margin: 0 auto;">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="form-group">
+                <label>District</label>
+                <select name="district_id" class="form-input" required>
+                    {% for district in districts %}
+                        <option value="{{ district.id }}" {% if current_user.district_id == district.id %}selected{% endif %}>
+                            {{ district.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Authority</label>
+                <select name="authority_id" class="form-input" required>
+                    {% for authority in authorities %}
+                        <option value="{{ authority.id }}">{{ authority.name }} ({{ authority.category }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Category</label>
+                <select name="category" class="form-input" required>
+                    <option value="road_blocked">Road Blocked</option>
+                    <option value="water_supply">Water Supply</option>
+                    <option value="electricity">Electricity</option>
+                    <option value="waste">Waste Management</option>
+                    <option value="landslide">Landslide</option>
+                    <option value="bridge">Bridge Damage</option>
+                    <option value="drainage">Drainage</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Urgency</label>
+                <select name="urgency" class="form-input">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Location</label>
+                <input type="text" name="location" class="form-input" placeholder="e.g., Kamalamai, Sindhuli">
+            </div>
+            
+            <div class="form-group">
+                <label>Description</label>
+                <textarea name="description" class="form-input" rows="5" required placeholder="Describe the issue..."></textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block">Submit Complaint</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

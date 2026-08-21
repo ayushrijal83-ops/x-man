@@ -1,27 +1,50 @@
 {% extends "base.html" %}
 
-{% block title %}HackForge - Build Faster{% endblock %}
+{% block title %}NepalSathi - Know Your Nepal{% endblock %}
 
 {% block content %}
-<div class="dashboard-container">
-    <nav class="navbar">
-        <a href="/" class="nav-brand">HackForge</a>
+<div style="min-height: 100vh; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);">
+    <nav class="navbar" style="background: transparent;">
+        <a href="/" class="nav-brand">🇳🇵 NepalSathi</a>
         <div class="nav-links">
-            <a href="/auth/login" class="btn btn-outline">Login</a>
-            <a href="/auth/register" class="btn btn-primary">Get Started</a>
+            <a href="/auth/login">Login</a>
+            <a href="/auth/register" class="btn btn-primary" style="background: white; color: #1e3c72;">Get Started</a>
         </div>
     </nav>
     
-    <div class="hero-section">
-        <h1 class="hero-title">Build Amazing Projects Faster</h1>
-        <p class="hero-subtitle">
-            Your reusable foundation for rapid development. 
-            Focus on innovation, not infrastructure.
+    <div style="text-align: center; padding: 6rem 2rem; color: white;">
+        <h1 style="font-size: 3.5rem; margin-bottom: 1rem;">🇳🇵 NepalSathi</h1>
+        <p style="font-size: 1.5rem; margin-bottom: 0.5rem;">Know your district. Know your roads. Know your Nepal.</p>
+        <p style="font-size: 1.1rem; margin-bottom: 2rem; opacity: 0.9;">
+            Nepal's AI-powered district intelligence & community platform
         </p>
-        <div class="hero-actions">
-            <a href="/auth/register" class="btn btn-primary btn-lg">
-                Start Building
+        <div style="display: flex; gap: 1rem; justify-content: center;">
+            <a href="/auth/register" class="btn btn-primary" style="background: white; color: #1e3c72; padding: 0.75rem 1.5rem; font-size: 1.1rem;">
+                Start Exploring
             </a>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; margin-top: 4rem; max-width: 900px; margin-left: auto; margin-right: auto;">
+            <div>
+                <div style="font-size: 2.5rem;">🛣️</div>
+                <h3>Live Road Tracking</h3>
+                <p style="opacity: 0.9;">Real-time road conditions across Nepal</p>
+            </div>
+            <div>
+                <div style="font-size: 2.5rem;">🌊</div>
+                <h3>River Monitoring</h3>
+                <p style="opacity: 0.9;">Track river levels and flood risks</p>
+            </div>
+            <div>
+                <div style="font-size: 2.5rem;">🏗️</div>
+                <h3>Project Tracker</h3>
+                <p style="opacity: 0.9;">Follow development projects</p>
+            </div>
+            <div>
+                <div style="font-size: 2.5rem;">🤖</div>
+                <h3>AI Intelligence</h3>
+                <p style="opacity: 0.9;">Smart insights for better decisions</p>
+            </div>
         </div>
     </div>
 </div>
