@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}File Complaint - NepalSathi{% endblock %}
+{% block title %}{{ 'File Complaint'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="megaphone"></i> File a Complaint</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">Report issues to the right authority</p>
+    <h1><i data-lucide="megaphone"></i> {{ 'File a Complaint'|t }}</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">{{ 'Report issues to the right authority'|t }}</p>
     
     <div class="card" style="max-width: 600px; margin: 0 auto;">
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="form-group">
-                <label>District</label>
+                <label>{{ 'District'|t }}</label>
                 <select name="district_id" class="form-input" required>
                     {% for district in districts %}
                         <option value="{{ district.id }}" {% if current_user.district_id == district.id %}selected{% endif %}>
@@ -25,49 +25,49 @@
             </div>
             
             <div class="form-group">
-                <label>Authority</label>
+                <label>{{ 'Authority'|t }}</label>
                 <select name="authority_id" class="form-input" required>
                     {% for authority in authorities %}
-                        <option value="{{ authority.id }}">{{ authority.name }} ({{ authority.category }})</option>
+                        <option value="{{ authority.id }}">{{ authority.name }} ({{ authority.category|t }})</option>
                     {% endfor %}
                 </select>
             </div>
             
             <div class="form-group">
-                <label>Category</label>
+                <label>{{ 'Category'|t }}</label>
                 <select name="category" class="form-input" required>
-                    <option value="road_blocked">Road Blocked</option>
-                    <option value="water_supply">Water Supply</option>
-                    <option value="electricity">Electricity</option>
-                    <option value="waste">Waste Management</option>
-                    <option value="landslide">Landslide</option>
-                    <option value="bridge">Bridge Damage</option>
-                    <option value="drainage">Drainage</option>
-                    <option value="other">Other</option>
+                    <option value="road_blocked">{{ 'Road Blocked'|t }}</option>
+                    <option value="water_supply">{{ 'Water Supply'|t }}</option>
+                    <option value="electricity">{{ 'Electricity'|t }}</option>
+                    <option value="waste">{{ 'Waste Management'|t }}</option>
+                    <option value="landslide">{{ 'Landslide'|t }}</option>
+                    <option value="bridge">{{ 'Bridge Damage'|t }}</option>
+                    <option value="drainage">{{ 'Drainage'|t }}</option>
+                    <option value="other">{{ 'Other'|t }}</option>
                 </select>
             </div>
             
             <div class="form-group">
-                <label>Urgency</label>
+                <label>{{ 'Urgency'|t }}</label>
                 <select name="urgency" class="form-input">
-                    <option value="low">Low</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
+                    <option value="low">{{ 'Low'|t }}</option>
+                    <option value="medium" selected>{{ 'Medium'|t }}</option>
+                    <option value="high">{{ 'High'|t }}</option>
+                    <option value="critical">{{ 'Critical'|t }}</option>
                 </select>
             </div>
             
             <div class="form-group">
-                <label>Location</label>
-                <input type="text" name="location" class="form-input" placeholder="e.g., Kamalamai, Sindhuli">
+                <label>{{ 'Location'|t }}</label>
+                <input type="text" name="location" class="form-input" placeholder="{{ 'e.g., Kamalamai, Sindhuli'|t }}">
             </div>
             
             <div class="form-group">
-                <label>Description</label>
-                <textarea name="description" class="form-input" rows="5" required placeholder="Describe the issue..."></textarea>
+                <label>{{ 'Description'|t }}</label>
+                <textarea name="description" class="form-input" rows="5" required placeholder="{{ 'Describe the issue...'|t }}"></textarea>
             </div>
             
-            <button type="submit" class="btn btn-primary btn-block">Submit Complaint</button>
+            <button type="submit" class="btn btn-primary btn-block">{{ 'Submit Complaint'|t }}</button>
         </form>
     </div>
 </div>

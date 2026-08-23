@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Districts - NepalSathi{% endblock %}
+{% block title %}{{ 'Districts'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="mountain-snow"></i> Nepal's 77 Districts</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">Select your district to see local information</p>
+    <h1><i data-lucide="mountain-snow"></i> {{ "Nepal's 77 Districts"|t }}</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">{{ 'Select your district to see local information'|t }}</p>
     
     {% for province, district_list in provinces.items() %}
         <div class="card">
-            <h2 class="card-title">{{ province }} Province</h2>
+            <h2 class="card-title">{{ province }} {{ 'Province'|t }}</h2>
             <div class="grid grid-4">
                 {% for district in district_list %}
                     <a href="/district/{{ district.id }}" style="text-decoration: none; color: inherit;">

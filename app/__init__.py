@@ -1,5 +1,6 @@
 from flask import Flask
 from flask_login import current_user
+from jinja2 import pass_context
 import os
 from dotenv import load_dotenv
 
@@ -71,14 +72,29 @@ def create_app(config_name=None):
             return '—'
         return '%.1fm' % value
 
-    @app.context_processor
-    def inject_translations():
-        """Expose t() / current_lang / languages to every template."""
+    def active_language():
+        """Session language, else the user's saved preference, else Nepali."""
         from flask import session
         lang = session.get('language')
         if not lang and current_user.is_authenticated:
             lang = current_user.language
-        lang = lang or 'ne'
+        return lang or 'ne'
+
+    @app.template_filter('t')
+    @pass_context
+    def _t(_ctx, text):
+        """Translate page content: {{ 'Road Status'|t }}.
+
+        pass_context is load-bearing: without it Jinja constant-folds
+        `'Road Status'|t` when the template is first compiled and every later
+        request keeps that first visitor's language.
+        """
+        return translation_service.get_translation(active_language(), text)
+
+    @app.context_processor
+    def inject_translations():
+        """Expose t() / current_lang / languages to every template."""
+        lang = active_language()
         return {
             't': lambda key: translation_service.get_translation(lang, key),
             'current_lang': lang,

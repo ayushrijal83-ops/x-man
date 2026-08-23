@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - NepalSathi{% endblock %}
+{% block title %}{{ 'Dashboard'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1>Welcome, {{ current_user.username }}! <i data-lucide="mountain-snow"></i></h1>
+    <h1>{{ 'Welcome,'|t }} {{ current_user.username }}! <i data-lucide="mountain-snow"></i></h1>
     <p style="color: var(--text-muted); margin-bottom: 2rem;">
         {% if user_district %}
-            Your District: <strong>{{ user_district.name }}</strong> ({{ user_district.province }} Province)
+            {{ 'Your District:'|t }} <strong>{{ user_district.name }}</strong> ({{ user_district.province }} {{ 'Province'|t }})
         {% else %}
-            <a href="/districts">Select your district</a>
+            <a href="/districts">{{ 'Select your district'|t }}</a>
         {% endif %}
     </p>
     
@@ -19,94 +19,94 @@
     <div class="grid grid-4" style="margin-bottom: 2rem;">
         <div class="stat-card">
             <div class="stat-value">{{ roads|length }}</div>
-            <div class="stat-label">Road Segments</div>
+            <div class="stat-label">{{ 'Road Segments'|t }}</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">{{ rivers|length }}</div>
-            <div class="stat-label">Rivers</div>
+            <div class="stat-label">{{ 'Rivers'|t }}</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">{{ projects|length }}</div>
-            <div class="stat-label">Projects</div>
+            <div class="stat-label">{{ 'Projects'|t }}</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">{{ recent_posts|length }}</div>
-            <div class="stat-label">Recent Posts</div>
+            <div class="stat-label">{{ 'Recent Posts'|t }}</div>
         </div>
     </div>
     
     <div class="grid grid-2">
         <!-- Road Status -->
         <div class="card">
-            <h2 class="card-title"><i data-lucide="route"></i> Road Status{% if roads_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">Nationwide</span>{% endif %}</h2>
+            <h2 class="card-title"><i data-lucide="route"></i> {{ 'Road Status'|t }}{% if roads_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ 'Nationwide'|t }}</span>{% endif %}</h2>
             {% if roads %}
                 {% for road in roads %}
                     <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <strong>{{ road.name }}</strong>
                             <div>
-                                <span class="status-badge status-{{ road.status }}">{{ road.status }}</span>
-                                <span class="status-badge status-{{ road.traffic_level }}">{{ road.traffic_level }}</span>
+                                <span class="status-badge status-{{ road.status }}">{{ road.status|t }}</span>
+                                <span class="status-badge status-{{ road.traffic_level }}">{{ road.traffic_level|t }}</span>
                             </div>
                         </div>
                         <small style="color: var(--text-muted);">{{ road.from_location }} <i data-lucide="move-right" class="icon-sm"></i> {{ road.to_location }}</small>
                     </div>
                 {% endfor %}
-                <a href="/roads/status" class="btn btn-outline btn-block" style="margin-top: 1rem;">View All Roads</a>
+                <a href="/roads/status" class="btn btn-outline btn-block" style="margin-top: 1rem;">{{ 'View All Roads'|t }}</a>
             {% else %}
-                <p>No road data available.</p>
+                <p>{{ 'No road data available.'|t }}</p>
             {% endif %}
         </div>
         
         <!-- River Status -->
         <div class="card">
-            <h2 class="card-title"><i data-lucide="waves"></i> River Status{% if rivers_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">Nationwide</span>{% endif %}</h2>
+            <h2 class="card-title"><i data-lucide="waves"></i> {{ 'River Status'|t }}{% if rivers_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ 'Nationwide'|t }}</span>{% endif %}</h2>
             {% if rivers %}
                 {% for river in rivers %}
                     <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <strong>{{ river.name }}</strong>
-                            <span class="status-badge status-{{ river.status }}">{{ river.status }}</span>
+                            <span class="status-badge status-{{ river.status }}">{{ river.status|t }}</span>
                         </div>
-                        <small style="color: var(--text-muted);">Level: {{ river.current_level|metres }} | Danger: {{ river.danger_level|metres }}</small>
+                        <small style="color: var(--text-muted);">{{ 'Level:'|t }} {{ river.current_level|metres }} | {{ 'Danger:'|t }} {{ river.danger_level|metres }}</small>
                     </div>
                 {% endfor %}
-                <a href="/rivers/status" class="btn btn-outline btn-block" style="margin-top: 1rem;">View All Rivers</a>
+                <a href="/rivers/status" class="btn btn-outline btn-block" style="margin-top: 1rem;">{{ 'View All Rivers'|t }}</a>
             {% else %}
-                <p>No river data available.</p>
+                <p>{{ 'No river data available.'|t }}</p>
             {% endif %}
         </div>
         
         <!-- Development Projects -->
         <div class="card">
-            <h2 class="card-title"><i data-lucide="building-2"></i> Development Projects{% if projects_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">Nationwide</span>{% endif %}</h2>
+            <h2 class="card-title"><i data-lucide="building-2"></i> {{ 'Development Projects'|t }}{% if projects_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ 'Nationwide'|t }}</span>{% endif %}</h2>
             {% if projects %}
                 {% for project in projects %}
                     <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <strong>{{ project.name }}</strong>
-                            <span class="status-badge status-{{ project.status }}">{{ project.status }}</span>
+                            <span class="status-badge status-{{ project.status }}">{{ project.status|t }}</span>
                         </div>
                         <div class="progress-bar" style="margin: 0.5rem 0;">
                             <div class="progress-fill" style="width: {{ project.progress_percent }}%;"></div>
                         </div>
-                        <small>{{ project.progress_percent }}% complete</small>
+                        <small>{{ project.progress_percent }}% {{ 'complete'|t }}</small>
                     </div>
                 {% endfor %}
-                <a href="/projects/tracker" class="btn btn-outline btn-block" style="margin-top: 1rem;">View All Projects</a>
+                <a href="/projects/tracker" class="btn btn-outline btn-block" style="margin-top: 1rem;">{{ 'View All Projects'|t }}</a>
             {% else %}
-                <p>No projects available.</p>
+                <p>{{ 'No projects available.'|t }}</p>
             {% endif %}
         </div>
         
         <!-- Community Feed with AI Tags -->
         <div class="card">
-            <h2 class="card-title"><i data-lucide="newspaper"></i> Community Feed</h2>
+            <h2 class="card-title"><i data-lucide="newspaper"></i> {{ 'Community Feed'|t }}</h2>
             {% if recent_posts %}
                 {% for post in recent_posts %}
                     <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <strong><i data-lucide="user"></i> User #{{ post.user_id }}</strong>
+                            <strong><i data-lucide="user"></i> {{ 'User #'|t }}{{  post.user_id }}</strong>
                             <small style="color: var(--text-muted);">{{ post.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
                         </div>
                         
@@ -114,36 +114,36 @@
                         
                         <!-- AI Tags -->
                         <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.5rem;">
-                            <span class="status-badge status-{{ post.category or 'general' }}">{{ post.category or 'general' }}</span>
+                            <span class="status-badge status-{{ post.category or 'general' }}">{{ (post.category or 'general')|t }}</span>
                             
                             {% if post.is_ai_classified %}
-                                <span class="status-badge status-open" title="Classified by AI"><i data-lucide="bot"></i> AI</span>
+                                <span class="status-badge status-open" title="{{ 'Classified by AI'|t }}"><i data-lucide="bot"></i> AI</span>
                             {% endif %}
                             
                             {% if post.severity %}
-                                <span class="status-badge status-{{ post.severity }}">{{ post.severity }}</span>
+                                <span class="status-badge status-{{ post.severity }}">{{ post.severity|t }}</span>
                             {% endif %}
                             
                             {% if post.language == 'ne' %}
-                                <span class="status-badge" title="Nepali"><i data-lucide="mountain-snow"></i> नेपाली</span>
+                                <span class="status-badge" title="{{ 'Nepali'|t }}"><i data-lucide="mountain-snow"></i> नेपाली</span>
                             {% elif post.language == 'en' %}
-                                <span class="status-badge" title="English">English</span>
+                                <span class="status-badge" title="{{ 'English'|t }}">{{ 'English'|t }}</span>
                             {% endif %}
                             
                             {% if post.location %}
-                                <span class="status-badge" title="Location"><i data-lucide="map-pin"></i> {{ post.location }}</span>
+                                <span class="status-badge" title="{{ 'Location'|t }}"><i data-lucide="map-pin"></i> {{ post.location }}</span>
                             {% endif %}
                         </div>
                         
                         <div style="margin-top: 0.5rem;">
-                            <a href="/posts/{{ post.id }}" style="color: var(--brand-primary); text-decoration: none;">View Post <i data-lucide="arrow-right" class="icon-sm"></i></a>
+                            <a href="/posts/{{ post.id }}" style="color: var(--brand-primary); text-decoration: none;">{{ 'View Post'|t }} <i data-lucide="arrow-right" class="icon-sm"></i></a>
                         </div>
                     </div>
                 {% endfor %}
-                <a href="/posts/create" class="btn btn-primary btn-block" style="margin-top: 1rem;">Create Post</a>
+                <a href="/posts/create" class="btn btn-primary btn-block" style="margin-top: 1rem;">{{ 'Create Post'|t }}</a>
             {% else %}
-                <p>No posts yet.</p>
-                <a href="/posts/create" class="btn btn-primary" style="margin-top: 0.5rem;">Create First Post</a>
+                <p>{{ 'No posts yet.'|t }}</p>
+                <a href="/posts/create" class="btn btn-primary" style="margin-top: 0.5rem;">{{ 'Create First Post'|t }}</a>
             {% endif %}
         </div>
     </div>

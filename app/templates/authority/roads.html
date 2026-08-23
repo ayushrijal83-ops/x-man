@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}Roads - Authority - NepalSathi{% endblock %}
+{% block title %}{{ 'Roads'|t }} - {{ 'Authority'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 <nav class="navbar" style="background: var(--bg-dark);">
     <a href="/" class="nav-brand"><i data-lucide="landmark"></i> {{ authority.name }}</a>
     <div class="nav-links">
-        <a href="/authority/dashboard">Dashboard</a>
-        <a href="/authority/complaints">Complaints</a>
-        <a href="/authority/projects">Projects</a>
-        <a href="/authority/roads">Roads</a>
-        <a href="/authority/rivers">Rivers</a>
-        <a href="/auth/logout">Logout</a>
+        <a href="/authority/dashboard">{{ 'Dashboard'|t }}</a>
+        <a href="/authority/complaints">{{ 'Complaints'|t }}</a>
+        <a href="/authority/projects">{{ 'Projects'|t }}</a>
+        <a href="/authority/roads">{{ 'Roads'|t }}</a>
+        <a href="/authority/rivers">{{ 'Rivers'|t }}</a>
+        <a href="/auth/logout">{{ 'Logout'|t }}</a>
         {% include "components/lang_selector.html" %}
     </div>
 </nav>
 
 <div class="container">
-    <h1><i data-lucide="route"></i> Road Management</h1>
-    <p style="color: var(--text-muted);">Update road status in your district</p>
+    <h1><i data-lucide="route"></i> {{ 'Road Management'|t }}</h1>
+    <p style="color: var(--text-muted);">{{ 'Update road status in your district'|t }}</p>
     
     {% if roads %}
         <div class="grid grid-2">
@@ -28,46 +28,46 @@
                     <p style="color: var(--text-muted);">{{ road.highway }}</p>
                     
                     <div style="margin: 1rem 0;">
-                        <span class="status-badge status-{{ road.status }}">{{ road.status }}</span>
-                        <span class="status-badge status-{{ road.traffic_level }}">{{ road.traffic_level }}</span>
+                        <span class="status-badge status-{{ road.status }}">{{ road.status|t }}</span>
+                        <span class="status-badge status-{{ road.traffic_level }}">{{ road.traffic_level|t }}</span>
                     </div>
                     
                     <form method="POST" action="/authority/roads/{{ road.id }}/update">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         
                         <div class="form-group">
-                            <label>Road Status</label>
+                            <label>{{ 'Road Status'|t }}</label>
                             <select name="status" class="form-input">
-                                <option value="open" {% if road.status == 'open' %}selected{% endif %}>Open</option>
-                                <option value="partial" {% if road.status == 'partial' %}selected{% endif %}>Partially Open</option>
-                                <option value="restricted" {% if road.status == 'restricted' %}selected{% endif %}>Restricted</option>
-                                <option value="blocked" {% if road.status == 'blocked' %}selected{% endif %}>Blocked</option>
+                                <option value="open" {% if road.status == 'open' %}selected{% endif %}>{{ 'Open'|t }}</option>
+                                <option value="partial" {% if road.status == 'partial' %}selected{% endif %}>{{ 'Partially Open'|t }}</option>
+                                <option value="restricted" {% if road.status == 'restricted' %}selected{% endif %}>{{ 'Restricted'|t }}</option>
+                                <option value="blocked" {% if road.status == 'blocked' %}selected{% endif %}>{{ 'Blocked'|t }}</option>
                             </select>
                         </div>
                         
                         <div class="form-group">
-                            <label>Traffic Level</label>
+                            <label>{{ 'Traffic Level'|t }}</label>
                             <select name="traffic_level" class="form-input">
-                                <option value="low" {% if road.traffic_level == 'low' %}selected{% endif %}>Low</option>
-                                <option value="moderate" {% if road.traffic_level == 'moderate' %}selected{% endif %}>Moderate</option>
-                                <option value="heavy" {% if road.traffic_level == 'heavy' %}selected{% endif %}>Heavy</option>
-                                <option value="severe" {% if road.traffic_level == 'severe' %}selected{% endif %}>Severe</option>
+                                <option value="low" {% if road.traffic_level == 'low' %}selected{% endif %}>{{ 'Low'|t }}</option>
+                                <option value="moderate" {% if road.traffic_level == 'moderate' %}selected{% endif %}>{{ 'Moderate'|t }}</option>
+                                <option value="heavy" {% if road.traffic_level == 'heavy' %}selected{% endif %}>{{ 'Heavy'|t }}</option>
+                                <option value="severe" {% if road.traffic_level == 'severe' %}selected{% endif %}>{{ 'Severe'|t }}</option>
                             </select>
                         </div>
                         
                         <div class="form-group">
-                            <label>Update Description</label>
-                            <textarea name="description" class="form-input" rows="2" placeholder="Describe the update..."></textarea>
+                            <label>{{ 'Update Description'|t }}</label>
+                            <textarea name="description" class="form-input" rows="2" placeholder="{{ 'Describe the update...'|t }}"></textarea>
                         </div>
                         
-                        <button type="submit" class="btn btn-primary">Update Road</button>
+                        <button type="submit" class="btn btn-primary">{{ 'Update Road'|t }}</button>
                     </form>
                 </div>
             {% endfor %}
         </div>
     {% else %}
         <div class="card" style="text-align: center;">
-            <p>No roads in your district.</p>
+            <p>{{ 'No roads in your district.'|t }}</p>
         </div>
     {% endif %}
 </div>

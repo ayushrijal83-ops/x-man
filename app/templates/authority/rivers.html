@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}Rivers - Authority - NepalSathi{% endblock %}
+{% block title %}{{ 'Rivers'|t }} - {{ 'Authority'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 <nav class="navbar" style="background: var(--bg-dark);">
     <a href="/" class="nav-brand"><i data-lucide="landmark"></i> {{ authority.name }}</a>
     <div class="nav-links">
-        <a href="/authority/dashboard">Dashboard</a>
-        <a href="/authority/complaints">Complaints</a>
-        <a href="/authority/projects">Projects</a>
-        <a href="/authority/roads">Roads</a>
-        <a href="/authority/rivers">Rivers</a>
-        <a href="/auth/logout">Logout</a>
+        <a href="/authority/dashboard">{{ 'Dashboard'|t }}</a>
+        <a href="/authority/complaints">{{ 'Complaints'|t }}</a>
+        <a href="/authority/projects">{{ 'Projects'|t }}</a>
+        <a href="/authority/roads">{{ 'Roads'|t }}</a>
+        <a href="/authority/rivers">{{ 'Rivers'|t }}</a>
+        <a href="/auth/logout">{{ 'Logout'|t }}</a>
         {% include "components/lang_selector.html" %}
     </div>
 </nav>
 
 <div class="container">
-    <h1><i data-lucide="waves"></i> River Management</h1>
-    <p style="color: var(--text-muted);">Update river levels and issue warnings</p>
+    <h1><i data-lucide="waves"></i> {{ 'River Management'|t }}</h1>
+    <p style="color: var(--text-muted);">{{ 'Update river levels and issue warnings'|t }}</p>
     
     {% if rivers %}
         <div class="grid grid-2">
@@ -27,38 +27,38 @@
                     <h3>{{ river.name }}</h3>
                     
                     <div style="margin: 1rem 0;">
-                        <span class="status-badge status-{{ river.status }}">{{ river.status }}</span>
+                        <span class="status-badge status-{{ river.status }}">{{ river.status|t }}</span>
                     </div>
                     
-                    <p><strong>Current Level:</strong> {{ river.current_level|metres }}</p>
-                    <p><strong>Danger Level:</strong> {{ river.danger_level|metres }}</p>
+                    <p><strong>{{ 'Current Level:'|t }}</strong> {{ river.current_level|metres }}</p>
+                    <p><strong>{{ 'Danger Level:'|t }}</strong> {{ river.danger_level|metres }}</p>
                     
                     <form method="POST" action="/authority/rivers/{{ river.id }}/update" style="margin-top: 1rem;">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         
                         <div class="form-group">
-                            <label>Water Level (m)</label>
+                            <label>{{ 'Water Level (m)'|t }}</label>
                             <input type="number" name="water_level" class="form-input" step="0.1" value="{{ river.current_level }}">
                         </div>
                         
                         <div class="form-group">
-                            <label>Status</label>
+                            <label>{{ 'Status'|t }}</label>
                             <select name="status" class="form-input">
-                                <option value="normal" {% if river.status == 'normal' %}selected{% endif %}>Normal</option>
-                                <option value="rising" {% if river.status == 'rising' %}selected{% endif %}>Rising</option>
-                                <option value="high" {% if river.status == 'high' %}selected{% endif %}>High</option>
-                                <option value="flooding" {% if river.status == 'flooding' %}selected{% endif %}>Flooding</option>
+                                <option value="normal" {% if river.status == 'normal' %}selected{% endif %}>{{ 'Normal'|t }}</option>
+                                <option value="rising" {% if river.status == 'rising' %}selected{% endif %}>{{ 'Rising'|t }}</option>
+                                <option value="high" {% if river.status == 'high' %}selected{% endif %}>{{ 'High'|t }}</option>
+                                <option value="flooding" {% if river.status == 'flooding' %}selected{% endif %}>{{ 'Flooding'|t }}</option>
                             </select>
                         </div>
                         
-                        <button type="submit" class="btn btn-primary">Update River</button>
+                        <button type="submit" class="btn btn-primary">{{ 'Update River'|t }}</button>
                     </form>
                 </div>
             {% endfor %}
         </div>
     {% else %}
         <div class="card" style="text-align: center;">
-            <p>No rivers in your district.</p>
+            <p>{{ 'No rivers in your district.'|t }}</p>
         </div>
     {% endif %}
 </div>

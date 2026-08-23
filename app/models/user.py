@@ -13,12 +13,15 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='citizen')
     district_id = db.Column(db.Integer, db.ForeignKey('districts.id'), nullable=True)
+    authority_id = db.Column(db.Integer, db.ForeignKey('authorities.id'), nullable=True)
     is_verified = db.Column(db.Boolean, default=False)
     reputation = db.Column(db.Integer, default=0)
     language = db.Column(db.String(10), default='ne')
     bio = db.Column(db.Text)
     phone = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    authority = db.relationship('Authority', foreign_keys=[authority_id])
     
     def set_password(self, password):
         """Hash and set password."""

@@ -138,6 +138,7 @@ def authority_register():
             email=email,
             role='authority',
             district_id=int(district_id),
+            authority_id=authority.id,
             is_verified=True
         )
         user.set_password(password)

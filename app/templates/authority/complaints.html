@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}Complaints - Authority - NepalSathi{% endblock %}
+{% block title %}{{ 'Complaints'|t }} - {{ 'Authority'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 <nav class="navbar" style="background: var(--bg-dark);">
     <a href="/" class="nav-brand"><i data-lucide="landmark"></i> {{ authority.name }}</a>
     <div class="nav-links">
-        <a href="/authority/dashboard">Dashboard</a>
-        <a href="/authority/complaints">Complaints</a>
-        <a href="/authority/projects">Projects</a>
-        <a href="/authority/roads">Roads</a>
-        <a href="/authority/rivers">Rivers</a>
-        <a href="/auth/logout">Logout</a>
+        <a href="/authority/dashboard">{{ 'Dashboard'|t }}</a>
+        <a href="/authority/complaints">{{ 'Complaints'|t }}</a>
+        <a href="/authority/projects">{{ 'Projects'|t }}</a>
+        <a href="/authority/roads">{{ 'Roads'|t }}</a>
+        <a href="/authority/rivers">{{ 'Rivers'|t }}</a>
+        <a href="/auth/logout">{{ 'Logout'|t }}</a>
         {% include "components/lang_selector.html" %}
     </div>
 </nav>
 
 <div class="container">
-    <h1><i data-lucide="clipboard-list"></i> Complaints</h1>
-    <p style="color: var(--text-muted);">All complaints filed to {{ authority.name }}</p>
+    <h1><i data-lucide="clipboard-list"></i> {{ 'Complaints'|t }}</h1>
+    <p style="color: var(--text-muted);">{{ 'All complaints filed to'|t }} {{ authority.name }}</p>
     
     {% if complaints %}
         <div class="grid grid-2">
@@ -26,20 +26,20 @@
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <h3>{{ complaint.ticket_number }}</h3>
-                        <span class="status-badge status-{{ complaint.status }}">{{ complaint.status }}</span>
+                        <span class="status-badge status-{{ complaint.status }}">{{ complaint.status|t }}</span>
                     </div>
-                    <p><strong>Category:</strong> {{ complaint.category|upper }}</p>
-                    <p><strong>Urgency:</strong> {{ complaint.urgency|upper }}</p>
-                    <p><strong>Location:</strong> {{ complaint.location }}</p>
-                    <p><strong>Description:</strong> {{ complaint.description[:100] }}...</p>
-                    <p><strong>Filed:</strong> {{ complaint.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
-                    <a href="/authority/complaints/{{ complaint.id }}" class="btn btn-primary">Respond</a>
+                    <p><strong>{{ 'Category:'|t }}</strong> {{ complaint.category|t|upper }}</p>
+                    <p><strong>{{ 'Urgency:'|t }}</strong> {{ complaint.urgency|t|upper }}</p>
+                    <p><strong>{{ 'Location:'|t }}</strong> {{ complaint.location }}</p>
+                    <p><strong>{{ 'Description:'|t }}</strong> {{ complaint.description[:100] }}...</p>
+                    <p><strong>{{ 'Filed:'|t }}</strong> {{ complaint.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                    <a href="/authority/complaints/{{ complaint.id }}" class="btn btn-primary">{{ 'Respond'|t }}</a>
                 </div>
             {% endfor %}
         </div>
     {% else %}
         <div class="card" style="text-align: center;">
-            <p>No complaints filed.</p>
+            <p>{{ 'No complaints filed.'|t }}</p>
         </div>
     {% endif %}
 </div>

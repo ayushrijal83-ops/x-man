@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}My Complaints - NepalSathi{% endblock %}
+{% block title %}{{ 'My Complaints'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="clipboard-list"></i> My Complaints</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">Track your filed complaints</p>
+    <h1><i data-lucide="clipboard-list"></i> {{ 'My Complaints'|t }}</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">{{ 'Track your filed complaints'|t }}</p>
     
     {% if complaints %}
         <div class="grid grid-2">
@@ -15,21 +15,21 @@
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <h3>{{ complaint.ticket_number }}</h3>
-                        <span class="status-badge status-{{ complaint.status }}">{{ complaint.status }}</span>
+                        <span class="status-badge status-{{ complaint.status }}">{{ complaint.status|t }}</span>
                     </div>
-                    <p><strong>Category:</strong> {{ complaint.category }}</p>
-                    <p><strong>Urgency:</strong> {{ complaint.urgency }}</p>
-                    <p><strong>Location:</strong> {{ complaint.location }}</p>
-                    <p><strong>Description:</strong> {{ complaint.description[:100] }}...</p>
-                    <p><strong>Filed:</strong> {{ complaint.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
-                    <a href="/complaints/{{ complaint.id }}" class="btn btn-outline">View Details</a>
+                    <p><strong>{{ 'Category:'|t }}</strong> {{ complaint.category|t }}</p>
+                    <p><strong>{{ 'Urgency:'|t }}</strong> {{ complaint.urgency|t }}</p>
+                    <p><strong>{{ 'Location:'|t }}</strong> {{ complaint.location }}</p>
+                    <p><strong>{{ 'Description:'|t }}</strong> {{ complaint.description[:100] }}...</p>
+                    <p><strong>{{ 'Filed:'|t }}</strong> {{ complaint.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                    <a href="/complaints/{{ complaint.id }}" class="btn btn-outline">{{ 'View Details'|t }}</a>
                 </div>
             {% endfor %}
         </div>
     {% else %}
         <div class="card" style="text-align: center;">
-            <p>No complaints filed yet.</p>
-            <a href="/complaints/new" class="btn btn-primary">File Your First Complaint</a>
+            <p>{{ 'No complaints filed yet.'|t }}</p>
+            <a href="/complaints/new" class="btn btn-primary">{{ 'File Your First Complaint'|t }}</a>
         </div>
     {% endif %}
 </div>

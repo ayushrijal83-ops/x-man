@@ -1,45 +1,45 @@
 {% extends "base.html" %}
 
-{% block title %}Travel Planner - NepalSathi{% endblock %}
+{% block title %}{{ 'Travel Planner'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="car"></i> Travel Planner</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">Plan your journey with live road and river information</p>
+    <h1><i data-lucide="car"></i> {{ 'Travel Planner'|t }}</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">{{ 'Plan your journey with live road and river information'|t }}</p>
     
     <div class="card" style="max-width: 600px; margin: 0 auto;">
-        <h2 class="card-title">Plan Your Journey</h2>
+        <h2 class="card-title">{{ 'Plan Your Journey'|t }}</h2>
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="form-group">
-                <label>From</label>
-                <input type="text" name="from_location" class="form-input" required placeholder="e.g., Sindhuli">
+                <label>{{ 'From'|t }}</label>
+                <input type="text" name="from_location" class="form-input" required placeholder="{{ 'e.g., Sindhuli'|t }}">
             </div>
             
             <div class="form-group">
-                <label>To</label>
-                <input type="text" name="to_location" class="form-input" required placeholder="e.g., Kathmandu">
+                <label>{{ 'To'|t }}</label>
+                <input type="text" name="to_location" class="form-input" required placeholder="{{ 'e.g., Kathmandu'|t }}">
             </div>
             
             <div class="form-group">
-                <label>Travel Date</label>
+                <label>{{ 'Travel Date'|t }}</label>
                 <input type="date" name="travel_date" class="form-input">
             </div>
             
             <div class="form-group">
-                <label>Preferred Time</label>
+                <label>{{ 'Preferred Time'|t }}</label>
                 <select name="travel_time" class="form-input">
-                    <option value="flexible">Flexible</option>
-                    <option value="morning">Morning (6AM - 10AM)</option>
-                    <option value="afternoon">Afternoon (10AM - 4PM)</option>
-                    <option value="evening">Evening (4PM - 8PM)</option>
+                    <option value="flexible">{{ 'Flexible'|t }}</option>
+                    <option value="morning">{{ 'Morning (6AM - 10AM)'|t }}</option>
+                    <option value="afternoon">{{ 'Afternoon (10AM - 4PM)'|t }}</option>
+                    <option value="evening">{{ 'Evening (4PM - 8PM)'|t }}</option>
                 </select>
             </div>
             
-            <button type="submit" class="btn btn-primary btn-block">Analyze Route</button>
+            <button type="submit" class="btn btn-primary btn-block">{{ 'Analyze Route'|t }}</button>
         </form>
     </div>
 </div>

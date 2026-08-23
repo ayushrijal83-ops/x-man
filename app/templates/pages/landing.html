@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}NepalSathi — District Intelligence for Nepal{% endblock %}
+{% block title %}{{ 'NepalSathi — District Intelligence for Nepal'|t }}{% endblock %}
 
 {% block content %}
 <header class="lp-nav">
@@ -8,36 +8,34 @@
         <span class="sidebar-mark" aria-hidden="true"><i data-lucide="mountain-snow"></i></span>
         NepalSathi
     </a>
-    <nav style="display: flex; gap: var(--space-2); align-items: center;" aria-label="Account">
+    <nav style="display: flex; gap: var(--space-2); align-items: center;" aria-label="{{ 'Account'|t }}">
         {% include "components/lang_selector.html" %}
-        <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+        <button type="button" class="theme-toggle" aria-label="{{ 'Switch to dark mode'|t }}" aria-pressed="false">
             <i data-lucide="moon"></i>
         </button>
         <a href="/auth/authority/login" class="btn btn-ghost">
-            <i data-lucide="landmark"></i> Authority
+            <i data-lucide="landmark"></i> {{ 'Authority'|t }}
         </a>
-        <a href="/auth/login" class="btn btn-secondary">Sign in</a>
-        <a href="/auth/register" class="btn btn-primary">Get started</a>
+        <a href="/auth/login" class="btn btn-secondary">{{ 'Sign in'|t }}</a>
+        <a href="/auth/register" class="btn btn-primary">{{ 'Get started'|t }}</a>
     </nav>
 </header>
 
 <section class="lp-hero">
     <span class="lp-eyebrow">
-        <i data-lucide="radio" class="icon-sm"></i> Live across 77 districts
+        <i data-lucide="radio" class="icon-sm"></i> {{ 'Live across 77 districts'|t }}
     </span>
-    <h1 class="lp-title">Know your district. <em>Before you travel.</em></h1>
+    <h1 class="lp-title">{{ 'Know your district.'|t }} <em>{{ 'Before you travel.'|t }}</em></h1>
     <div class="lp-rule" aria-hidden="true"></div>
     <p class="lp-lede">
-        Road closures, river levels, and infrastructure projects for every district in
-        Nepal — reported by the people who live there, verified by the authorities who
-        maintain them.
+        {{ 'Road closures, river levels, and infrastructure projects for every district in Nepal — reported by the people who live there, verified by the authorities who maintain them.'|t }}
     </p>
     <div class="lp-actions">
         <a href="/auth/register" class="btn btn-primary btn-lg">
-            Create free account <i data-lucide="arrow-right"></i>
+            {{ 'Create free account'|t }} <i data-lucide="arrow-right"></i>
         </a>
         <a href="/auth/login" class="btn btn-secondary btn-lg">
-            <i data-lucide="log-in"></i> Sign in
+            <i data-lucide="log-in"></i> {{ 'Sign in'|t }}
         </a>
     </div>
 </section>
@@ -47,19 +45,19 @@
         <div class="lp-stats">
             <div>
                 <div class="lp-stat-value">77</div>
-                <div class="lp-stat-label">Districts covered</div>
+                <div class="lp-stat-label">{{ 'Districts covered'|t }}</div>
             </div>
             <div>
                 <div class="lp-stat-value">7</div>
-                <div class="lp-stat-label">Provinces</div>
+                <div class="lp-stat-label">{{ 'Provinces'|t }}</div>
             </div>
             <div>
                 <div class="lp-stat-value">4</div>
-                <div class="lp-stat-label">Languages</div>
+                <div class="lp-stat-label">{{ 'Languages'|t }}</div>
             </div>
             <div>
                 <div class="lp-stat-value">24/7</div>
-                <div class="lp-stat-label">Community reporting</div>
+                <div class="lp-stat-label">{{ 'Community reporting'|t }}</div>
             </div>
         </div>
     </div>
@@ -68,46 +66,40 @@
 <section class="lp-section" style="padding-top: 0;">
     <div class="lp-wrap">
         <div class="lp-section-head">
-            <h2>Everything about your district, in one place</h2>
-            <p>Built for people who need to know whether the road is open before they set out.</p>
+            <h2>{{ 'Everything about your district, in one place'|t }}</h2>
+            <p>{{ 'Built for people who need to know whether the road is open before they set out.'|t }}</p>
         </div>
 
         <div class="grid grid-3">
             <article class="lp-feature">
                 <div class="lp-feature-icon"><i data-lucide="route"></i></div>
-                <h3>Road status</h3>
-                <p>Segment-level conditions across highways and feeder roads, with closures and
-                   construction flagged as they happen.</p>
+                <h3>{{ 'Road status'|t }}</h3>
+                <p>{{ 'Segment-level conditions across highways and feeder roads, with closures and construction flagged as they happen.'|t }}</p>
             </article>
             <article class="lp-feature">
                 <div class="lp-feature-icon"><i data-lucide="waves"></i></div>
-                <h3>River monitoring</h3>
-                <p>Water levels and flood warnings for the rivers that cut through your district,
-                   updated through the monsoon.</p>
+                <h3>{{ 'River monitoring'|t }}</h3>
+                <p>{{ 'Water levels and flood warnings for the rivers that cut through your district, updated through the monsoon.'|t }}</p>
             </article>
             <article class="lp-feature">
                 <div class="lp-feature-icon"><i data-lucide="building-2"></i></div>
-                <h3>Project tracking</h3>
-                <p>Follow bridges, roads, and public works from budget to completion — with real
-                   progress, not press releases.</p>
+                <h3>{{ 'Project tracking'|t }}</h3>
+                <p>{{ 'Follow bridges, roads, and public works from budget to completion — with real progress, not press releases.'|t }}</p>
             </article>
             <article class="lp-feature">
                 <div class="lp-feature-icon"><i data-lucide="megaphone"></i></div>
-                <h3>Direct complaints</h3>
-                <p>File an issue against the responsible authority and track its status until
-                   somebody answers for it.</p>
+                <h3>{{ 'Direct complaints'|t }}</h3>
+                <p>{{ 'File an issue against the responsible authority and track its status until somebody answers for it.'|t }}</p>
             </article>
             <article class="lp-feature">
                 <div class="lp-feature-icon"><i data-lucide="car"></i></div>
-                <h3>Travel planning</h3>
-                <p>Check a route end to end before you leave, with a risk score built from current
-                   road and river conditions.</p>
+                <h3>{{ 'Travel planning'|t }}</h3>
+                <p>{{ 'Check a route end to end before you leave, with a risk score built from current road and river conditions.'|t }}</p>
             </article>
             <article class="lp-feature">
                 <div class="lp-feature-icon"><i data-lucide="bot"></i></div>
-                <h3>AI assistant</h3>
-                <p>Ask about conditions in plain Nepali or English and get an answer drawn from
-                   live district data.</p>
+                <h3>{{ 'AI assistant'|t }}</h3>
+                <p>{{ 'Ask about conditions in plain Nepali or English and get an answer drawn from live district data.'|t }}</p>
             </article>
         </div>
     </div>
@@ -116,27 +108,24 @@
 <section class="lp-section" style="background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
     <div class="lp-wrap">
         <div class="lp-section-head">
-            <h2>How it works</h2>
-            <p>Three steps from signing up to knowing what is happening on the ground.</p>
+            <h2>{{ 'How it works'|t }}</h2>
+            <p>{{ 'Three steps from signing up to knowing what is happening on the ground.'|t }}</p>
         </div>
         <div class="grid grid-3">
             <div>
                 <div class="lp-step-num">I</div>
-                <h3 style="margin-bottom: var(--space-2);">Pick your district</h3>
-                <p style="font-size: 14.5px;">Choose where you live or where you are heading. Everything
-                   you see is filtered to that district.</p>
+                <h3 style="margin-bottom: var(--space-2);">{{ 'Pick your district'|t }}</h3>
+                <p style="font-size: 14.5px;">{{ 'Choose where you live or where you are heading. Everything you see is filtered to that district.'|t }}</p>
             </div>
             <div>
                 <div class="lp-step-num">II</div>
-                <h3 style="margin-bottom: var(--space-2);">See live conditions</h3>
-                <p style="font-size: 14.5px;">Roads, rivers, and projects on one dashboard, combining
-                   community reports with authority updates.</p>
+                <h3 style="margin-bottom: var(--space-2);">{{ 'See live conditions'|t }}</h3>
+                <p style="font-size: 14.5px;">{{ 'Roads, rivers, and projects on one dashboard, combining community reports with authority updates.'|t }}</p>
             </div>
             <div>
                 <div class="lp-step-num">III</div>
-                <h3 style="margin-bottom: var(--space-2);">Report and follow up</h3>
-                <p style="font-size: 14.5px;">Post what you see, file complaints, and track them
-                   through to a response.</p>
+                <h3 style="margin-bottom: var(--space-2);">{{ 'Report and follow up'|t }}</h3>
+                <p style="font-size: 14.5px;">{{ 'Post what you see, file complaints, and track them through to a response.'|t }}</p>
             </div>
         </div>
     </div>
@@ -144,13 +133,13 @@
 
 <section class="lp-section">
     <div class="lp-wrap" style="text-align: center;">
-        <h2 style="font-size: clamp(24px, 3vw, 32px);">Start with your district</h2>
+        <h2 style="font-size: clamp(24px, 3vw, 32px);">{{ 'Start with your district'|t }}</h2>
         <div class="lp-rule" aria-hidden="true"></div>
         <p style="max-width: 48ch; margin: 0 auto var(--space-6); font-size: 16px;">
-            Free to use, in Nepali, Newari, Maithili, and English.
+            {{ 'Free to use, in Nepali, Newari, Maithili, and English.'|t }}
         </p>
         <a href="/auth/register" class="btn btn-primary btn-lg">
-            Create account <i data-lucide="arrow-right"></i>
+            {{ 'Create account'|t }} <i data-lucide="arrow-right"></i>
         </a>
     </div>
 </section>
@@ -161,15 +150,15 @@
             <span class="sidebar-mark" aria-hidden="true"><i data-lucide="mountain-snow"></i></span>
             <div>
                 <div style="font-family: var(--font-serif); font-weight: 600; font-size: 16px; color: var(--on-dark);">NepalSathi</div>
-                <div style="color: var(--brand-accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.11em;">District intelligence for Nepal</div>
+                <div style="color: var(--brand-accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.11em;">{{ 'District intelligence for Nepal'|t }}</div>
             </div>
         </div>
         <nav style="display: flex; gap: var(--space-5); flex-wrap: wrap;" aria-label="Footer">
-            <a href="/districts">Districts</a>
-            <a href="/roads/status">Roads</a>
-            <a href="/rivers/status">Rivers</a>
-            <a href="/projects/tracker">Projects</a>
-            <a href="/authorities/directory">Authorities</a>
+            <a href="/districts">{{ 'Districts'|t }}</a>
+            <a href="/roads/status">{{ 'Roads'|t }}</a>
+            <a href="/rivers/status">{{ 'Rivers'|t }}</a>
+            <a href="/projects/tracker">{{ 'Projects'|t }}</a>
+            <a href="/authorities/directory">{{ 'Authorities'|t }}</a>
         </nav>
     </div>
 </footer>

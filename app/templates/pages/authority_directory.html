@@ -1,26 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}Authority Directory - NepalSathi{% endblock %}
+{% block title %}{{ 'Authority Directory'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="landmark"></i> Authority Directory</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">Government authorities in your district</p>
+    <h1><i data-lucide="landmark"></i> {{ 'Authority Directory'|t }}</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">{{ 'Government authorities in your district'|t }}</p>
     
     <div class="card" style="margin-bottom: 2rem;">
         <form method="GET" style="display: flex; gap: 1rem; align-items: center;">
-            <label>Filter by District:</label>
+            <label>{{ 'Filter by District:'|t }}</label>
             <select name="district_id" class="form-input" style="max-width: 300px;">
-                <option value="">All Districts</option>
+                <option value="">{{ 'All Districts'|t }}</option>
                 {% for district in districts %}
                     <option value="{{ district.id }}" {% if selected_district == district.id|string %}selected{% endif %}>
                         {{ district.name }}
                     </option>
                 {% endfor %}
             </select>
-            <button type="submit" class="btn btn-primary">Filter</button>
+            <button type="submit" class="btn btn-primary">{{ 'Filter'|t }}</button>
         </form>
     </div>
     
@@ -28,15 +28,15 @@
         {% for authority in authorities %}
             <div class="card">
                 <h3>{{ authority.name }}</h3>
-                <span class="status-badge status-open"><i data-lucide="check"></i> VERIFIED</span>
+                <span class="status-badge status-open"><i data-lucide="check"></i> {{ 'VERIFIED'|t }}</span>
                 <div style="margin-top: 1rem;">
-                    <p><strong><i data-lucide="phone"></i> Phone:</strong> {{ authority.phone }}</p>
-                    <p><strong><i data-lucide="mail"></i> Email:</strong> {{ authority.email }}</p>
-                    <p><strong><i data-lucide="map-pin"></i> Address:</strong> {{ authority.address }}</p>
-                    <p><strong><i data-lucide="clock"></i> Hours:</strong> {{ authority.office_hours }}</p>
-                    <p><strong>Category:</strong> {{ authority.category|upper }}</p>
+                    <p><strong><i data-lucide="phone"></i> {{ 'Phone:'|t }}</strong> {{ authority.phone or '—' }}</p>
+                    <p><strong><i data-lucide="mail"></i> {{ 'Email:'|t }}</strong> {{ authority.email or '—' }}</p>
+                    <p><strong><i data-lucide="map-pin"></i> {{ 'Address:'|t }}</strong> {{ authority.address or '—' }}</p>
+                    <p><strong><i data-lucide="clock"></i> {{ 'Hours:'|t }}</strong> {{ authority.office_hours or '—' }}</p>
+                    <p><strong>{{ 'Category:'|t }}</strong> {{ authority.category|t|upper }}</p>
                 </div>
-                <a href="/complaints/new" class="btn btn-primary" style="margin-top: 1rem;">File Complaint</a>
+                <a href="/complaints/new" class="btn btn-primary" style="margin-top: 1rem;">{{ 'File Complaint'|t }}</a>
             </div>
         {% endfor %}
     </div>

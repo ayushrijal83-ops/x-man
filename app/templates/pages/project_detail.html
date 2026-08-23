@@ -1,52 +1,52 @@
 {% extends "base.html" %}
 
-{% block title %}{{ project.name }} - NepalSathi{% endblock %}
+{% block title %}{{ project.name }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
     <h1>{{ project.name }}</h1>
-    <p style="color: var(--text-muted);">{{ project.category|upper }} | {{ project.location }}</p>
+    <p style="color: var(--text-muted);">{{ project.category|t|upper }} | {{ project.location }}</p>
     
     <div class="grid grid-3" style="margin: 2rem 0;">
         <div class="stat-card">
             <div class="stat-value">{{ project.progress_percent }}%</div>
-            <div class="stat-label">Complete</div>
+            <div class="stat-label">{{ 'Complete'|t }}</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">Rs. {{ project.total_budget }}Cr</div>
-            <div class="stat-label">Total Budget</div>
+            <div class="stat-value">{{ 'Rs.'|t }} {{ project.total_budget }}{{ 'Cr'|t }}</div>
+            <div class="stat-label">{{ 'Total Budget'|t }}</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">Rs. {{ project.spent_budget }}Cr</div>
-            <div class="stat-label">Spent</div>
+            <div class="stat-label">{{ 'Spent'|t }}</div>
         </div>
     </div>
     
     <div class="card">
-        <h2 class="card-title">Project Details</h2>
-        <p><strong>Description:</strong> {{ project.description }}</p>
-        <p><strong>Contractor:</strong> {{ project.contractor }}</p>
-        <p><strong>Start Date:</strong> {{ project.start_date.strftime('%Y-%m-%d') if project.start_date }}</p>
-        <p><strong>Expected Completion:</strong> {{ project.expected_completion.strftime('%Y-%m-%d') if project.expected_completion }}</p>
-        <p><strong>Status:</strong> <span class="status-badge status-{{ project.status }}">{{ project.status }}</span></p>
+        <h2 class="card-title">{{ 'Project Details'|t }}</h2>
+        <p><strong>{{ 'Description:'|t }}</strong> {{ project.description }}</p>
+        <p><strong>{{ 'Contractor:'|t }}</strong> {{ project.contractor }}</p>
+        <p><strong>{{ 'Start Date:'|t }}</strong> {{ project.start_date.strftime('%Y-%m-%d') if project.start_date }}</p>
+        <p><strong>{{ 'Expected Completion:'|t }}</strong> {{ project.expected_completion.strftime('%Y-%m-%d') if project.expected_completion }}</p>
+        <p><strong>{{ 'Status:'|t }}</strong> <span class="status-badge status-{{ project.status }}">{{ project.status|t }}</span></p>
     </div>
     
     <div class="card">
-        <h2 class="card-title"><i data-lucide="bar-chart-3"></i> Progress Updates</h2>
+        <h2 class="card-title"><i data-lucide="bar-chart-3"></i> {{ 'Progress Updates'|t }}</h2>
         {% if updates %}
             {% for update in updates %}
                 <div style="padding: 1rem 0; border-bottom: 1px solid var(--border);">
-                    <p><strong>{{ update.update_type|upper }}</strong> - {{ update.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                    <p><strong>{{ update.update_type|t|upper }}</strong> - {{ update.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
                     <p>{{ update.description }}</p>
                     {% if update.progress_percent %}
-                        <small>Progress: {{ update.progress_percent }}%</small>
+                        <small>{{ 'Progress:'|t }} {{ update.progress_percent }}%</small>
                     {% endif %}
                 </div>
             {% endfor %}
         {% else %}
-            <p>No updates yet.</p>
+            <p>{{ 'No updates yet.'|t }}</p>
         {% endif %}
     </div>
 </div>

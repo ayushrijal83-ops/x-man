@@ -1,26 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}Project Tracker - NepalSathi{% endblock %}
+{% block title %}{{ 'Project Tracker'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="building-2"></i> Development Project Tracker</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">Track development projects across Nepal</p>
+    <h1><i data-lucide="building-2"></i> {{ 'Development Project Tracker'|t }}</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">{{ 'Track development projects across Nepal'|t }}</p>
     
     <div class="card" style="margin-bottom: 2rem;">
         <form method="GET" style="display: flex; gap: 1rem; align-items: center;">
-            <label>Filter by District:</label>
+            <label>{{ 'Filter by District:'|t }}</label>
             <select name="district_id" class="form-input" style="max-width: 300px;">
-                <option value="">All Districts</option>
+                <option value="">{{ 'All Districts'|t }}</option>
                 {% for district in districts %}
                     <option value="{{ district.id }}" {% if selected_district == district.id|string %}selected{% endif %}>
                         {{ district.name }}
                     </option>
                 {% endfor %}
             </select>
-            <button type="submit" class="btn btn-primary">Filter</button>
+            <button type="submit" class="btn btn-primary">{{ 'Filter'|t }}</button>
         </form>
     </div>
     
@@ -28,24 +28,24 @@
         {% for project in projects %}
             <div class="card">
                 <h3>{{ project.name }}</h3>
-                <p style="color: var(--text-muted);">{{ project.category|upper }} | {{ project.location }}</p>
+                <p style="color: var(--text-muted);">{{ project.category|t|upper }} | {{ project.location }}</p>
                 
                 <div style="margin: 1rem 0;">
-                    <span class="status-badge status-{{ project.status }}">{{ project.status|upper }}</span>
+                    <span class="status-badge status-{{ project.status }}">{{ project.status|t|upper }}</span>
                 </div>
                 
                 <div class="progress-bar" style="margin: 1rem 0;">
                     <div class="progress-fill" style="width: {{ project.progress_percent }}%;"></div>
                 </div>
-                <p><strong>Progress:</strong> {{ project.progress_percent }}%</p>
+                <p><strong>{{ 'Progress:'|t }}</strong> {{ project.progress_percent }}%</p>
                 
                 <div style="margin-top: 1rem;">
-                    <p><strong>Budget:</strong> Rs. {{ project.total_budget }} Crore</p>
-                    <p><strong>Spent:</strong> Rs. {{ project.spent_budget }} Crore</p>
-                    <p><strong>Contractor:</strong> {{ project.contractor }}</p>
+                    <p><strong>{{ 'Budget:'|t }}</strong> {{ 'Rs.'|t }} {{ project.total_budget }} {{ 'Crore'|t }}</p>
+                    <p><strong>{{ 'Spent:'|t }}</strong> {{ 'Rs.'|t }} {{ project.spent_budget }} {{ 'Crore'|t }}</p>
+                    <p><strong>{{ 'Contractor:'|t }}</strong> {{ project.contractor }}</p>
                 </div>
                 
-                <a href="/projects/{{ project.id }}" class="btn btn-outline" style="margin-top: 1rem;">View Details</a>
+                <a href="/projects/{{ project.id }}" class="btn btn-outline" style="margin-top: 1rem;">{{ 'View Details'|t }}</a>
             </div>
         {% endfor %}
     </div>

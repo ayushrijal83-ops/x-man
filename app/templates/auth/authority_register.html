@@ -1,40 +1,40 @@
 {% extends "base.html" %}
 
-{% block title %}Authority Registration - NepalSathi{% endblock %}
+{% block title %}{{ 'Authority Registration'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 <div class="auth-container" style="background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-dark) 100%);">
     <div class="auth-card" style="max-width: 500px;">
         <div style="text-align: center; margin-bottom: 2rem;">
-            <h2 class="auth-title"><i data-lucide="landmark"></i> Authority Registration</h2>
-            <p class="auth-subtitle">Register your government organization</p>
+            <h2 class="auth-title"><i data-lucide="landmark"></i> {{ 'Authority Registration'|t }}</h2>
+            <p class="auth-subtitle">{{ 'Register your government organization'|t }}</p>
         </div>
         
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="form-group">
-                <label>Organization Name</label>
+                <label>{{ 'Organization Name'|t }}</label>
                 <input type="text" name="authority_name" class="form-input" required 
-                       placeholder="e.g., Sindhuli Road Division Office">
+                       placeholder="{{ 'e.g., Sindhuli Road Division Office'|t }}">
             </div>
             
             <div class="form-group">
-                <label>Category</label>
+                <label>{{ 'Category'|t }}</label>
                 <select name="authority_category" class="form-input" required>
-                    <option value="road">Road Division</option>
-                    <option value="police">Police</option>
-                    <option value="electricity">Electricity Authority</option>
-                    <option value="water">Water Supply</option>
-                    <option value="health">Health Office</option>
-                    <option value="municipality">Municipality</option>
-                    <option value="disaster">Disaster Management</option>
-                    <option value="other">Other</option>
+                    <option value="road">{{ 'Road Division'|t }}</option>
+                    <option value="police">{{ 'Police'|t }}</option>
+                    <option value="electricity">{{ 'Electricity Authority'|t }}</option>
+                    <option value="water">{{ 'Water Supply'|t }}</option>
+                    <option value="health">{{ 'Health Office'|t }}</option>
+                    <option value="municipality">{{ 'Municipality'|t }}</option>
+                    <option value="disaster">{{ 'Disaster Management'|t }}</option>
+                    <option value="other">{{ 'Other'|t }}</option>
                 </select>
             </div>
             
             <div class="form-group">
-                <label>District</label>
+                <label>{{ 'District'|t }}</label>
                 <select name="district_id" class="form-input" required>
                     {% for district in districts %}
                         <option value="{{ district.id }}">{{ district.name }}</option>
@@ -43,38 +43,38 @@
             </div>
             
             <div class="form-group">
-                <label>Phone</label>
+                <label>{{ 'Phone'|t }}</label>
                 <input type="text" name="phone" class="form-input" placeholder="e.g., 047-520123">
             </div>
             
             <div class="form-group">
-                <label>Email</label>
-                <input type="email" name="email" class="form-input" required placeholder="Organization email">
+                <label>{{ 'Email'|t }}</label>
+                <input type="email" name="email" class="form-input" required placeholder="{{ 'Organization email'|t }}">
             </div>
             
             <div class="form-group">
-                <label>Username</label>
-                <input type="text" name="username" class="form-input" required placeholder="Choose username">
+                <label>{{ 'Username'|t }}</label>
+                <input type="text" name="username" class="form-input" required placeholder="{{ 'Choose username'|t }}">
             </div>
             
             <div class="form-group">
-                <label>Password</label>
+                <label>{{ 'Password'|t }}</label>
                 <input type="password" name="password" class="form-input" required 
-                       placeholder="Create password" minlength="6">
+                       placeholder="{{ 'Create password'|t }}" minlength="6">
             </div>
             
             <button type="submit" class="btn btn-primary btn-block" 
                     style="background: var(--bg-dark);">
-                Register Authority Account
+                {{ 'Register Authority Account'|t }}
             </button>
         </form>
         
         <div style="margin-top: 1.5rem; text-align: center;">
             <p class="auth-footer">
-                <a href="/auth/authority/login"><i data-lucide="arrow-left"></i> Authority Login</a>
+                <a href="/auth/authority/login"><i data-lucide="arrow-left"></i> {{ 'Authority Login'|t }}</a>
             </p>
             <p class="auth-footer" style="margin-top: 0.5rem;">
-                <a href="/auth/register">Citizen Registration</a>
+                <a href="/auth/register">{{ 'Citizen Registration'|t }}</a>
             </p>
         </div>
     </div>

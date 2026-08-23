@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Complaint Detail - NepalSathi{% endblock %}
+{% block title %}{{ 'Complaint Detail'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 <nav class="navbar" style="background: var(--bg-dark);">
-    <a href="/" class="nav-brand"><i data-lucide="landmark"></i> Authority Panel</a>
+    <a href="/" class="nav-brand"><i data-lucide="landmark"></i> {{ 'Authority Panel'|t }}</a>
     <div class="nav-links">
-        <a href="/authority/dashboard">Dashboard</a>
-        <a href="/authority/complaints">Complaints</a>
-        <a href="/auth/logout">Logout</a>
+        <a href="/authority/dashboard">{{ 'Dashboard'|t }}</a>
+        <a href="/authority/complaints">{{ 'Complaints'|t }}</a>
+        <a href="/auth/logout">{{ 'Logout'|t }}</a>
         {% include "components/lang_selector.html" %}
     </div>
 </nav>
@@ -17,64 +17,64 @@
     <h1><i data-lucide="clipboard-list"></i> {{ complaint.ticket_number }}</h1>
     
     <div class="card" style="margin: 2rem 0;">
-        <h2 class="card-title">Complaint Details</h2>
+        <h2 class="card-title">{{ 'Complaint Details'|t }}</h2>
         
         <div class="grid grid-2">
             <div>
-                <p><strong>Category:</strong> {{ complaint.category|upper }}</p>
-                <p><strong>Urgency:</strong> {{ complaint.urgency|upper }}</p>
-                <p><strong>Location:</strong> {{ complaint.location }}</p>
-                <p><strong>Status:</strong> <span class="status-badge status-{{ complaint.status }}">{{ complaint.status }}</span></p>
+                <p><strong>{{ 'Category:'|t }}</strong> {{ complaint.category|t|upper }}</p>
+                <p><strong>{{ 'Urgency:'|t }}</strong> {{ complaint.urgency|t|upper }}</p>
+                <p><strong>{{ 'Location:'|t }}</strong> {{ complaint.location }}</p>
+                <p><strong>{{ 'Status:'|t }}</strong> <span class="status-badge status-{{ complaint.status }}">{{ complaint.status|t }}</span></p>
             </div>
             <div>
-                <p><strong>Filed by:</strong> User #{{ complaint.user_id }}</p>
-                <p><strong>Filed on:</strong> {{ complaint.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
-                <p><strong>Last Updated:</strong> {{ complaint.updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                <p><strong>{{ 'Filed by:'|t }}</strong> {{ 'User #'|t }}{{  complaint.user_id }}</p>
+                <p><strong>{{ 'Filed on:'|t }}</strong> {{ complaint.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                <p><strong>{{ 'Last Updated:'|t }}</strong> {{ complaint.updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
             </div>
         </div>
         
         <div style="margin-top: 1.5rem;">
-            <h3>Description</h3>
+            <h3>{{ 'Description'|t }}</h3>
             <p style="background: var(--bg-surface); padding: 1rem; border-radius: 0.5rem;">{{ complaint.description }}</p>
         </div>
     </div>
     
     <div class="card" style="margin: 2rem 0;">
-        <h2 class="card-title"><i data-lucide="message-circle"></i> Previous Responses</h2>
+        <h2 class="card-title"><i data-lucide="message-circle"></i> {{ 'Previous Responses'|t }}</h2>
         {% if responses %}
             {% for response in responses %}
                 <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
-                    <p><strong>Response:</strong> {{ response.message }}</p>
-                    <p><strong>Status:</strong> {{ response.status_update }}</p>
+                    <p><strong>{{ 'Response:'|t }}</strong> {{ response.message }}</p>
+                    <p><strong>{{ 'Status:'|t }}</strong> {{ response.status_update|t }}</p>
                     <small>{{ response.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
                 </div>
             {% endfor %}
         {% else %}
-            <p>No responses yet.</p>
+            <p>{{ 'No responses yet.'|t }}</p>
         {% endif %}
     </div>
     
     <div class="card">
-        <h2 class="card-title"><i data-lucide="file-text"></i> Send Response</h2>
+        <h2 class="card-title"><i data-lucide="file-text"></i> {{ 'Send Response'|t }}</h2>
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             
             <div class="form-group">
-                <label>Update Status</label>
+                <label>{{ 'Update Status'|t }}</label>
                 <select name="status" class="form-input">
-                    <option value="pending" {% if complaint.status == 'pending' %}selected{% endif %}>Pending</option>
-                    <option value="in_progress" {% if complaint.status == 'in_progress' %}selected{% endif %}>In Progress</option>
-                    <option value="resolved" {% if complaint.status == 'resolved' %}selected{% endif %}>Resolved</option>
-                    <option value="rejected" {% if complaint.status == 'rejected' %}selected{% endif %}>Rejected</option>
+                    <option value="pending" {% if complaint.status == 'pending' %}selected{% endif %}>{{ 'Pending'|t }}</option>
+                    <option value="in_progress" {% if complaint.status == 'in_progress' %}selected{% endif %}>{{ 'In Progress'|t }}</option>
+                    <option value="resolved" {% if complaint.status == 'resolved' %}selected{% endif %}>{{ 'Resolved'|t }}</option>
+                    <option value="rejected" {% if complaint.status == 'rejected' %}selected{% endif %}>{{ 'Rejected'|t }}</option>
                 </select>
             </div>
             
             <div class="form-group">
-                <label>Response Message</label>
-                <textarea name="response" class="form-input" rows="4" placeholder="Type your response..."></textarea>
+                <label>{{ 'Response Message'|t }}</label>
+                <textarea name="response" class="form-input" rows="4" placeholder="{{ 'Type your response...'|t }}"></textarea>
             </div>
             
-            <button type="submit" class="btn btn-primary">Send Response</button>
+            <button type="submit" class="btn btn-primary">{{ 'Send Response'|t }}</button>
         </form>
     </div>
 </div>

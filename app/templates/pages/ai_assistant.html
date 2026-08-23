@@ -1,53 +1,53 @@
 {% extends "base.html" %}
 
-{% block title %}AI Assistant - NepalSathi{% endblock %}
+{% block title %}{{ 'AI Assistant'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="bot"></i> NepalSathi AI Assistant</h1>
+    <h1><i data-lucide="bot"></i> {{ 'NepalSathi AI Assistant'|t }}</h1>
     <p style="color: var(--text-muted); margin-bottom: 1rem;">
-        Ask questions about roads, rivers, projects, and travel in Nepal
+        {{ 'Ask questions about roads, rivers, projects, and travel in Nepal'|t }}
     </p>
     
     <div class="card" style="max-width: 900px; margin: 0 auto;">
         <div style="text-align: center; margin-bottom: 1rem;">
-            <span id="ai-health" class="status-badge" style="font-size: 0.9rem;">Checking AI status...</span>
+            <span id="ai-health" class="status-badge" style="font-size: 0.9rem;">{{ 'Checking AI status...'|t }}</span>
         </div>
         
         <div id="chat-box" style="height: 400px; overflow-y: auto; padding: 1rem; border: 1px solid var(--border); border-radius: 0.5rem; margin-bottom: 1rem; background: var(--bg-surface);">
             <div id="welcome-message" style="text-align: center; color: var(--text-muted); padding-top: 60px;">
                 <div style="font-size: 3rem; margin-bottom: 1rem;"><i data-lucide="bot"></i></div>
-                <h3>NepalSathi AI Assistant</h3>
-                <p style="margin-top: 0.5rem;">I can help you with:</p>
+                <h3>{{ 'NepalSathi AI Assistant'|t }}</h3>
+                <p style="margin-top: 0.5rem;">{{ 'I can help you with:'|t }}</p>
                 <ul style="list-style: none; padding: 0; margin-top: 1rem;">
-                    <li style="margin-bottom: 0.5rem;"><i data-lucide="route"></i> Road conditions in Nepal</li>
-                    <li style="margin-bottom: 0.5rem;"><i data-lucide="waves"></i> River levels and flood warnings</li>
-                    <li style="margin-bottom: 0.5rem;"><i data-lucide="building-2"></i> Development projects</li>
-                    <li style="margin-bottom: 0.5rem;"><i data-lucide="car"></i> Travel planning</li>
-                    <li style="margin-bottom: 0.5rem;"><i data-lucide="landmark"></i> Authority information</li>
-                    <li style="margin-bottom: 0.5rem;"><i data-lucide="siren"></i> Emergency numbers</li>
+                    <li style="margin-bottom: 0.5rem;"><i data-lucide="route"></i> {{ 'Road conditions in Nepal'|t }}</li>
+                    <li style="margin-bottom: 0.5rem;"><i data-lucide="waves"></i> {{ 'River levels and flood warnings'|t }}</li>
+                    <li style="margin-bottom: 0.5rem;"><i data-lucide="building-2"></i> {{ 'Development projects'|t }}</li>
+                    <li style="margin-bottom: 0.5rem;"><i data-lucide="car"></i> {{ 'Travel planning'|t }}</li>
+                    <li style="margin-bottom: 0.5rem;"><i data-lucide="landmark"></i> {{ 'Authority information'|t }}</li>
+                    <li style="margin-bottom: 0.5rem;"><i data-lucide="siren"></i> {{ 'Emergency numbers'|t }}</li>
                 </ul>
             </div>
         </div>
         
         <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
-            <button onclick="askQuestion('What is the road status in Sindhuli?')" class="btn btn-outline btn-sm"><i data-lucide="route"></i> Road Status</button>
-            <button onclick="askQuestion('Any flood warnings for Kamala River?')" class="btn btn-outline btn-sm"><i data-lucide="waves"></i> Flood Warnings</button>
-            <button onclick="askQuestion('What projects are ongoing in Sindhuli?')" class="btn btn-outline btn-sm"><i data-lucide="building-2"></i> Projects</button>
-            <button onclick="askQuestion('When should I travel from Sindhuli to Kathmandu?')" class="btn btn-outline btn-sm"><i data-lucide="car"></i> Travel Advice</button>
-            <button onclick="askQuestion('What are emergency numbers in Nepal?')" class="btn btn-outline btn-sm"><i data-lucide="siren"></i> Emergency</button>
-            <button onclick="askQuestion('How do I file a complaint?')" class="btn btn-outline btn-sm"><i data-lucide="megaphone"></i> File Complaint</button>
+            <button onclick="askQuestion('What is the road status in Sindhuli?')" class="btn btn-outline btn-sm"><i data-lucide="route"></i> {{ 'Road Status'|t }}</button>
+            <button onclick="askQuestion('Any flood warnings for Kamala River?')" class="btn btn-outline btn-sm"><i data-lucide="waves"></i> {{ 'Flood Warnings'|t }}</button>
+            <button onclick="askQuestion('What projects are ongoing in Sindhuli?')" class="btn btn-outline btn-sm"><i data-lucide="building-2"></i> {{ 'Projects'|t }}</button>
+            <button onclick="askQuestion('When should I travel from Sindhuli to Kathmandu?')" class="btn btn-outline btn-sm"><i data-lucide="car"></i> {{ 'Travel Advice'|t }}</button>
+            <button onclick="askQuestion('What are emergency numbers in Nepal?')" class="btn btn-outline btn-sm"><i data-lucide="siren"></i> {{ 'Emergency'|t }}</button>
+            <button onclick="askQuestion('How do I file a complaint?')" class="btn btn-outline btn-sm"><i data-lucide="megaphone"></i> {{ 'File Complaint'|t }}</button>
         </div>
         
         <form id="chat-form" style="display: flex; gap: 0.5rem;">
-            <input type="text" id="chat-input" class="form-input" placeholder="Type your question about Nepal..." style="flex: 1;" autocomplete="off">
-            <button type="submit" class="btn btn-primary">Send</button>
+            <input type="text" id="chat-input" class="form-input" placeholder="{{ 'Type your question about Nepal...'|t }}" style="flex: 1;" autocomplete="off">
+            <button type="submit" class="btn btn-primary">{{ 'Send'|t }}</button>
         </form>
         
         <div style="margin-top: 0.5rem; text-align: center;">
-            <small style="color: var(--text-muted);">Powered by Local AI (Ollama) • Qwen 2.5</small>
+            <small style="color: var(--text-muted);">{{ 'Powered by Local AI (Ollama) • Qwen 2.5'|t }}</small>
         </div>
     </div>
 </div>

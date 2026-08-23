@@ -3,6 +3,8 @@ import re
 import os
 from dotenv import load_dotenv
 
+from app.services.page_strings import page_translation
+
 load_dotenv()
 
 class TranslationService:
@@ -197,10 +199,17 @@ class TranslationService:
         }
     
     def get_translation(self, lang, key):
-        """Get translation for a key."""
-        if lang in self.translations:
-            return self.translations[lang].get(key, self.translations['en'].get(key, key))
-        return self.translations['en'].get(key, key)
+        """Translate a short UI key ('dashboard') or a page string ('Road Status').
+
+        UI keys win; anything else falls through to the page-content dictionary,
+        so the `t()` helper and the `|t` filter share one lookup.
+        """
+        table = self.translations.get(lang, self.translations['en'])
+        if key in table:
+            return table[key]
+        if key in self.translations['en']:
+            return self.translations['en'][key]
+        return page_translation(lang, key)
     
     LANG_NAMES = {
         'en': 'English',

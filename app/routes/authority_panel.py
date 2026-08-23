@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import Complaint, Authority, Project, RoadSegment, River, AuthorityResponse
@@ -7,24 +7,30 @@ from datetime import datetime
 authority_panel_bp = Blueprint('authority_panel', __name__)
 
 def get_authority():
-    """Get authority associated with current user."""
-    # For demo, find authority by name matching username
-    authority = Authority.query.filter_by(name=current_user.username).first()
-    if not authority:
-        # Fallback: get first authority
-        authority = Authority.query.first()
-    return authority
+    """Authority linked to the logged-in user (set by the before_request guard)."""
+    return g.authority
+
+
+@authority_panel_bp.before_request
+@login_required
+def require_linked_authority():
+    """Every panel route needs an authority user linked to a real authority."""
+    if current_user.role not in ('authority', 'admin'):
+        flash('Authority account required.', 'error')
+        return redirect(url_for('main.dashboard'))
+
+    g.authority = Authority.query.get(current_user.authority_id) if current_user.authority_id else None
+    if g.authority is None:
+        flash('No authority is linked to your account. Contact an administrator.', 'error')
+        return redirect(url_for('main.dashboard'))
+
 
 @authority_panel_bp.route('/dashboard')
 @login_required
 def dashboard():
     """Authority dashboard."""
     authority = get_authority()
-    
-    if not authority:
-        flash('No authority found for your account.', 'error')
-        return redirect(url_for('main.dashboard'))
-    
+
     # Get complaints for this authority
     complaints = Complaint.query.filter_by(authority_id=authority.id).order_by(Complaint.created_at.desc()).all()
     

@@ -1,26 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}River Status - NepalSathi{% endblock %}
+{% block title %}{{ 'River Status'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="waves"></i> River Status</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">Monitor river levels and flood risks</p>
+    <h1><i data-lucide="waves"></i> {{ 'River Status'|t }}</h1>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">{{ 'Monitor river levels and flood risks'|t }}</p>
     
     <div class="card" style="margin-bottom: 2rem;">
         <form method="GET" style="display: flex; gap: 1rem; align-items: center;">
-            <label>Filter by District:</label>
+            <label>{{ 'Filter by District:'|t }}</label>
             <select name="district_id" class="form-input" style="max-width: 300px;">
-                <option value="">All Districts</option>
+                <option value="">{{ 'All Districts'|t }}</option>
                 {% for district in districts %}
                     <option value="{{ district.id }}" {% if selected_district == district.id|string %}selected{% endif %}>
                         {{ district.name }}
                     </option>
                 {% endfor %}
             </select>
-            <button type="submit" class="btn btn-primary">Filter</button>
+            <button type="submit" class="btn btn-primary">{{ 'Filter'|t }}</button>
         </form>
     </div>
     
@@ -29,20 +29,20 @@
             <div class="card">
                 <h3>{{ river.name }}</h3>
                 <div style="margin: 1rem 0;">
-                    <span class="status-badge status-{{ river.status }}">{{ river.status|upper }}</span>
+                    <span class="status-badge status-{{ river.status }}">{{ river.status|t|upper }}</span>
                 </div>
-                <p><strong>Current Level:</strong> {{ river.current_level|metres }}</p>
-                <p><strong>Danger Level:</strong> {{ river.danger_level|metres }}</p>
+                <p><strong>{{ 'Current Level:'|t }}</strong> {{ river.current_level|metres }}</p>
+                <p><strong>{{ 'Danger Level:'|t }}</strong> {{ river.danger_level|metres }}</p>
                 
                 {% if river.current_level and river.danger_level %}
                     {% set percentage = (river.current_level / river.danger_level * 100)|round %}
                     <div class="progress-bar" style="margin: 1rem 0;">
                         <div class="progress-fill" style="width: {{ percentage }}%; {% if percentage > 80 %}background: var(--danger);{% elif percentage > 60 %}background: var(--warning);{% else %}background: var(--success);{% endif %}"></div>
                     </div>
-                    <small>{{ percentage }}% of danger level</small>
+                    <small>{{ percentage }}% {{ 'of danger level'|t }}</small>
                 {% endif %}
                 
-                <p style="margin-top: 1rem;"><strong>Last Updated:</strong> {{ river.last_updated.strftime('%Y-%m-%d %H:%M') }}</p>
+                <p style="margin-top: 1rem;"><strong>{{ 'Last Updated:'|t }}</strong> {{ river.last_updated.strftime('%Y-%m-%d %H:%M') }}</p>
             </div>
         {% endfor %}
     </div>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}AI Test - NepalSathi{% endblock %}
+{% block title %}{{ 'AI Test'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
@@ -17,7 +17,7 @@
             <button onclick="testClassify('Traffic is heavy near Dhulikhel')" class="btn btn-primary">Traffic (English)</button>
             <button onclick="testClassify('बाढी आएको छ गाउँमा')" class="btn btn-primary">Flood (Nepali)</button>
             <button onclick="testClassify('Road construction at KM 45')" class="btn btn-primary">Road Work</button>
-            <button onclick="testClassify('Weather is clear today')" class="btn btn-primary">Weather</button>
+            <button onclick="testClassify('Weather is clear today')" class="btn btn-primary">{{ 'Weather'|t }}</button>
         </div>
         
         <div id="classification-result" style="margin-top: 1rem; padding: 1rem; background: var(--bg-surface); border-radius: 0.5rem;">

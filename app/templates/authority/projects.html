@@ -1,62 +1,62 @@
 {% extends "base.html" %}
 
-{% block title %}Projects - Authority - NepalSathi{% endblock %}
+{% block title %}{{ 'Projects'|t }} - {{ 'Authority'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 <nav class="navbar" style="background: var(--bg-dark);">
     <a href="/" class="nav-brand"><i data-lucide="landmark"></i> {{ authority.name }}</a>
     <div class="nav-links">
-        <a href="/authority/dashboard">Dashboard</a>
-        <a href="/authority/complaints">Complaints</a>
-        <a href="/authority/projects">Projects</a>
-        <a href="/authority/roads">Roads</a>
-        <a href="/authority/rivers">Rivers</a>
-        <a href="/auth/logout">Logout</a>
+        <a href="/authority/dashboard">{{ 'Dashboard'|t }}</a>
+        <a href="/authority/complaints">{{ 'Complaints'|t }}</a>
+        <a href="/authority/projects">{{ 'Projects'|t }}</a>
+        <a href="/authority/roads">{{ 'Roads'|t }}</a>
+        <a href="/authority/rivers">{{ 'Rivers'|t }}</a>
+        <a href="/auth/logout">{{ 'Logout'|t }}</a>
         {% include "components/lang_selector.html" %}
     </div>
 </nav>
 
 <div class="container">
-    <h1><i data-lucide="building-2"></i> Projects</h1>
-    <p style="color: var(--text-muted);">Manage your development projects</p>
+    <h1><i data-lucide="building-2"></i> {{ 'Projects'|t }}</h1>
+    <p style="color: var(--text-muted);">{{ 'Manage your development projects'|t }}</p>
     
     {% if projects %}
         <div class="grid grid-2">
             {% for project in projects %}
                 <div class="card">
                     <h3>{{ project.name }}</h3>
-                    <p style="color: var(--text-muted);">{{ project.category|upper }} | {{ project.location }}</p>
+                    <p style="color: var(--text-muted);">{{ project.category|t|upper }} | {{ project.location }}</p>
                     
                     <div style="margin: 1rem 0;">
-                        <span class="status-badge status-{{ project.status }}">{{ project.status }}</span>
+                        <span class="status-badge status-{{ project.status }}">{{ project.status|t }}</span>
                     </div>
                     
                     <div class="progress-bar" style="margin: 1rem 0;">
                         <div class="progress-fill" style="width: {{ project.progress_percent }}%;"></div>
                     </div>
-                    <p><strong>Progress:</strong> {{ project.progress_percent }}%</p>
+                    <p><strong>{{ 'Progress:'|t }}</strong> {{ project.progress_percent }}%</p>
                     
                     <form method="POST" action="/authority/projects/{{ project.id }}/update" style="margin-top: 1rem;">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         
                         <div class="form-group">
-                            <label>Update Progress (%)</label>
+                            <label>{{ 'Update Progress (%)'|t }}</label>
                             <input type="number" name="progress_percent" class="form-input" min="0" max="100" value="{{ project.progress_percent }}">
                         </div>
                         
                         <div class="form-group">
-                            <label>Update Description</label>
-                            <textarea name="description" class="form-input" rows="3" placeholder="Describe the update..."></textarea>
+                            <label>{{ 'Update Description'|t }}</label>
+                            <textarea name="description" class="form-input" rows="3" placeholder="{{ 'Describe the update...'|t }}"></textarea>
                         </div>
                         
-                        <button type="submit" class="btn btn-primary">Update Project</button>
+                        <button type="submit" class="btn btn-primary">{{ 'Update Project'|t }}</button>
                     </form>
                 </div>
             {% endfor %}
         </div>
     {% else %}
         <div class="card" style="text-align: center;">
-            <p>No projects assigned.</p>
+            <p>{{ 'No projects assigned.'|t }}</p>
         </div>
     {% endif %}
 </div>
