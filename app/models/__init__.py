@@ -18,6 +18,7 @@ from app.models.bridge import Bridge
 from app.models.project_update import ProjectUpdate
 from app.models.authority_response import AuthorityResponse
 from app.models.iot_device import IoTDevice, SensorReading
+from app.models.citizen_report import CitizenReport
 
 __all__ = [
     'User',
@@ -31,6 +32,7 @@ __all__ = [
     'River',
     'RiverUpdate',
     'Incident',
+    'CitizenReport',
     'IncidentAffectedDistrict',
     'Comment',
     'Like',

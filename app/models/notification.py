@@ -2,7 +2,8 @@ from app.extensions import db
 from datetime import datetime
 
 # Hazard lifecycle notifications (M03). One vocabulary for every hazard type.
-NOTIFICATION_TYPES = ['hazard_detected', 'hazard_escalated', 'hazard_confirmed', 'hazard_resolved', 'system']
+NOTIFICATION_TYPES = ['hazard_detected', 'hazard_escalated', 'hazard_confirmed', 'hazard_resolved', 'system',
+                      'report_update']  # report_update: status of the user's own citizen report (M05)
 # Written by pre-M03 code; kept readable so legacy rows still display.
 LEGACY_NOTIFICATION_TYPES = ['road_alert', 'river_alert', 'project_update', 'complaint_response']
 

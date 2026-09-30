@@ -124,11 +124,12 @@ def _compose(incident, ntype):
     return title, ' · '.join(dict.fromkeys(p for p in parts if p))
 
 
-def notify_hazard(incident, ntype):
+def notify_hazard(incident, ntype, exclude_user_ids=()):
     """Send a lifecycle notification to every recipient who hasn't had it yet.
 
     Returns the new notifications. Active-hazard alerts (detected, escalated,
-    confirmed) are never sent for resolved/rejected events.
+    confirmed) are never sent for resolved/rejected events. `exclude_user_ids`
+    skips e.g. the citizen whose own report created the hazard.
     """
     if ntype not in _VERBS:
         raise ValueError(f'Not a hazard notification type: {ntype}')
@@ -137,7 +138,8 @@ def notify_hazard(incident, ntype):
 
     key = dedup_key(incident, ntype)
     already = {uid for (uid,) in db.session.query(Notification.user_id).filter(Notification.dedup_key == key)}
-    recipients = [uid for uid in hazard_recipients(incident) if uid not in already]
+    recipients = [uid for uid in hazard_recipients(incident)
+                  if uid not in already and uid not in exclude_user_ids]
     if not recipients:
         return []
     title, message = _compose(incident, ntype)
@@ -146,8 +148,8 @@ def notify_hazard(incident, ntype):
                   for uid in recipients])
 
 
-def notify_hazard_detected(incident):
-    return notify_hazard(incident, 'hazard_detected')
+def notify_hazard_detected(incident, exclude_user_ids=()):
+    return notify_hazard(incident, 'hazard_detected', exclude_user_ids)
 
 
 def notify_hazard_escalated(incident, previous_severity):
@@ -174,6 +176,22 @@ def notify_area_expanded(incident):
     if incident.status == 'confirmed':
         sent += notify_hazard(incident, 'hazard_confirmed')
     return sent
+
+
+_REPORT_MESSAGES = {
+    'submitted': ('Your {label} report was received',
+                  'Thank you. Authorities will review it. This is a receipt, not a hazard alert.'),
+    'accepted': ('Your {label} report was accepted', 'An authority reviewed your report and accepted it.'),
+    'rejected': ('Your {label} report was not accepted', 'An authority reviewed your report and did not accept it.'),
+}
+
+
+def notify_report_update(report):
+    """Receipt/review notice to the reporter only (M05). Separate from hazard alerts."""
+    title, message = _REPORT_MESSAGES[report.status]
+    label = HAZARD_LABELS.get(report.hazard_type, report.hazard_type).lower()
+    return _save([_build(report.reporter_id, 'report_update', title.format(label=label), message,
+                         '/reports/mine', dedup_key=f'report:{report.id}:{report.status}')])
 
 
 # --- per-user access (always scoped by user_id: no IDOR) --------------------

@@ -78,8 +78,12 @@ def _bounding_box(latitude, longitude, radius_km):
 def create_hazard_event(event_type, severity, source, district_id=None, location=None,
                         latitude=None, longitude=None, river_id=None, road_segment_id=None,
                         title=None, description=None, source_reference=None,
-                        confidence=None, detected_at=None):
-    """Validate and create a new hazard event in 'detected' status. Raises ValueError."""
+                        confidence=None, detected_at=None, notify_exclude_user_ids=()):
+    """Validate and create a new hazard event in 'detected' status. Raises ValueError.
+
+    notify_exclude_user_ids: users not to send the 'detected' alert to (e.g. the
+    citizen whose report created it — they get a report receipt instead).
+    """
     _validate_hazard_type(event_type)
     _validate_severity(severity)
     _validate_source(source)
@@ -120,7 +124,7 @@ def create_hazard_event(event_type, severity, source, district_id=None, location
     )
     db.session.add(incident)
     db.session.flush()  # need incident.id for the notification link
-    notification_service.notify_hazard_detected(incident)
+    notification_service.notify_hazard_detected(incident, notify_exclude_user_ids)
     db.session.commit()
     return incident
 
@@ -172,8 +176,12 @@ def add_evidence(incident, severity=None, source_reference=None):
     return incident
 
 
-def report_hazard(event_type, severity, source, **fields):
-    """Create a new event, or merge into the matching active one. Returns (incident, created)."""
+def report_hazard(event_type, severity, source, escalate=True, **fields):
+    """Create a new event, or merge into the matching active one. Returns (incident, created).
+
+    escalate=False: merged evidence never raises the existing event's severity
+    (used for unverified citizen photo reports).
+    """
     _validate_hazard_type(event_type)
     _validate_severity(severity)
     _validate_coordinates(fields.get('latitude'), fields.get('longitude'))
@@ -186,7 +194,7 @@ def report_hazard(event_type, severity, source, **fields):
         longitude=fields.get('longitude'),
     )
     if existing:
-        return add_evidence(existing, severity, fields.get('source_reference')), False
+        return add_evidence(existing, severity if escalate else None, fields.get('source_reference')), False
     return create_hazard_event(event_type, severity, source, **fields), True
 
 

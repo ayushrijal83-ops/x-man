@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Report a Hazard'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .report-wrap { max-width: 640px; margin: 0 auto; }
+    .hazard-choice { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+    .hazard-choice input { position: absolute; opacity: 0; pointer-events: none; }
+    .hazard-choice label {
+        display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+        padding: var(--space-4); border: 2px solid var(--border); border-radius: var(--radius-md);
+        cursor: pointer; text-align: center; font-weight: 600; text-transform: none; letter-spacing: 0;
+        font-size: 15px; margin: 0;
+    }
+    .hazard-choice .emoji { font-size: 32px; line-height: 1; }
+    .hazard-choice input:checked + label { border-color: var(--brand-primary); background: var(--bg-surface-hover); }
+    .hazard-choice input:focus-visible + label { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
+    .photo-preview { display: none; width: 100%; max-height: 320px; object-fit: contain; border-radius: var(--radius-md); margin-bottom: var(--space-3); background: var(--bg-surface-hover); }
+    .coords { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+    .hint { color: var(--text-muted); font-size: 13px; display: block; margin-top: var(--space-1); }
+    .loc-status { margin-left: var(--space-2); font-size: 13px; color: var(--text-muted); }
+    .form-error { display: none; }
+    .report-wrap .btn { min-height: 48px; }
+    @media (max-width: 420px) { .coords { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container report-wrap">
+    <h1><i data-lucide="camera"></i> {{ 'Report a Hazard'|t }}</h1>
+    <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+        {{ 'Send a photo of a landslide or road damage. Authorities will review it.'|t }}
+    </p>
+
+    <div class="alert alert-error form-error" id="form-error" role="alert"></div>
+
+    <form id="report-form" class="card" novalidate>
+        <div class="form-group">
+            <span class="form-label">{{ 'What did you see?'|t }}</span>
+            <div class="hazard-choice">
+                {% for h in hazard_types %}
+                <div>
+                    <input type="radio" name="hazard_type" id="hz-{{ h }}" value="{{ h }}" {% if loop.first %}checked{% endif %}>
+                    <label for="hz-{{ h }}"><span class="emoji" aria-hidden="true">{{ '🏔️' if h == 'landslide' else '🚧' }}</span>{{ h|t }}</label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="photo">{{ 'Photo'|t }}</label>
+            <img id="photo-preview" class="photo-preview" alt="{{ 'Preview'|t }}">
+            <input type="file" id="photo" name="image" accept="image/jpeg,image/png,image/webp" capture="environment" required>
+            <small class="hint">{{ 'Take a photo or choose one. JPG, PNG or WEBP, up to'|t }} {{ max_mb }} MB.</small>
+        </div>
+
+        <div class="form-group">
+            <label for="district">{{ 'District'|t }}</label>
+            <select id="district" name="district_id" required>
+                {% for d in districts %}
+                <option value="{{ d.id }}" {% if current_user.district_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <span class="form-label">{{ 'Location'|t }}</span>
+            <button type="button" class="btn btn-outline" id="use-location">📍 {{ 'Use My Location'|t }}</button>
+            <span class="loc-status" id="loc-status" aria-live="polite"></span>
+            <div class="coords" style="margin-top: var(--space-3);">
+                <div>
+                    <label for="latitude">{{ 'Latitude'|t }}</label>
+                    <input type="number" step="any" min="-90" max="90" id="latitude" name="latitude" inputmode="decimal">
+                </div>
+                <div>
+                    <label for="longitude">{{ 'Longitude'|t }}</label>
+                    <input type="number" step="any" min="-180" max="180" id="longitude" name="longitude" inputmode="decimal">
+                </div>
+            </div>
+            <small class="hint">{{ 'Optional. If location access is blocked, type the coordinates or leave them empty.'|t }}</small>
+        </div>
+
+        <div class="form-group">
+            <label for="location">{{ 'Nearby landmark (optional)'|t }}</label>
+            <input type="text" id="location" name="location" maxlength="200" placeholder="{{ 'e.g., near the bridge at Kamalamai'|t }}">
+            <small class="hint">{{ 'Shown publicly with the hazard.'|t }}</small>
+        </div>
+
+        <div class="form-group">
+            <label for="description">{{ 'Description (optional)'|t }}</label>
+            <textarea id="description" name="description" maxlength="1000" rows="3"></textarea>
+            <small class="hint">{{ 'Only you and the reviewing authority can see this.'|t }}</small>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="submit-btn">{{ 'Submit Report'|t }}</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var form = document.getElementById('report-form');
+    var errorBox = document.getElementById('form-error');
+    var photo = document.getElementById('photo');
+    var preview = document.getElementById('photo-preview');
+    var status = document.getElementById('loc-status');
+    var submitBtn = document.getElementById('submit-btn');
+    var text = {
+        locating: {{ 'Getting location…'|t|tojson }},
+        located: {{ 'Location added.'|t|tojson }},
+        denied: {{ 'Location unavailable. You can type it or leave it empty.'|t|tojson }},
+        needPhoto: {{ 'Please add a photo.'|t|tojson }},
+        sending: {{ 'Sending…'|t|tojson }},
+        failed: {{ 'Could not send the report. Please try again.'|t|tojson }}
+    };
+
+    function showError(message) {
+        errorBox.textContent = message;
+        errorBox.style.display = 'block';
+        errorBox.scrollIntoView({behavior: 'smooth', block: 'center'});
+    }
+
+    photo.addEventListener('change', function () {
+        var file = photo.files && photo.files[0];
+        if (!file) { preview.style.display = 'none'; return; }
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = 'block';
+    });
+
+    document.getElementById('use-location').addEventListener('click', function () {
+        if (!navigator.geolocation) { status.textContent = text.denied; return; }
+        status.textContent = text.locating;
+        navigator.geolocation.getCurrentPosition(function (pos) {
+            document.getElementById('latitude').value = pos.coords.latitude.toFixed(6);
+            document.getElementById('longitude').value = pos.coords.longitude.toFixed(6);
+            status.textContent = text.located;
+        }, function () {
+            status.textContent = text.denied;
+        }, {enableHighAccuracy: true, timeout: 15000, maximumAge: 60000});
+    });
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        errorBox.style.display = 'none';
+        if (!photo.files || !photo.files[0]) { showError(text.needPhoto); return; }
+        submitBtn.disabled = true;
+        submitBtn.textContent = text.sending;
+        fetch('/api/reports', {
+            method: 'POST',
+            headers: {'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content},
+            body: new FormData(form)
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (data) { return {ok: r.ok, data: data}; });
+        }).then(function (res) {
+            if (res.ok) { window.location.href = '/reports/mine?submitted=' + res.data.report.id; return; }
+            throw new Error(res.data.error || text.failed);
+        }).catch(function (err) {
+            showError(err.message || text.failed);
+            submitBtn.disabled = false;
+            submitBtn.textContent = {{ 'Submit Report'|t|tojson }};
+        });
+    });
+})();
+</script>
+{% endblock %}

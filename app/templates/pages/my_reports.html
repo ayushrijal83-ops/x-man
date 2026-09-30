@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'My Reports'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .report-list { display: flex; flex-direction: column; gap: var(--space-3); }
+    .report-item { display: flex; gap: var(--space-4); align-items: flex-start; }
+    .report-item img { width: 96px; height: 96px; object-fit: cover; border-radius: var(--radius-md); flex: none; background: var(--bg-surface-hover); }
+    .report-item h3 { margin: 0 0 var(--space-1); font-size: 16px; }
+    .report-meta { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-muted); }
+    .status-submitted { background: var(--info-bg); color: var(--info-text); border-color: var(--info); }
+    .status-accepted { background: var(--success-bg); color: var(--success-text); border-color: var(--success); }
+    .status-rejected { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger); }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        <h1><i data-lucide="clipboard-list"></i> {{ 'My Reports'|t }}</h1>
+        <a href="/report" class="btn btn-primary"><i data-lucide="camera"></i> {{ 'Report a Hazard'|t }}</a>
+    </div>
+
+    {% if request.args.get('submitted') %}
+    <div class="alert alert-success" role="status">{{ 'Report sent. Thank you — authorities will review it.'|t }}</div>
+    {% endif %}
+
+    {% if reports %}
+    <div class="report-list" style="margin-top: 1.5rem;">
+        {% for r in reports %}
+        <div class="card report-item">
+            <img src="/api/reports/{{ r.id }}/image" alt="{{ 'Report photo'|t }}" loading="lazy">
+            <div>
+                <h3>{{ r.hazard_type|t }}</h3>
+                <div class="report-meta">
+                    <span class="status-badge status-{{ r.status }}">{{ r.status|t }}</span>
+                    <span>{{ r.district.name }}</span>
+                    <time datetime="{{ r.created_at.isoformat() }}Z">{{ r.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</time>
+                    {% if r.incident %}<span>{{ 'Hazard'|t }} #{{ r.incident.id }} · {{ r.incident.status|t }}</span>{% endif %}
+                </div>
+                {% if r.location %}<p style="margin: var(--space-2) 0 0;">{{ r.location }}</p>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card empty-state" style="margin-top: 1.5rem;">
+        <i data-lucide="camera"></i>
+        <p>{{ 'You have not sent any reports yet.'|t }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

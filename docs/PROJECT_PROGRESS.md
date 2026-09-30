@@ -1,6 +1,6 @@
 # NepalSathi - Project Progress
 
-## Current Status: M04 Alert Deduplication + Affected Areas Complete (M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
+## Current Status: M05 Mobile Camera Citizen Reporting Complete (M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
 
 ### ✅ Completed (Core Features)
 - Flask application
@@ -53,7 +53,7 @@
 - Testing
 
 ### 📋 Next Steps
-- M05 — Mobile Camera Citizen Reporting (see the M04 section at the end).
+- M06 — Road Damage + Landslide Vision AI (see the M05 section at the end).
 - Still open from M01: ESP32 firmware, periodic risk worker, real-time dashboard transport, device provisioning UI.
 
 ### 🐛 Known Issues
@@ -683,3 +683,193 @@ feat(m04): add affected areas and alert deduplication
 ### 🏷️ Status
 **M04 — ALERT DEDUPLICATION + AFFECTED AREAS COMPLETE**
 **HARDWARE NOT YET CONNECTED · NO MPU6050/ESP32 FIRMWARE · NO AI VISION**
+
+---
+
+## M05 — Mobile Camera Citizen Reporting
+
+### 1. Status
+**Complete.** Secure mobile photo evidence collection, integrated with the existing hazard-event
+system. **No vision AI**: a photo is human-reviewable evidence and proves nothing on its own.
+
+### 2. Architecture
+```
+Phone browser (camera via <input capture>, GPS via Geolocation API, description)
+      ↓ multipart POST /api/reports (login + CSRF)
+citizen_report_service
+      ├─ validate fields (type, district, coords, text)
+      ├─ decode + re-encode image (Pillow) → instance/uploads/reports/<uuid>.jpg
+      ├─ CitizenReport row (evidence, status 'submitted')
+      └─ hazard_event_service.report_hazard(source='citizen_report', escalate=False)
+              ↓ M02 dedup: new Incident or join the related active one
+         Incident ('detected') → M03/M04 alerts to affected districts (reporter gets a receipt instead)
+```
+A **report** is evidence and an **Incident** is the hazard. Two reports can point at one Incident.
+There is no second hazard table.
+
+### 3. Report model — `CitizenReport` (`citizen_reports`)
+`reporter_id` (FK users), `incident_id` (FK incidents, nullable), `district_id` (FK districts),
+`hazard_type`, `description` (private), `location` (landmark, becomes public `Incident.location`),
+`latitude`/`longitude` (optional), `image_filename` (server-generated, unique), `status`,
+`reviewed_by_id`, `reviewed_at`, `created_at`, `updated_at`.
+`Incident.citizen_reports` lists the evidence for an event.
+
+### 4. Report lifecycle (separate from the Incident lifecycle)
+`submitted → accepted | rejected`, set by an authority responsible for the report's district, or an
+admin, via `POST /api/reports/<id>/review`. Nobody reviews their own report. Reviewing a report
+**never** changes the Incident: that stays `detected → investigating → confirmed → resolved/rejected`
+through `/api/hazards`. A report can never auto-confirm anything.
+
+### 5. Supported visual hazards
+`VISUAL_HAZARD_TYPES = ['landslide', 'road_damage']` (subset of the global `HAZARD_TYPES`).
+`earthquake`, `flood`, `iot`, `authority` etc. are rejected with 400 on this endpoint. Globally all
+four hazard types still work (flood/earthquake via their own paths). New visual hazards can be
+added to the list later.
+
+### 6. Image upload & storage
+- **Allowed:** JPG/JPEG, PNG, WEBP. The extension must match the **decoded** format, and the
+  client MIME type must be `image/*`. SVG, GIF, PDF, executables, scripts and polyglots are
+  rejected.
+- **Size:** 10 MB per photo (413), under the existing app-wide 16 MB `MAX_CONTENT_LENGTH` (also a
+  JSON 413).
+- **Decompression bombs:** more than 40 MP is rejected, and Pillow's bomb warning is treated as an
+  error.
+- **Re-encoding:** the upload is decoded, orientation-fixed from EXIF, downscaled to at most 2560 px
+  and **re-encoded to a new JPEG**. The original bytes are never stored, and EXIF (camera
+  make/model, **embedded GPS**) and any appended payload are dropped.
+- **Storage:** `instance/uploads/reports/<uuid4 hex>.jpg` (configurable via `REPORT_UPLOAD_DIR`).
+  It's outside `/static`, and `instance/` is gitignored. The client filename is ignored entirely,
+  so path traversal isn't possible. The file is opened with `'xb'` (never overwrites), and the
+  stored name is re-checked against `^[0-9a-f]{32}\.jpg$` before serving. On any failure after
+  the file is written, the DB is rolled back and the file removed.
+- **Serving:** only through `GET /api/reports/<id>/image` after an authorization check,
+  `Cache-Control: private, no-store`, `nosniff`.
+- The DB stores only the generated filename, never a path or image bytes.
+- Pillow (already installed) was added to `requirements.txt`. No external storage.
+
+### 7. Location & district
+- "📍 Use My Location" fills latitude/longitude from the browser Geolocation API.
+- If permission is denied or unavailable, the user can type coordinates **or leave them empty**.
+  District plus an optional landmark is enough to report.
+- Server-side validation: both or neither, real finite numbers, lat −90..90, lon −180..180.
+- **District decision: Option A (explicit selection).** The project has no district boundary data,
+  so point-in-district lookup would be invented. The form defaults to the user's home district.
+  Coordinates are stored and used by M02 dedup (5 km box).
+
+### 8. Report → Incident integration
+`submit_report` calls `report_hazard()` (the M02 path):
+- `source = 'citizen_report'`, always set by the server. `source`, `status`, `severity`,
+  `incident_id` and `reporter_id` form fields are ignored.
+- Severity is fixed at `medium`, and `escalate=False`: joining an existing event bumps
+  `report_count` but **never raises its severity**, so a photo can't trigger escalation alerts.
+- M02 dedup decides whether to create or join: 2 reports → 1 Incident (both reports kept).
+- The citizen's description stays on the report (private); the Incident gets a neutral title and
+  the landmark. `Incident.source_reference = report_<id>` (internal, hidden from citizens).
+
+### 9. Notifications
+- A new Incident → `hazard_detected` to its affected districts (M03/M04 targeting + per-user dedup).
+- **The reporter is excluded from that emergency alert** and instead gets a `report_update`
+  receipt ("Your road damage report was received … This is a receipt, not a hazard alert").
+  Review outcomes send `accepted`/`rejected` receipts. Receipts use dedup keys
+  `report:<id>:<status>` and have no incident link.
+- More reports on the same event don't create duplicate alerts (M04).
+
+### 10. API
+| Method | Endpoint | Who | Notes |
+|---|---|---|---|
+| POST | `/api/reports` | any logged-in user | multipart: `hazard_type`, `district_id`, `image`, optional `latitude`, `longitude`, `location`, `description`. 201 `{report, incident_created}`; 400 validation; 404 unknown district; 413 too large |
+| GET | `/api/reports?status=&limit=` | logged-in | citizen: own; authority: own district's + own; admin: all |
+| GET | `/api/reports/<id>` | reporter / responsible authority / admin | others 404; non-integer 400 |
+| GET | `/api/reports/<id>/image` | same as above | private JPEG |
+| POST | `/api/reports/<id>/review` `{"status": "accepted"\|"rejected"}` | responsible authority / admin, not own report | 409 if already reviewed |
+
+Responses never include file paths, `image_filename`, `source_reference` or email. Reviewers see
+only the reporter's username.
+
+### 11. Frontend
+- `/report` (`pages/report_hazard.html`): large 🏔️ Landslide / 🚧 Road Damage choice, a
+  `<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment">` with live
+  preview (the phone's own camera/file picker; no native camera control is claimed), district
+  select, 📍 Use My Location plus manual coordinates, landmark, private description, and a 48 px
+  submit button. Vanilla JS `fetch` + `FormData` + `X-CSRFToken`, with error messages shown inline.
+- `/reports/mine` (`pages/my_reports.html`): the user's own reports with a thumbnail (via the
+  authorized image route), status, district, time, and linked hazard number and status.
+- Sidebar links "Report a Hazard" and "My Reports". All new UI strings are in Nepali too.
+
+### 12. Security review
+- Authentication: API → 401 JSON; pages → login redirect.
+- RBAC/ownership: visibility = reporter, admin, or authority responsible for the report's district;
+  everyone else 404 (no id leak). Review = responsible authority/admin, never self.
+- Citizens cannot change severity, confirm, resolve, or edit affected districts through reports.
+- CSRF: `CSRFProtect` on POST `/api/reports` and review (tested).
+- Uploads: see §6. Private image route; no public copy.
+- No source spoofing; no arbitrary Incident modification; ORM-only; no image data, paths or
+  descriptions logged; safe JSON errors.
+
+### 13. Migration
+`migrations/versions/e4d8a1f6b209_m05_citizen_reports.py` (revises `c7e2b5a91d3f`). **Additive:**
+creates `citizen_reports` plus 3 indexes; no existing table touched.
+Verified on a scratch pre-M05 DB holding M01–M04 data (users, districts, river, IoT device, incident,
+affected district, hazard + legacy notifications): upgrade → downgrade → upgrade with identical row
+counts in every existing table, then an ORM report linked to the incident. The local dev DB was
+backed up and upgraded to `e4d8a1f6b209`.
+
+### 14. Tests
+`tests/test_citizen_reports_m05.py` (54 tests):
+- **submission:** both visual types; 6 rejected types; global types unchanged; source, status,
+  severity, incident and reporter override ignored; GPS optional; 8 bad-coordinate cases; district
+  and text limits
+- **upload security:** missing file; exe, php-polyglot, text, pdf, empty, svg and gif; content
+  mismatch both ways; non-image MIME; no extension; PNG, WEBP and uppercase accepted; 10 MB and
+  16 MB limits; decompression bomb; path traversal (`/` and `\`); EXIF/GPS stripped and
+  downscaled; malformed multipart/JSON; login; CSRF
+- **integration:** 2 reports → 1 incident; report never escalates or confirms; reporter gets a
+  receipt, not an alert; repeated reports send no duplicate alerts
+- **access:** cross-user/authority 404, reviewer sees username only, private image headers, no
+  static copy, review rules/409/self-review/CSRF
+- **pages:** mobile form markup, Nepali, "My Reports" shows only your own
+
+**Full suite: `python -m pytest tests/ -q` → 267 passed, 57 warnings.**
+All warnings are the pre-existing SQLAlchemy `Query.get()` legacy warnings.
+
+### 15. Known limitations
+- No vision AI; nothing verifies what the photo shows (M06).
+- District is chosen by the user and not checked against the coordinates (no boundary data).
+- Without coordinates, M02 dedup matches any active same-type event in the district within 24 h, so
+  two separate road-damage spots reported without GPS in one district can merge into one event.
+- Browser geolocation needs HTTPS (or localhost) on phones. Over plain HTTP on a LAN, users must
+  type coordinates or skip them.
+- `capture="environment"` is a hint; some browsers show a file picker instead of opening the camera.
+- HEIC photos (iPhone default in some settings) are not accepted; most browsers convert to JPEG on
+  upload, but not all.
+- Photos are on local disk: no replication or backup, and no retention/cleanup policy.
+- No per-user rate limit on report submission.
+- Pre-existing, outside M05: the older JSON `POST /api/hazards` lets a citizen pass any
+  `severity`, which can escalate an existing event (and send district-wide escalation alerts). The
+  M05 photo path does not allow this. Restricting it on `/api/hazards` too is recommended.
+- Pre-existing, outside M05: community post photos (`/posts/create`) are still saved under public
+  `static/uploads` with the original (sanitised) filename.
+
+### 16. Next milestone
+**M06 — ROAD DAMAGE + LANDSLIDE VISION AI** (not started).
+
+### 17. Files
+- Created: `app/models/citizen_report.py`, `app/services/citizen_report_service.py`,
+  `app/routes/reports.py`, `app/templates/pages/report_hazard.html`,
+  `app/templates/pages/my_reports.html`, `migrations/versions/e4d8a1f6b209_m05_citizen_reports.py`,
+  `tests/test_citizen_reports_m05.py`
+- Modified: `app/__init__.py`, `app/models/__init__.py`, `app/models/notification.py`
+  (`report_update` type), `app/services/hazard_event_service.py` (`escalate` flag, detection alert
+  exclusion), `app/services/notification_service.py` (exclusion, report receipts),
+  `app/services/page_strings.py`, `app/templates/components/navbar.html`, `requirements.txt`
+  (Pillow), `docs/PROJECT_PROGRESS.md`
+- Deleted: none
+
+### 18. Git commit
+```
+feat(m05): add mobile citizen hazard reporting
+```
+
+### 🏷️ Status
+**M05 — MOBILE CAMERA CITIZEN REPORTING COMPLETE**
+**NO VISION AI · HARDWARE NOT YET CONNECTED**
