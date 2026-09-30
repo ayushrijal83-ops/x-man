@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, request
 from flask_login import current_user, login_required
 from app.extensions import db
 from app.models import District, Post, Authority, Project, RoadSegment, River, Incident
+from app.models.incident import ACTIVE_STATUSES
 
 main_bp = Blueprint('main', __name__)
 
@@ -21,7 +22,7 @@ def dashboard():
         user_district = District.query.get(current_user.district_id)
     
     recent_posts = Post.query.order_by(Post.created_at.desc()).limit(10).all()
-    active_incidents = Incident.query.filter_by(status='active').limit(5).all()
+    active_incidents = Incident.query.filter(Incident.status.in_(ACTIVE_STATUSES)).limit(5).all()
 
     def local_first(model, limit=5):
         """Prefer the user's own district; fall back to nationwide if it has none.
@@ -88,7 +89,7 @@ def district_detail(district_id):
     projects = Project.query.filter_by(district_id=district_id).all()
     roads = RoadSegment.query.filter_by(district_id=district_id).all()
     rivers = River.query.filter_by(district_id=district_id).all()
-    incidents = Incident.query.filter_by(district_id=district_id, status='active').all()
+    incidents = Incident.query.filter(Incident.district_id == district_id, Incident.status.in_(ACTIVE_STATUSES)).all()
     
     return render_template('pages/district_detail.html',
                          district=district,

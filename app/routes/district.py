@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
 from app.models import District, Post, Authority, RoadSegment, River, Project, Incident, Complaint
+from app.models.incident import ACTIVE_STATUSES
 
 district_bp = Blueprint('district', __name__)
 
@@ -23,7 +24,7 @@ def district_detail(district_id):
     roads = RoadSegment.query.filter_by(district_id=district_id).all()
     rivers = River.query.filter_by(district_id=district_id).all()
     projects = Project.query.filter_by(district_id=district_id).all()
-    incidents = Incident.query.filter_by(district_id=district_id, status='active').all()
+    incidents = Incident.query.filter(Incident.district_id == district_id, Incident.status.in_(ACTIVE_STATUSES)).all()
     
     return render_template('pages/district_detail.html',
                          district=district,

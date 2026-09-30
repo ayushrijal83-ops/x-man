@@ -7,6 +7,7 @@ from app.services.risk_engine import (
     assess_water_level_risk,
     compute_river_status,
 )
+from app.services.hazard_event_service import auto_create_flood_event_from_river
 from datetime import datetime
 import json
 
@@ -176,9 +177,10 @@ def ingest_telemetry():
 
 def process_water_level_reading(device, water_level, unit):
     """Process a water level reading and update the associated river.
-
+    
     Uses the explicit device.river_id relationship for reliable river association.
     Falls back to district-level lookup only if river_id is not set (backward compat).
+    Creates/updates flood hazard events via the hazard event engine.
     """
     if unit != 'm':
         return
@@ -203,7 +205,11 @@ def process_water_level_reading(device, water_level, unit):
         river.status = compute_river_status(water_level, river.danger_level)
 
         risk = assess_water_level_risk(water_level, river.danger_level)
+        
         if risk['alert_required'] and risk['risk_level'] >= 2:  # rising=2, flooding=3
+            # M02: threshold crossing becomes evidence for a flood hazard event
+            auto_create_flood_event_from_river(river, risk, device)
+            # M01 behaviour, unchanged (notification rework is M03)
             create_river_alert(device, river, risk)
 
 

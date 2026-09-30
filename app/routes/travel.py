@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for
 from flask_login import current_user, login_required
 from app.models import RoadSegment, Incident, River, District
+from app.models.incident import ACTIVE_STATUSES
 
 travel_bp = Blueprint('travel', __name__)
 
@@ -61,7 +62,7 @@ def travel_planner():
         
         roads, route_matched = _roads_on_route(from_location, to_location)
         district_ids = [r.district_id for r in roads]
-        incidents = Incident.query.filter_by(status='active').all()
+        incidents = Incident.query.filter(Incident.status.in_(ACTIVE_STATUSES)).all()
         rivers = (River.query
                   .filter(River.status.in_(RISKY_RIVER_STATUS))
                   .filter(River.district_id.in_(district_ids) if district_ids else True)
@@ -81,10 +82,10 @@ def travel_planner():
         for incident in incidents:
             if incident.severity == 'critical':
                 risk_score += 40
-                warnings.append(f"CRITICAL: {incident.category}")
+                warnings.append(f"CRITICAL: {incident.event_type}")
             elif incident.severity == 'high':
                 risk_score += 20
-                warnings.append(f"HIGH: {incident.category}")
+                warnings.append(f"HIGH: {incident.event_type}")
 
         for river in rivers:
             risk_score += 30

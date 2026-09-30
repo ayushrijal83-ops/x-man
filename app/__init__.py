@@ -42,6 +42,7 @@ def create_app(config_name=None):
     from app.routes.social import social_bp
     from app.routes.language import language_bp
     from app.routes.iot import iot_bp
+    from app.routes.hazard_events import hazard_events_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -59,6 +60,7 @@ def create_app(config_name=None):
     app.register_blueprint(social_bp, url_prefix='/social')
     app.register_blueprint(language_bp, url_prefix='/language')
     app.register_blueprint(iot_bp)
+    app.register_blueprint(hazard_events_bp)
     
     from app.services.translation_service import TranslationService
     translation_service = TranslationService()
