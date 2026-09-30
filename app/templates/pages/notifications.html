@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Notifications'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .notif-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-6); }
+    .notif-list { display: flex; flex-direction: column; gap: var(--space-3); }
+    .notif { display: flex; gap: var(--space-4); align-items: flex-start; }
+    .notif.unread { border-left: 3px solid var(--danger); }
+    .notif-body { flex: 1; min-width: 0; }
+    .notif-body h3 { margin: var(--space-2) 0 var(--space-1); font-size: 16px; }
+    .notif-body p { margin: 0; color: var(--text-muted); overflow-wrap: anywhere; }
+    .notif-meta { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--text-muted); }
+    .notif-actions { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-end; }
+    @media (max-width: 600px) { .notif { flex-direction: column; } .notif-actions { flex-direction: row; align-items: center; } }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+{% set severity_class = {'critical': 'badge-danger', 'high': 'badge-danger', 'medium': 'badge-warning', 'low': 'badge-info'} %}
+
+<div class="container">
+    <div class="notif-head">
+        <div>
+            <h1><i data-lucide="bell"></i> {{ 'Notifications'|t }}</h1>
+            <p style="color: var(--text-muted);"><span id="unread-count">{{ unread_notifications }}</span> {{ 'unread'|t }}</p>
+        </div>
+        {% if unread_notifications %}
+        <button type="button" class="btn btn-outline" id="read-all">{{ 'Mark all as read'|t }}</button>
+        {% endif %}
+    </div>
+
+    {% if notifications %}
+    <div class="notif-list">
+        {% for n in notifications %}
+        <div class="card notif{% if not n.is_read %} unread{% endif %}" data-id="{{ n.id }}">
+            <div class="notif-body">
+                <div class="notif-meta">
+                    {% if n.severity %}<span class="badge {{ severity_class.get(n.severity, 'badge-neutral') }}">{{ n.severity|t }}</span>{% endif %}
+                    {% if n.incident %}<span class="badge badge-neutral">{{ n.incident.event_type|t }}</span>{% endif %}
+                    <time datetime="{{ n.created_at.isoformat() }}Z">{{ n.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</time>
+                </div>
+                <h3>{{ n.title }}</h3>
+                {% if n.message %}<p>{{ n.message }}</p>{% endif %}
+            </div>
+            <div class="notif-actions">
+                {% if n.link %}<a href="{{ n.link }}" class="btn btn-outline">{{ 'View'|t }}</a>{% endif %}
+                {% if not n.is_read %}<button type="button" class="btn btn-primary mark-read">{{ 'Mark as read'|t }}</button>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card empty-state">
+        <i data-lucide="bell-off"></i>
+        <p>{{ 'No notifications yet.'|t }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+
+    function post(url) {
+        return fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+            body: '{}'
+        }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+    }
+
+    function setUnread(count) {
+        document.getElementById('unread-count').textContent = count;
+        document.querySelectorAll('.nav-badge').forEach(function (b) {
+            if (count) { b.textContent = count; } else { b.remove(); }
+        });
+        if (!count) { var all = document.getElementById('read-all'); if (all) all.remove(); }
+    }
+
+    function markCardRead(card) {
+        card.classList.remove('unread');
+        var btn = card.querySelector('.mark-read');
+        if (btn) btn.remove();
+    }
+
+    document.querySelectorAll('.mark-read').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var card = btn.closest('.notif');
+            btn.disabled = true;
+            post('/api/notifications/' + card.dataset.id + '/read')
+                .then(function (data) { markCardRead(card); setUnread(data.unread_count); })
+                .catch(function () { btn.disabled = false; });
+        });
+    });
+
+    var all = document.getElementById('read-all');
+    if (all) {
+        all.addEventListener('click', function () {
+            all.disabled = true;
+            post('/api/notifications/read-all')
+                .then(function () { document.querySelectorAll('.notif.unread').forEach(markCardRead); setUnread(0); })
+                .catch(function () { all.disabled = false; });
+        });
+    }
+})();
+</script>
+{% endblock %}

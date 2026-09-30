@@ -2,7 +2,8 @@
 
 Business logic for the hazard-event layer. Every source (IoT, citizen report,
 authority, system) goes through here and produces/updates an Incident.
-Notification delivery is NOT done here (M03).
+Lifecycle state changes are handed to notification_service (M03); this module
+never builds notifications itself.
 """
 
 import math
@@ -10,6 +11,7 @@ from datetime import datetime, timedelta
 
 from app.extensions import db
 from app.models import Incident, River, RoadSegment, District
+from app.services import notification_service
 from app.models.incident import (
     HAZARD_TYPES, HAZARD_SOURCES, HAZARD_SEVERITY, HAZARD_STATUS,
     ACTIVE_STATUSES, VALID_STATUS_TRANSITIONS,
@@ -117,6 +119,8 @@ def create_hazard_event(event_type, severity, source, district_id=None, location
         updated_at=now,
     )
     db.session.add(incident)
+    db.session.flush()  # need incident.id for the notification link
+    notification_service.notify_hazard_detected(incident)
     db.session.commit()
     return incident
 
@@ -157,8 +161,10 @@ def add_evidence(incident, severity=None, source_reference=None):
     lowering is an authority decision). Does not change lifecycle status.
     """
     incident.report_count = (incident.report_count or 0) + 1
-    if severity and HAZARD_SEVERITY.index(severity) > HAZARD_SEVERITY.index(incident.severity or 'low'):
+    previous = incident.severity
+    if severity and HAZARD_SEVERITY.index(severity) > HAZARD_SEVERITY.index(previous or 'low'):
         incident.severity = severity
+        notification_service.notify_hazard_escalated(incident, previous)
     if source_reference:
         incident.source_reference = source_reference
     incident.updated_at = datetime.utcnow()
@@ -184,16 +190,58 @@ def report_hazard(event_type, severity, source, **fields):
     return create_hazard_event(event_type, severity, source, **fields), True
 
 
-def transition_event_status(incident, new_status):
-    """Validated lifecycle transition. Returns old status. Raises ValueError."""
+_STATUS_NOTIFIERS = {
+    'confirmed': notification_service.notify_hazard_confirmed,
+    'resolved': notification_service.notify_hazard_resolved,
+}
+
+
+def _apply_transition(incident, new_status):
+    """The single path for status changes, so notifications can't be bypassed."""
     _validate_status(new_status)
     old_status = incident.transition_status(new_status)
+    notifier = _STATUS_NOTIFIERS.get(new_status)
+    if notifier:
+        notifier(incident)
+    return old_status
+
+
+def transition_event_status(incident, new_status):
+    """Validated lifecycle transition. Returns old status. Raises ValueError."""
+    old_status = _apply_transition(incident, new_status)
     db.session.commit()
     return old_status
 
 
+def update_event(incident, severity=None, status=None, **fields):
+    """Authority/admin edit. Validates everything before changing anything.
+
+    Raising severity notifies an escalation; lowering it is allowed (a human
+    decision) and is silent. `fields` must already be validated by the caller
+    (title, description, location, latitude, longitude).
+    """
+    if severity is not None:
+        _validate_severity(severity)
+    if status is not None:
+        _validate_status(status)
+        if not incident.can_transition_to(status):
+            raise ValueError(f"Invalid transition from {incident.status} to {status}")
+
+    for key, value in fields.items():
+        setattr(incident, key, value)
+    if severity is not None and severity != incident.severity:
+        previous = incident.severity
+        incident.severity = severity
+        notification_service.notify_hazard_escalated(incident, previous)
+    if status is not None:
+        _apply_transition(incident, status)
+    incident.updated_at = datetime.utcnow()
+    db.session.commit()
+    return incident
+
+
 def _transition_with_note(incident, new_status, label, note):
-    old_status = incident.transition_status(new_status)
+    old_status = _apply_transition(incident, new_status)
     if note:
         incident.description = (incident.description or '') + f'\n\n{label}: {note}'
     db.session.commit()

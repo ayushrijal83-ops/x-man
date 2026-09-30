@@ -38,6 +38,7 @@
             <span class="theme-label">{{ 'Dark mode'|t }}</span>
         </button>
         <nav class="nav-links" aria-label="{{ 'Account'|t }}">
+            <a href="/notifications"><i data-lucide="bell"></i>{{ 'Notifications'|t }}{% if unread_notifications %}<span class="nav-badge" aria-label="{{ 'unread'|t }}">{{ unread_notifications }}</span>{% endif %}</a>
             <a href="/profile/me"><i data-lucide="user"></i>{{ t('my_profile') }}</a>
             <a href="/auth/logout"><i data-lucide="log-out"></i>{{ t('logout') }}</a>
         </nav>

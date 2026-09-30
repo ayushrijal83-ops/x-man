@@ -16,7 +16,7 @@ from app.extensions import db
 from app.models import Incident
 from app.models.incident import HAZARD_TYPES, HAZARD_SOURCES, HAZARD_STATUS, ACTIVE_STATUSES
 from app.services.hazard_event_service import (
-    report_hazard, transition_event_status, resolve_event, reject_event,
+    report_hazard, transition_event_status, update_event, resolve_event, reject_event,
     get_active_events_for_district, get_events_by_type, get_events_by_source,
     get_event_statistics, _validate_hazard_type, _validate_severity,
     _validate_coordinates,
@@ -205,24 +205,14 @@ def update_hazard(event_id):
         return jsonify({'error': 'A JSON object body is required'}), 400
 
     try:
-        if 'severity' in data:
-            _validate_severity(data['severity'])
+        fields = {k: _optional_text(data, k) for k in TEXT_LIMITS if k in data}
         if 'latitude' in data or 'longitude' in data:
             _validate_coordinates(data.get('latitude'), data.get('longitude'))
-        texts = {k: _optional_text(data, k) for k in TEXT_LIMITS if k in data}
-        if 'status' in data:
-            incident.transition_status(data['status'])
+            fields['latitude'], fields['longitude'] = data.get('latitude'), data.get('longitude')
+        update_event(incident, severity=data.get('severity'), status=data.get('status'), **fields)
     except ValueError as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
-
-    if 'severity' in data:
-        incident.severity = data['severity']
-    if 'latitude' in data or 'longitude' in data:
-        incident.latitude, incident.longitude = data.get('latitude'), data.get('longitude')
-    for key, value in texts.items():
-        setattr(incident, key, value)
-    db.session.commit()
     return jsonify({'event': _serialize(incident)})
 
 

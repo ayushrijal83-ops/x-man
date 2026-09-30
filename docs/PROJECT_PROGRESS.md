@@ -1,6 +1,6 @@
 # NepalSathi - Project Progress
 
-## Current Status: M02 Hazard Event Engine Complete (M01 Hardware Readiness Foundation — VERIFIED)
+## Current Status: M03 Notification System Complete (M02 Hazard Event Engine, M01 Hardware Readiness Foundation)
 
 ### ✅ Completed (Core Features)
 - Flask application
@@ -53,7 +53,7 @@
 - Testing
 
 ### 📋 Next Steps
-- M03 — Notification System (see the M02 section at the end).
+- M04 — Alert Deduplication + Affected Areas (see the M03 section at the end).
 - Still open from M01: ESP32 firmware, periodic risk worker, real-time dashboard transport, device provisioning UI.
 
 ### 🐛 Known Issues
@@ -300,3 +300,200 @@ Warnings are pre-existing SQLAlchemy `Query.get()` legacy warnings.
 ### 🏷️ Status
 **M02 — HAZARD EVENT ENGINE COMPLETE**
 **HARDWARE NOT YET CONNECTED · NO AI VISION IMPLEMENTED**
+
+---
+
+## M03 — Notification System
+
+### 1. Status
+**Complete.** In-app notifications only. No SMS, email, push, or external providers.
+
+### 2. Architecture
+```
+Route (/api/hazards) or IoT (/api/iot/telemetry)
+            ↓
+  hazard_event_service   ← the only code that changes hazard state
+            ↓  state change: detected / severity up / confirmed / resolved
+  notification_service   ← the only code that creates notifications
+            ↓
+  Notification rows (one per recipient)
+            ↓
+  /api/notifications  +  /notifications page  +  sidebar unread badge
+```
+No route, template, model method or IoT handler builds notifications. Every hazard status change
+goes through `hazard_event_service._apply_transition()`, so a notification can't be bypassed by
+calling a different endpoint. Authority PATCH edits now go through `update_event()`.
+
+### 3. Notification model decision
+The existing `Notification` model is **reused and extended** (no new table):
+- added `incident_id` (nullable FK → `incidents`, indexed): the hazard event it is about
+- added `severity` (nullable, M02 `HAZARD_SEVERITY`): severity when sent
+- added index `(user_id, is_read)` for unread counts
+- read state stays the existing `is_read` boolean
+- `to_dict()` returns id, type, title, message, link, severity, is_read, created_at and
+  `hazard: {id, event_type, status}`. No reporter/device identifiers.
+
+### 4. Notification service (`app/services/notification_service.py`)
+`create_notification`, `hazard_recipients`, `notify_hazard` (+ `notify_hazard_detected`,
+`notify_hazard_escalated`, `notify_hazard_confirmed`, `notify_hazard_resolved`),
+`get_user_notifications`, `unread_count`, `mark_as_read`, `mark_all_as_read`.
+It adds to the session without committing; the hazard service owns the transaction, so an event
+change and its notifications commit together.
+
+### 5. Notification types
+`hazard_detected`, `hazard_escalated`, `hazard_confirmed`, `hazard_resolved`, `system`.
+The legacy values `road_alert`, `river_alert`, `project_update` and `complaint_response` stay valid
+so existing rows keep displaying. Severity reuses M02 `low / medium / high / critical`.
+
+| Hazard change | Notification |
+|---|---|
+| event created | `hazard_detected` |
+| severity goes up (evidence or authority edit) | `hazard_escalated` |
+| severity unchanged or lowered | none |
+| → `confirmed` | `hazard_confirmed` |
+| → `resolved` | `hazard_resolved` |
+| → `investigating` / `rejected` | none |
+
+### 6. Targeting (`hazard_recipients`)
+- Hazard with a district → users whose home `district_id` is that district (citizens and
+  authorities), **plus** authority users whose `Authority.district_id` is that district (the
+  responsible authority, even with no home district set), **plus** all admins.
+- Hazard with no district → admins only.
+- Never broadcast to everyone. Affected-area / radius targeting is M04.
+
+### 7. RBAC
+- Citizen / authority / admin: can only list, count, and mark-read **their own** notifications.
+- Nobody can create a notification over HTTP (`POST /api/notifications` → 405). Only the hazard
+  service creates them.
+- Authorities see notifications for their district because targeting sends them there.
+  Hazard-event authorization (M02) is unchanged.
+- Admins receive every hazard notification (system-wide recipient). They cannot read other users'
+  notifications.
+- No new roles.
+
+### 8. Flood / IoT integration
+The M01 `create_river_alert()` (one notification per user per rising/flooding **reading**) was
+removed. Threshold semantics are unchanged (<80% normal, 80–100% rising, ≥100% flooding).
+
+| Reading | Hazard | Notification |
+|---|---|---|
+| normal | none | none |
+| first rising | flood event created (`medium`) | `hazard_detected` once |
+| repeated rising | same event, `report_count+1` | none |
+| flooding | same event, severity → `high` | `hazard_escalated` once |
+| repeated flooding | same event | none |
+| back to rising | severity not lowered | none |
+
+Legacy `river_alert` rows already in the DB are kept and still shown.
+
+### 9. Earthquake support
+`earthquake` is now a first-class `HAZARD_TYPES` value (`flood, earthquake, landslide, road_damage`):
+it passes validation in the service and API, and gets dedup, lifecycle, statistics and
+notifications like any other type. It is labelled
+**"Earthquake / abnormal ground motion"**, because a future MPU6050 prototype detects abnormal
+ground motion and is not a certified early-warning instrument.
+**Not implemented:** MPU6050/ESP32 firmware, wiring, calibration, thresholds, magnitude, prediction,
+external APIs. Tilt/vibration telemetry is still stored only. The ready path for later is
+`MPU6050 → ESP32 → /api/iot/telemetry → (future risk rule) → create/report_hazard('earthquake') →
+notifications`. Tests create earthquake events directly; no sensor data is faked.
+
+### 10. Deduplication
+- A notification only follows a real state change (see table above).
+- Safety net in `notify_hazard`: a (hazard, type) pair is sent once; escalations once per severity
+  level. Repeated calls, or an authority lowering then re-raising severity, send nothing new.
+- Cross-event dedup / affected areas: M04.
+
+### 11. API endpoints
+| Method | Endpoint | Auth | Result |
+|---|---|---|---|
+| GET | `/api/notifications?unread=1&limit=N` | login | own notifications + `unread_count` |
+| GET | `/api/notifications/unread-count` | login | `{unread_count}` |
+| POST | `/api/notifications/<id>/read` | login | 200 own; 404 missing **or another user's**; 400 non-integer id |
+| POST | `/api/notifications/read-all` | login | `{updated, unread_count: 0}`, own only |
+
+Unauthenticated → 401 JSON. Errors are JSON `{error}`.
+
+### 12. Frontend notification center
+- `GET /notifications` (`pages/notifications.html`): Jinja + a small inline vanilla-JS block, no
+  build step. It shows severity badge, hazard type, UTC timestamp, title, message, a "View" link to
+  the relevant river/district page, per-item "Mark as read", and "Mark all as read". Fetch calls
+  send `X-CSRFToken` from the existing meta tag.
+- A "Notifications" link with an unread count badge in the citizen sidebar and in the six authority
+  page navs (count injected by a context processor).
+- Nepali strings added to `page_strings.py` (UI labels, `earthquake`, `road_damage`).
+
+### 13. Migration
+`migrations/versions/a3f1c9d2e8b4_m03_link_notifications_to_hazard_events.py` (revises
+`199353c81cdc`). **Additive only:** two nullable columns, one FK, two indexes. Nothing is dropped
+and no rows are changed.
+Verified on a scratch DB with legacy `river_alert` / `complaint_response` rows:
+upgrade → downgrade → upgrade, then an ORM earthquake event that produced a linked notification.
+Legacy rows survived every step. The local dev DB (`instance/hackforge.db`) was backed up and then
+upgraded to `a3f1c9d2e8b4`.
+
+### 14. Security review
+- Authentication: every notification endpoint → 401 JSON without login; page → login redirect.
+- Ownership / no IDOR: every query is filtered by `current_user.id` in the service. Another user's
+  id returns the same 404 as a missing id.
+- RBAC: no HTTP create path; authority district boundaries for hazard management unchanged (M02).
+- Privacy: messages are built only from public fields (type, district, title, river/road name,
+  severity). They never include `description` (free text, may identify the reporter),
+  `source_reference`, user ids, device ids, or API keys.
+- CSRF: `CSRFProtect` covers the POST endpoints (tested: 400 without a token when enabled). Nothing
+  exempted.
+- Input validation: integer id check (ASCII digits only), `limit` clamped 1–200, type/severity
+  validated.
+- ORM-only DB access. No logging of notification contents or credentials.
+
+### 15. Tests
+`tests/test_notifications_m03.py` (28 tests): model/relationship/defaults, validation, targeting
+(district, responsible authority, admin, no-district), lifecycle, reject/investigating silent,
+escalation only on increase, authority lowering silent + no repeat, dedup, invalid transition
+sends nothing, privacy, earthquake detected + escalated (service and API), IoT flood sequence,
+API auth/ownership/IDOR/malformed/nonexistent/read/read-all/unread-count, no create endpoint,
+CSRF, page render + badge + Nepali + empty state.
+Updated: `test_hazard_event_model.py` (hazard types list),
+`test_hazard_m02_integration.py` (used `earthquake` as its invalid-type example → `volcano`).
+
+**Full suite: `python -m pytest tests/ -q` → 185 passed, 51 warnings.**
+All warnings are pre-existing SQLAlchemy `Query.get()` legacy warnings. The count rose from 44
+because new telemetry tests exercise the existing `iot.py` `River.query.get` line more often.
+
+### 16. Known limitations
+- Notification title/message text is stored in English. Badges and UI labels are translated, the
+  body text is not.
+- `rejected` sends no notification, so citizens told "detected" are not told it was a false alarm
+  unless an authority resolves it instead.
+- IoT events are still not auto-resolved when a river returns to normal (M02 limitation).
+- Targeting is district-level only. A hazard near a district border doesn't reach the neighbouring
+  district (M04).
+- The unread badge updates on page load and on actions in the notification page. There is no live
+  polling or push.
+- No retention/cleanup of old notifications; no per-user notification preferences.
+- One notification row per recipient: fine for district scale, but a very large district would
+  benefit from batching.
+
+### 17. Next milestone
+**M04 — Alert Deduplication + Affected Areas** (not started).
+
+### 18. Files
+- Created: `app/services/notification_service.py`, `app/routes/notifications.py`,
+  `app/templates/pages/notifications.html`,
+  `migrations/versions/a3f1c9d2e8b4_m03_link_notifications_to_hazard_events.py`,
+  `tests/test_notifications_m03.py`
+- Modified: `app/models/notification.py`, `app/models/incident.py`,
+  `app/services/hazard_event_service.py`, `app/routes/hazard_events.py`, `app/routes/iot.py`,
+  `app/__init__.py`, `app/templates/base.html`, `app/templates/components/navbar.html`,
+  `app/templates/authority/{dashboard,complaints,complaint_detail,projects,roads,rivers}.html`,
+  `app/services/page_strings.py`, `tests/test_hazard_event_model.py`,
+  `tests/test_hazard_m02_integration.py`, `docs/PROJECT_PROGRESS.md`
+- Deleted: none (the `create_river_alert()` function was removed from `app/routes/iot.py`)
+
+### 19. Git commit
+```
+feat(m03): add centralized hazard notification system
+```
+
+### 🏷️ Status
+**M03 — NOTIFICATION SYSTEM COMPLETE**
+**HARDWARE NOT YET CONNECTED · NO MPU6050/ESP32 FIRMWARE · NO AI VISION**

@@ -2,7 +2,8 @@ from app.extensions import db
 from datetime import datetime
 
 # Single source of truth for hazard-event vocabulary (M02).
-HAZARD_TYPES = ['flood', 'landslide', 'road_damage']
+# earthquake = abnormal ground/seismic motion (M03); no sensor source wired yet
+HAZARD_TYPES = ['flood', 'earthquake', 'landslide', 'road_damage']
 HAZARD_SOURCES = ['iot', 'citizen_report', 'authority', 'system']
 HAZARD_SEVERITY = ['low', 'medium', 'high', 'critical']
 HAZARD_STATUS = ['detected', 'investigating', 'confirmed', 'resolved', 'rejected']

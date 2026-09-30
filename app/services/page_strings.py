@@ -500,6 +500,15 @@ NE = {
     'River status updated successfully!': 'नदी अवस्था सफलतापूर्वक अद्यावधिक भयो!',
     'Unsupported language': 'यो भाषा समर्थित छैन',
     'Username already taken.': 'यो प्रयोगकर्ता नाम पहिले नै लिइएको छ।',
+    # --- notifications (M03) ---
+    'Notifications': 'सूचनाहरू',
+    'unread': 'नपढिएको',
+    'Mark all as read': 'सबै पढिएको चिन्ह लगाउनुहोस्',
+    'Mark as read': 'पढिएको चिन्ह लगाउनुहोस्',
+    'View': 'हेर्नुहोस्',
+    'No notifications yet.': 'अहिलेसम्म कुनै सूचना छैन।',
+    'earthquake': 'भूकम्प',
+    'road_damage': 'सडक क्षति',
 }
 
 PAGE_TEXT = {'ne': NE}

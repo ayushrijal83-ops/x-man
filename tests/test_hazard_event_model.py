@@ -228,7 +228,7 @@ class TestIncidentConstants:
 
     def test_hazard_types(self):
         from app.models.incident import HAZARD_TYPES
-        assert HAZARD_TYPES == ['flood', 'landslide', 'road_damage']
+        assert HAZARD_TYPES == ['flood', 'earthquake', 'landslide', 'road_damage']
 
     def test_hazard_sources(self):
         from app.models.incident import HAZARD_SOURCES

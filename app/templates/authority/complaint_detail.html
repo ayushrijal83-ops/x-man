@@ -8,6 +8,7 @@
     <div class="nav-links">
         <a href="/authority/dashboard">{{ 'Dashboard'|t }}</a>
         <a href="/authority/complaints">{{ 'Complaints'|t }}</a>
+        <a href="/notifications">{{ 'Notifications'|t }}{% if unread_notifications %} <span class="nav-badge">{{ unread_notifications }}</span>{% endif %}</a>
         <a href="/auth/logout">{{ 'Logout'|t }}</a>
         {% include "components/lang_selector.html" %}
     </div>

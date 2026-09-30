@@ -207,27 +207,9 @@ def process_water_level_reading(device, water_level, unit):
         risk = assess_water_level_risk(water_level, river.danger_level)
         
         if risk['alert_required'] and risk['risk_level'] >= 2:  # rising=2, flooding=3
-            # M02: threshold crossing becomes evidence for a flood hazard event
+            # threshold crossing -> flood hazard event; notifications fire from
+            # the event's state changes (M03), not from every reading
             auto_create_flood_event_from_river(river, risk, device)
-            # M01 behaviour, unchanged (notification rework is M03)
-            create_river_alert(device, river, risk)
-
-
-def create_river_alert(device, river, risk):
-    """Create a notification/alert for rising/flooding river."""
-    from app.models import Notification, User
-
-    users = User.query.filter_by(district_id=river.district_id).all()
-    for user in users:
-        notification = Notification(
-            user_id=user.id,
-            type='river_alert',
-            title=f"River Alert: {river.name}",
-            message=f"{river.name} is {risk['status']} at {river.current_level}m "
-                    f"({risk['percentage']:.0f}% of danger level). {risk['reason']}",
-            link=f"/rivers/status?district_id={river.district_id}",
-        )
-        db.session.add(notification)
 
 
 @iot_bp.route('/latest', methods=['GET'])

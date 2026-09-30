@@ -159,7 +159,7 @@ class TestHazardApiSecurity:
             client.post('/api/hazards', json={'event_type': 'flood', 'latitude': 27.7}),
             client.post('/api/hazards', json={'event_type': 'flood', 'district_id': '1'}),
             client.post('/api/hazards', json={'event_type': 'flood', 'title': 'x' * 201}),
-            client.post('/api/hazards', json={'event_type': 'earthquake'}),
+            client.post('/api/hazards', json={'event_type': 'volcano'}),
         ]
         assert [r.status_code for r in bad] == [400] * len(bad)
         assert all('error' in r.get_json() for r in bad)
