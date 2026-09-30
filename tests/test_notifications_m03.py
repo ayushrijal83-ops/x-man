@@ -70,7 +70,8 @@ class TestModelAndService:
             assert note.is_read is False
             assert note.incident.id == incident.id
             assert note.severity == 'high'
-            assert note.to_dict()['hazard'] == {'id': incident.id, 'event_type': 'landslide', 'status': 'detected'}
+            assert note.to_dict()['hazard'] == {'id': incident.id, 'event_type': 'landslide', 'status': 'detected',
+                                                'district_name': 'District A', 'affected_districts': ['District A']}
 
     def test_create_notification_validates(self, app, world):
         uid = world['users']['citizen_a']

@@ -10,7 +10,7 @@ import math
 from datetime import datetime, timedelta
 
 from app.extensions import db
-from app.models import Incident, River, RoadSegment, District
+from app.models import Incident, IncidentAffectedDistrict, River, RoadSegment, District
 from app.services import notification_service
 from app.models.incident import (
     HAZARD_TYPES, HAZARD_SOURCES, HAZARD_SEVERITY, HAZARD_STATUS,
@@ -240,6 +240,38 @@ def update_event(incident, severity=None, status=None, **fields):
     return incident
 
 
+def add_affected_district(incident, district_id):
+    """Add an extra affected district (M04). Raises ValueError / LookupError.
+
+    The primary district (incident.district_id) is always affected implicitly and
+    can't be added again. Newly covered users are notified of the current state
+    once; users already notified get nothing. Resolved/rejected events keep the
+    area for history but send no alerts.
+    """
+    if not db.session.get(District, district_id):
+        raise LookupError(f"District {district_id} not found")
+    if district_id in incident.affected_district_ids:
+        raise ValueError("District is already affected by this hazard")
+    db.session.add(IncidentAffectedDistrict(incident_id=incident.id, district_id=district_id))
+    db.session.flush()
+    db.session.expire(incident, ['additional_districts'])
+    sent = notification_service.notify_area_expanded(incident)
+    db.session.commit()
+    return sent
+
+
+def remove_affected_district(incident, district_id):
+    """Stop targeting an extra district. History (notifications, lifecycle) is untouched."""
+    if district_id == incident.district_id:
+        raise ValueError("The primary district can't be removed")
+    row = IncidentAffectedDistrict.query.filter_by(incident_id=incident.id, district_id=district_id).first()
+    if not row:
+        raise LookupError("District is not an additional affected district of this hazard")
+    db.session.delete(row)
+    db.session.commit()
+    db.session.expire(incident, ['additional_districts'])
+
+
 def _transition_with_note(incident, new_status, label, note):
     old_status = _apply_transition(incident, new_status)
     if note:
@@ -317,9 +349,15 @@ def auto_create_flood_event_from_river(river, risk_assessment, device=None):
     )
 
 
+def affects_district(district_id):
+    """SQL filter: incident's primary district OR an additional affected district (M04)."""
+    additional = db.session.query(IncidentAffectedDistrict.incident_id)         .filter(IncidentAffectedDistrict.district_id == district_id)
+    return db.or_(Incident.district_id == district_id, Incident.id.in_(additional))
+
+
 def get_active_events_for_district(district_id):
     return Incident.query.filter(
-        Incident.district_id == district_id,
+        affects_district(district_id),
         Incident.status.in_(ACTIVE_STATUSES),
     ).order_by(Incident.detected_at.desc()).all()
 

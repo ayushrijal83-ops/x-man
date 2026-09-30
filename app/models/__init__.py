@@ -10,7 +10,7 @@ from app.models.complaint import Complaint
 from app.models.project import Project
 from app.models.road import RoadSegment, RoadUpdate
 from app.models.river import River, RiverUpdate
-from app.models.incident import Incident
+from app.models.incident import Incident, IncidentAffectedDistrict
 from app.models.comment import Comment
 from app.models.like import Like
 from app.models.notification import Notification
@@ -31,6 +31,7 @@ __all__ = [
     'River',
     'RiverUpdate',
     'Incident',
+    'IncidentAffectedDistrict',
     'Comment',
     'Like',
     'Notification',

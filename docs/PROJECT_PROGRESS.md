@@ -1,6 +1,6 @@
 # NepalSathi - Project Progress
 
-## Current Status: M03 Notification System Complete (M02 Hazard Event Engine, M01 Hardware Readiness Foundation)
+## Current Status: M04 Alert Deduplication + Affected Areas Complete (M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
 
 ### ✅ Completed (Core Features)
 - Flask application
@@ -53,7 +53,7 @@
 - Testing
 
 ### 📋 Next Steps
-- M04 — Alert Deduplication + Affected Areas (see the M03 section at the end).
+- M05 — Mobile Camera Citizen Reporting (see the M04 section at the end).
 - Still open from M01: ESP32 firmware, periodic risk worker, real-time dashboard transport, device provisioning UI.
 
 ### 🐛 Known Issues
@@ -496,4 +496,190 @@ feat(m03): add centralized hazard notification system
 
 ### 🏷️ Status
 **M03 — NOTIFICATION SYSTEM COMPLETE**
+**HARDWARE NOT YET CONNECTED · NO MPU6050/ESP32 FIRMWARE · NO AI VISION**
+
+---
+
+## M04 — Alert Deduplication + Affected Areas
+
+### 1. Status
+**Complete.** Scope: district-level affected areas and reliable per-user alert deduplication.
+This is not GPS-radius or polygon targeting.
+
+### 2. Architecture
+```
+Evidence (IoT / citizen / authority)
+      ↓  M02: same hazard or new hazard?  (find_active_related_event — unchanged)
+Incident  ── primary district (incidents.district_id)
+      │   └─ additional districts (incident_affected_districts)
+      ↓  state change (detected / severity up / confirmed / resolved / area added)
+notification_service
+      ↓  recipients = users of every affected district + responsible authorities + admins
+      ↓  M04: has THIS user already had THIS alert?  (dedup_key, DB-unique per user)
+Notification rows
+```
+There is still one hazard record (`Incident`) and one notification record (`Notification`). The
+only new table is `incident_affected_districts`.
+
+### 3. Affected-area model
+`IncidentAffectedDistrict` (`incident_affected_districts`): `id`, `incident_id` (FK), `district_id`
+(FK, indexed), `created_at`, with **unique `(incident_id, district_id)`**. District names are never
+copied; they come from the `District` FK.
+`Incident.affected_districts` / `affected_district_ids` = primary first, then additional.
+`Incident.to_dict()` now includes `affected_districts: [{id, name}]`.
+
+### 4. Primary vs additional districts — decision: Option B (implicit primary)
+`Incident.district_id` **is** the primary affected district and is never stored as a row. Only
+additional districts are stored. This gives one source of truth, no backfill of existing
+incidents, and no way for the primary to exist twice. Adding the primary returns 409; removing the
+primary returns 400. An incident with no primary district can still have additional districts
+(admin).
+
+### 5. Targeting
+For each affected district (primary + additional):
+- users whose home `district_id` is that district (citizens and authority users)
+- authority users whose `Authority.district_id` is that district (the responsible authority)
+- plus all admins (unchanged from M03)
+
+Users outside every affected district get nothing. No affected district → admins only.
+District-scoped reads also follow the affected area (`/api/hazards/district/<id>/active`,
+`/api/hazards?district_id=`, district page, AI district summary) through one SQL helper,
+`affects_district()`.
+
+### 6. Notification deduplication
+- **Key:** `notifications.dedup_key` = `"<incident_id>:<type>"`, or
+  `"<incident_id>:hazard_escalated:<severity>"` for escalations. Same user + same key = same alert.
+- **Python:** `notify_hazard` skips users who already hold the key.
+- **Database (final defence):** unique index `uq_notifications_user_dedup (user_id, dedup_key)`.
+  Inserts run in a SAVEPOINT; a row that hits the index (e.g. a concurrent writer) is skipped and
+  the hazard change that triggered it is **not** rolled back.
+- Legacy / non-hazard notifications keep `dedup_key = NULL` and are never constrained.
+- No time-based cooldown: none is needed, because alerts only follow real state changes and each
+  is unique per user.
+- M02 evidence dedup is unchanged; it is a separate layer (which event?) from M04 (which user
+  already knows?).
+
+### 7. Escalation
+| Change | Alert |
+|---|---|
+| medium → high | `hazard_escalated` (high), once per user |
+| high → high | none |
+| high → critical | `hazard_escalated` (critical), once per user |
+| critical → high (authority edit) | none, never a downgrade alert |
+| back up to critical | none (already alerted at critical) |
+| evidence with a lower severity | ignored (severity never lowered automatically) |
+
+### 8. Expansion, removal, resolved, rejected
+- **Add district** (`add_affected_district`): newly covered users get `hazard_detected` at the
+  current severity (plus `hazard_confirmed` if the event is confirmed) **once**. Users already
+  notified get nothing.
+- **Remove district:** deletes only that affected-area row. The incident, lifecycle, users and
+  historical notifications are untouched; future alerts just stop going there.
+- **Resolved:** `hazard_resolved` goes to all currently affected users. After that, no
+  detected/escalated/confirmed alerts; area changes are kept for history but are silent.
+- **Rejected:** no active alerts; incident and affected areas kept.
+
+### 9. Flood behaviour
+```
+rising (A)            → event in A → A users: 1 × detected
+authority adds B      → B users: 1 × detected (A users: nothing)
+rising, rising, ...   → same event, report_count++ → nothing
+flooding              → medium→high → A + B users: 1 × escalated
+flooding again        → nothing
+```
+M01 thresholds unchanged (<80% normal, 80–100% rising, ≥100% flooding).
+
+### 10. Earthquake / landslide / road damage
+All four types (`flood, earthquake, landslide, road_damage`) go through the same code for affected
+districts, targeting, dedup, escalation and statistics. There is no per-type branch, and a
+parametrized test runs the same scenario for each type.
+Earthquake is still "Earthquake / abnormal ground motion": no MPU6050/ESP32 code, no thresholds,
+no magnitude, no prediction. Camera AI for landslide/road damage is not implemented.
+
+### 11. API
+| Method | Endpoint | Who | Result |
+|---|---|---|---|
+| GET | `/api/hazards/<id>/affected-districts` | any logged-in user | `{hazard_id, primary_district_id, affected_districts:[{id,name}]}`; 404 unknown hazard |
+| POST | `/api/hazards/<id>/affected-districts` body `{"district_id": <int>}` | authority (own hazards, M02 rule) / admin | 201 + `notifications_sent`; 400 bad body/type; 404 unknown hazard or district; 409 already affected (incl. primary); 403 not authorized |
+| DELETE | `/api/hazards/<id>/affected-districts/<district_id>` | authority (own hazards) / admin | 200; 400 primary; 404 not attached / unknown hazard; 403 not authorized |
+
+Existing hazard responses gain `affected_districts`. Notification responses gain
+`hazard.district_name` and `hazard.affected_districts` (names only). `dedup_key` is not exposed.
+
+### 12. Frontend
+The notification center shows, per alert: severity badge, hazard type, affected district names
+(map-pin), and a relative time ("5 minutes ago", Nepali or English via `Intl.RelativeTimeFormat`)
+with the absolute UTC time as a tooltip. The app has no hazard detail page, so affected districts
+are shown on the notification card and in the API rather than on a new page.
+
+### 13. Security
+- Authentication: all endpoints → 401 JSON without login.
+- RBAC: citizens view only. Authorities modify affected areas only for hazards they may manage
+  under the M02 rule (`user.authority.district_id` == hazard's primary district), and may extend
+  their hazard into neighbouring districts. Admins act globally. No new roles.
+- Input: `district_id` must be a JSON integer (strings/bools rejected); names are not accepted;
+  body must be a JSON object; district and hazard existence checked.
+- CSRF: POST/DELETE covered by `CSRFProtect` (tested: 400 without token when enabled).
+- IDOR: notifications remain scoped to `current_user.id`. Affected-area endpoints go through
+  the same authorization as other hazard writes.
+- Privacy: no `source_reference`, reporter identity, device IDs, API keys or `dedup_key` in
+  notification or hazard responses for citizens. ORM-only queries; nothing sensitive logged.
+
+### 14. Migration
+`migrations/versions/c7e2b5a91d3f_m04_affected_districts_and_alert_dedup.py` (revises
+`a3f1c9d2e8b4`). **Additive:** creates `incident_affected_districts`, adds nullable
+`notifications.dedup_key` and the unique index. Backfill gives existing M03 hazard notifications a
+key, but only the **earliest** row per (user, key). Historical duplicates keep NULL, so the index
+is created without deleting or rewriting rows.
+Verified on a scratch pre-M04 DB with legacy `river_alert` rows, a deliberate duplicate
+`hazard_detected`, users, districts, a river and an incident: upgrade → downgrade → upgrade with
+identical row counts at every step, then expansion + escalation on the migrated DB and a forced
+duplicate rejected by the DB. The local dev DB was backed up and upgraded to `c7e2b5a91d3f`.
+
+### 15. Tests
+`tests/test_affected_areas_m04.py` (28 tests): model (implicit primary, DB duplicate pair,
+unknown/duplicate/primary district), targeting, expansion (B then C, no repeats), escalation across
+districts, confirmed-state expansion, removal keeps history, resolved/rejected silent, dedup (same
+key once, escalation ladder, DB defence, savepoint batch skip, legacy unconstrained), all four
+hazard types, IoT rising/flooding across two districts, API (auth, citizen view-only, authority
+own vs other, admin, validation incl. string/bool/name/unknown/duplicate/primary, CSRF, payloads
+and district views), notification center.
+Updated: `tests/test_notifications_m03.py` (hazard payload now includes district fields).
+
+**Full suite: `python -m pytest tests/ -q` → 213 passed, 57 warnings.**
+All warnings are the pre-existing SQLAlchemy `Query.get()` legacy warnings (more of them because
+new IoT tests run the existing `iot.py` line).
+
+### 16. Known limitations
+- District-level only: no GPS radius, polygons, or river-downstream inference. Affected districts
+  are assigned explicitly by an authority/admin (IoT events start with the gauge's district only).
+- An authority can only manage hazards whose **primary** district is theirs. Authority B can't
+  manage a hazard that merely extends into B.
+- Notification titles name the primary district. Users in an additional district see it in the
+  "Affected:" line and the district badge.
+- No real-time push; alerts appear on page load or when polled.
+- No notification retention/cleanup or per-user preferences.
+- Not a certified seismic system; no earthquake prediction; no evacuation routing; no external
+  disaster-authority integration.
+
+### 17. Next milestone
+**M05 — Mobile Camera Citizen Reporting** (not started).
+
+### 18. Files
+- Created: `migrations/versions/c7e2b5a91d3f_m04_affected_districts_and_alert_dedup.py`,
+  `tests/test_affected_areas_m04.py`
+- Modified: `app/models/incident.py` (+ `IncidentAffectedDistrict`), `app/models/__init__.py`,
+  `app/models/notification.py`, `app/services/notification_service.py`,
+  `app/services/hazard_event_service.py`, `app/routes/hazard_events.py`, `app/routes/main.py`,
+  `app/routes/district.py`, `app/routes/ai_routes.py`, `app/templates/pages/notifications.html`,
+  `tests/test_notifications_m03.py`, `docs/PROJECT_PROGRESS.md`
+- Deleted: none
+
+### 19. Git commit
+```
+feat(m04): add affected areas and alert deduplication
+```
+
+### 🏷️ Status
+**M04 — ALERT DEDUPLICATION + AFFECTED AREAS COMPLETE**
 **HARDWARE NOT YET CONNECTED · NO MPU6050/ESP32 FIRMWARE · NO AI VISION**

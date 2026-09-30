@@ -16,8 +16,9 @@ from app.extensions import db
 from app.models import Incident
 from app.models.incident import HAZARD_TYPES, HAZARD_SOURCES, HAZARD_STATUS, ACTIVE_STATUSES
 from app.services.hazard_event_service import (
-    report_hazard, transition_event_status, update_event, resolve_event, reject_event,
-    get_active_events_for_district, get_events_by_type, get_events_by_source,
+    report_hazard, transition_event_status, update_event,
+    add_affected_district, remove_affected_district, resolve_event, reject_event,
+    affects_district, get_active_events_for_district, get_events_by_type, get_events_by_source,
     get_event_statistics, _validate_hazard_type, _validate_severity,
     _validate_coordinates,
 )
@@ -115,7 +116,7 @@ def list_hazards():
             query = query.filter(getattr(Incident, key) == value)
     district_id = request.args.get('district_id', type=int)
     if district_id:
-        query = query.filter(Incident.district_id == district_id)
+        query = query.filter(affects_district(district_id))
     if not request.args.get('status'):
         query = query.filter(Incident.status.in_(ACTIVE_STATUSES))
     incidents = query.order_by(Incident.detected_at.desc()).limit(_limit()).all()
@@ -269,6 +270,63 @@ def reject_hazard(event_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
     return jsonify({'event': _serialize(incident)})
+
+
+def _affected_payload(incident):
+    return {'hazard_id': incident.id,
+            'primary_district_id': incident.district_id,
+            'affected_districts': [{'id': d.id, 'name': d.name} for d in incident.affected_districts]}
+
+
+@hazard_events_bp.route('/<int:event_id>/affected-districts', methods=['GET'])
+@api_login_required
+def list_affected_districts(event_id):
+    incident = db.session.get(Incident, event_id)
+    if not incident:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify(_affected_payload(incident))
+
+
+@hazard_events_bp.route('/<int:event_id>/affected-districts', methods=['POST'])
+@manager_required
+def add_affected_district_endpoint(event_id):
+    """Body: {"district_id": <int>}. Authority: only hazards in its own district (M02 rule)."""
+    incident, error = _load_managed_incident(event_id)
+    if error:
+        return error
+    data = _json_body()
+    if data is None:
+        return jsonify({'error': 'A JSON object body is required'}), 400
+    try:
+        district_id = _optional_int(data, 'district_id')
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    if district_id is None:
+        return jsonify({'error': 'district_id is required'}), 400
+    try:
+        sent = add_affected_district(incident, district_id)
+    except LookupError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 404
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 409
+    return jsonify({**_affected_payload(incident), 'notifications_sent': len(sent)}), 201
+
+
+@hazard_events_bp.route('/<int:event_id>/affected-districts/<int:district_id>', methods=['DELETE'])
+@manager_required
+def remove_affected_district_endpoint(event_id, district_id):
+    incident, error = _load_managed_incident(event_id)
+    if error:
+        return error
+    try:
+        remove_affected_district(incident, district_id)
+    except LookupError as e:
+        return jsonify({'error': str(e)}), 404
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify(_affected_payload(incident))
 
 
 @hazard_events_bp.route('/district/<int:district_id>/active', methods=['GET'])

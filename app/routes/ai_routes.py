@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, render_template
 from flask_login import login_required, current_user
 from app.services.ai_service import AIService
 from app.models import Post, District, RoadSegment, River, Project, Incident
-from app.models.incident import ACTIVE_STATUSES
+from app.services.hazard_event_service import get_active_events_for_district
 
 ai_bp = Blueprint('ai', __name__)
 ai_service = AIService()
@@ -63,7 +63,7 @@ def district_summary(district_id):
     roads = RoadSegment.query.filter_by(district_id=district_id).all()
     rivers = River.query.filter_by(district_id=district_id).all()
     projects = Project.query.filter_by(district_id=district_id).all()
-    incidents = Incident.query.filter(Incident.district_id == district_id, Incident.status.in_(ACTIVE_STATUSES)).all()
+    incidents = get_active_events_for_district(district_id)
     
     summary = ai_service.summarize_district(
         district.name, roads, rivers, projects, incidents

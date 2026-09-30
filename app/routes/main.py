@@ -3,6 +3,7 @@ from flask_login import current_user, login_required
 from app.extensions import db
 from app.models import District, Post, Authority, Project, RoadSegment, River, Incident
 from app.models.incident import ACTIVE_STATUSES
+from app.services.hazard_event_service import get_active_events_for_district
 
 main_bp = Blueprint('main', __name__)
 
@@ -89,7 +90,7 @@ def district_detail(district_id):
     projects = Project.query.filter_by(district_id=district_id).all()
     roads = RoadSegment.query.filter_by(district_id=district_id).all()
     rivers = River.query.filter_by(district_id=district_id).all()
-    incidents = Incident.query.filter(Incident.district_id == district_id, Incident.status.in_(ACTIVE_STATUSES)).all()
+    incidents = get_active_events_for_district(district_id)
     
     return render_template('pages/district_detail.html',
                          district=district,

@@ -56,9 +56,22 @@ class Incident(db.Model):
     district = db.relationship('District', backref='incidents')
     river = db.relationship('River', backref='incidents')
     road_segment = db.relationship('RoadSegment', backref='incidents')
+    additional_districts = db.relationship('IncidentAffectedDistrict', back_populates='incident',
+                                           order_by='IncidentAffectedDistrict.id')
 
     def __repr__(self):
         return f'<Incident {self.id}: {self.event_type} ({self.status})>'
+
+    @property
+    def affected_districts(self):
+        """Primary district (implicit) first, then explicitly added ones."""
+        districts = [self.district] if self.district else []
+        return districts + [row.district for row in self.additional_districts
+                            if row.district_id != self.district_id]
+
+    @property
+    def affected_district_ids(self):
+        return [d.id for d in self.affected_districts]
 
     @property
     def is_active(self):
@@ -86,6 +99,7 @@ class Incident(db.Model):
             'source': self.source,
             'district_id': self.district_id,
             'district_name': self.district.name if self.district else None,
+            'affected_districts': [{'id': d.id, 'name': d.name} for d in self.affected_districts],
             'location': self.location,
             'latitude': self.latitude,
             'longitude': self.longitude,
@@ -107,3 +121,24 @@ class Incident(db.Model):
             # identifies the reporting user/device, so only authorities/admins see it
             data['source_reference'] = self.source_reference
         return data
+
+
+class IncidentAffectedDistrict(db.Model):
+    """An additional district affected by a hazard (M04).
+
+    The incident's own district_id is the primary district and is always
+    affected implicitly; only extra districts are stored here.
+    """
+    __tablename__ = 'incident_affected_districts'
+    __table_args__ = (db.UniqueConstraint('incident_id', 'district_id', name='uq_incident_affected_district'),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'), nullable=False)
+    district_id = db.Column(db.Integer, db.ForeignKey('districts.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    incident = db.relationship('Incident', back_populates='additional_districts')
+    district = db.relationship('District')
+
+    def __repr__(self):
+        return f'<IncidentAffectedDistrict incident={self.incident_id} district={self.district_id}>'

@@ -10,7 +10,12 @@ LEGACY_NOTIFICATION_TYPES = ['road_alert', 'river_alert', 'project_update', 'com
 class Notification(db.Model):
     """Notification model for user alerts."""
     __tablename__ = 'notifications'
-    __table_args__ = (db.Index('ix_notifications_user_read', 'user_id', 'is_read'),)
+    __table_args__ = (
+        db.Index('ix_notifications_user_read', 'user_id', 'is_read'),
+        # M04: final defence against duplicate alerts. NULL keys (legacy rows,
+        # non-hazard notifications) are not compared, so old data is untouched.
+        db.Index('uq_notifications_user_dedup', 'user_id', 'dedup_key', unique=True),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -23,6 +28,8 @@ class Notification(db.Model):
     # M03: which hazard event this is about, and the severity at the time it was sent
     incident_id = db.Column(db.Integer, db.ForeignKey('incidents.id'), nullable=True, index=True)
     severity = db.Column(db.String(20), nullable=True)  # HAZARD_SEVERITY
+    # M04: '<incident_id>:<type>' or '<incident_id>:hazard_escalated:<severity>'
+    dedup_key = db.Column(db.String(80), nullable=True)
 
     # Relationships
     user = db.relationship('User', backref='notifications')
@@ -46,5 +53,7 @@ class Notification(db.Model):
                 'id': self.incident.id,
                 'event_type': self.incident.event_type,
                 'status': self.incident.status,
+                'district_name': self.incident.district.name if self.incident.district else None,
+                'affected_districts': [d.name for d in self.incident.affected_districts],
             } if self.incident else None,
         }
