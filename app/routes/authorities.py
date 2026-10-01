@@ -8,7 +8,9 @@ authorities_bp = Blueprint('authorities', __name__)
 @login_required
 def directory():
     """Authority directory page."""
-    district_id = request.args.get('district_id')
+    district_id = (request.args.get('district_id') or '').strip()
+    if not (district_id.isascii() and district_id.isdigit()):  # 'abc' used to be a 500
+        district_id = ''
     
     if district_id:
         authorities = Authority.query.filter_by(district_id=int(district_id)).all()

@@ -122,7 +122,7 @@
     'detected_at': 'Detected'|t, 'updated_at': 'Updated'|t, 'last_seen': 'Last seen'|t,
     'ago': 'ago'|t, 'disabled': 'Disabled'|t, 'status': 'Status'|t, 'hazard': 'Hazard'|t,
     'ai': 'AI'|t, 'not_analyzed': 'Not analyzed'|t, 'failed': 'Analysis failed'|t, 'unknown': 'unknown'|t,
-    'model_confidence': 'Model confidence'|t, 'not_on_map': 'Not on the map (no coordinates):'|t,
+    'model_confidence': 'Model confidence'|t, 'no_hazard': 'No hazard recognised'|t, 'best_match': 'best match'|t, 'not_on_map': 'Not on the map (no coordinates):'|t,
     'updated': 'Updated'|t, 'every': 'refreshes every'|t, 'seconds': 's'|t, 'paused': 'paused while tab is hidden'|t,
     'error': 'Could not load dashboard data.'|t, 'nationwide': 'Nationwide'|t, 'your_district': 'District'|t,
     'no_scope': 'Your account is not linked to an authority district.'|t,
@@ -299,7 +299,9 @@
             row.appendChild(meta);
             var ai = r.ai_analysis, aiText;
             if (ai.status === 'completed') {
-                aiText = tr('ai') + ': ' + tr(ai.label) + ' · ' + tr('model_confidence') + ' ' + Number(ai.confidence).toFixed(2) + ' · ' + ai.model;
+                aiText = tr('ai') + ': ' + (ai.label === 'unknown'
+                    ? tr('no_hazard') + ' · ' + tr('best_match') + ' ' + Number(ai.confidence).toFixed(2)
+                    : tr(ai.label) + ' · ' + tr('model_confidence') + ' ' + Number(ai.confidence).toFixed(2)) + ' · ' + ai.model;
             } else {
                 aiText = tr('ai') + ': ' + tr(ai.status);
             }

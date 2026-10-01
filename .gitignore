@@ -45,4 +45,7 @@ instance/
 .coverage
 htmlcov/
 .pytest_cache/
-EOF
+
+# User uploads (community post photos) are runtime data, not source
+app/static/uploads/*
+!app/static/uploads/demo_landslide.jpg

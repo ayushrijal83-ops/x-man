@@ -23,12 +23,18 @@ ACTIVE_ALERT_HOURS = 48  # in-website emergency alert only for recent, unread, s
 notifications_bp = Blueprint('notifications', __name__)
 
 
+def reader_language():
+    """Same rule as the page translations: session choice, then the saved preference, then Nepali."""
+    return session.get('language') or (current_user.language if current_user.is_authenticated else None) or 'ne'
+
+
 @notifications_bp.app_context_processor
 def inject_unread_notifications():
-    """Unread count for the sidebar badge."""
+    """Unread count for the sidebar badge, and hazard headlines in the reader's language."""
+    context = {'alert_title': lambda n: notification_service.localized_title(n, reader_language())}
     if current_user.is_authenticated:
-        return {'unread_notifications': notification_service.unread_count(current_user.id)}
-    return {'unread_notifications': 0}
+        return {**context, 'unread_notifications': notification_service.unread_count(current_user.id)}
+    return {**context, 'unread_notifications': 0}
 
 
 @notifications_bp.route('/notifications')
@@ -207,7 +213,9 @@ def active_emergencies():
         Notification.created_at >= since, Notification.type.in_(emergency_dispatcher.ALERT_TYPES),
         Incident.status.in_(ACTIVE_STATUSES)) \
         .order_by(Notification.created_at.desc(), Notification.id.desc()).limit(20).all()
-    alerts = [n.to_dict() for n in rows if emergency_dispatcher.is_emergency(n.type, n.severity)][:5]
+    lang = reader_language()
+    alerts = [{**n.to_dict(), 'title': notification_service.localized_title(n, lang)}
+              for n in rows if emergency_dispatcher.is_emergency(n.type, n.severity)][:5]
     response = jsonify({'alerts': alerts, 'sound_enabled': bool(current_user.emergency_sound_enabled)})
     response.headers['Cache-Control'] = 'private, no-store'
     return response

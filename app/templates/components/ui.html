@@ -19,6 +19,16 @@
 {% macro hazard_icon(event_type) -%}<i data-lucide="{{ HAZARD_ICON.get(event_type, 'triangle-alert') }}" aria-hidden="true"></i>{%- endmacro %}
 {% macro status(value) -%}<span class="status-badge status-{{ value }}">{{ STATUS_LABEL.get(value, value)|t }}</span>{%- endmacro %}
 
+{# Vision AI result. For 'unknown' the stored confidence is the best hazard label's score, which fell
+   below the threshold; saying "unknown, confidence 0.02" read as "2 % sure it is unknown". #}
+{% macro ai_result(label, confidence) -%}
+{%- if label == 'unknown' -%}
+{{ 'No hazard recognised'|t }} · {{ 'best match'|t }} {{ '%.2f'|format(confidence or 0) }} ({{ 'needs'|t }} {{ '%.2f'|format(config.VISION_CONFIDENCE_THRESHOLD) }})
+{%- else -%}
+{{ hazard_name(label) }} · {{ 'Model confidence'|t }} {{ '%.2f'|format(confidence or 0) }}
+{%- endif -%}
+{%- endmacro %}
+
 {% macro empty(icon, text, sub=None) -%}
 <div class="empty-state">
     <i data-lucide="{{ icon }}" aria-hidden="true"></i>

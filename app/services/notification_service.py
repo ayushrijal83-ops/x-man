@@ -20,6 +20,7 @@ from app.models import Authority, Incident, IncidentAffectedDistrict, Notificati
 from app.models.incident import HAZARD_SEVERITY
 from app.models.notification import NOTIFICATION_TYPES, LEGACY_NOTIFICATION_TYPES
 from app.services import emergency_dispatcher
+from app.services.page_strings import page_translation
 
 HAZARD_LABELS = {
     'flood': 'Flood',
@@ -107,6 +108,32 @@ def _link_for(incident):
     return None
 
 
+_TITLES = {  # English keys; translated per reader (page_strings), so the stored title stays English
+    'hazard_detected': ('{hazard} detected in {place}', '{hazard} detected'),
+    'hazard_escalated': ('{hazard} escalated to {severity} in {place}', '{hazard} escalated to {severity}'),
+    'hazard_confirmed': ('{hazard} confirmed in {place}', '{hazard} confirmed'),
+    'hazard_resolved': ('{hazard} resolved in {place}', '{hazard} resolved'),
+}
+
+
+def localized_title(notification, lang):
+    """The hazard alert headline in the reader's language (the stored title is English).
+
+    Built from structured fields, so a Nepali reader sees e.g. 'सिन्धुलीमा बाढी पत्ता लाग्यो'
+    instead of 'Flood detected in Sindhuli'. Anything without a pattern keeps its stored title.
+    """
+    patterns = _TITLES.get(notification.type)
+    incident = notification.incident
+    if not patterns or incident is None:
+        return notification.title
+    tr = lambda text: page_translation(lang, text)  # noqa: E731
+    place = incident.district.name if incident.district else None
+    pattern = tr(patterns[0] if place else patterns[1])
+    return pattern.format(hazard=tr(HAZARD_LABELS.get(incident.event_type, incident.event_type)),
+                          severity=tr(notification.severity or '').upper() if lang == 'en'
+                          else tr(notification.severity or ''), place=place)[:200]
+
+
 def _compose(incident, ntype):
     label = HAZARD_LABELS.get(incident.event_type, incident.event_type)
     place = incident.district.name if incident.district else None
@@ -117,8 +144,10 @@ def _compose(incident, ntype):
     if place:
         title += f' in {place}'
     # Only public fields: never description (free text, resolution notes) or source_reference.
-    parts = [incident.title, incident.river.name if incident.river else None,
-             incident.road_segment.name if incident.road_segment else None,
+    names = [incident.river.name if incident.river else None,
+             incident.road_segment.name if incident.road_segment else None]
+    # skip a river/road name the title already contains ('Rising detected: Kamala River · Kamala River')
+    parts = [incident.title, *[n for n in names if n and n not in (incident.title or '')],
              f'Severity: {incident.severity}']
     affected = incident.affected_districts
     if len(affected) > 1:

@@ -238,7 +238,7 @@ class TestWaterLevelIntegration:
         assert response.status_code == 201
 
         with app.app_context():
-            river = River.query.get(river_id)
+            river = db.session.get(River, river_id)
             assert river.current_level == 3.5
             assert river.status == 'rising'
 
@@ -254,7 +254,7 @@ class TestWaterLevelIntegration:
 
         assert response.status_code == 201
         with app.app_context():
-            river = River.query.get(river_id)
+            river = db.session.get(River, river_id)
             assert river.status == 'rising'
 
     def test_water_level_triggers_flooding(self, app, client):
@@ -269,7 +269,7 @@ class TestWaterLevelIntegration:
 
         assert response.status_code == 201
         with app.app_context():
-            river = River.query.get(river_id)
+            river = db.session.get(River, river_id)
             assert river.status == 'flooding'
 
     def test_water_level_back_to_normal(self, app, client):
@@ -284,7 +284,7 @@ class TestWaterLevelIntegration:
 
         assert response.status_code == 201
         with app.app_context():
-            river = River.query.get(river_id)
+            river = db.session.get(River, river_id)
             assert river.status == 'normal'
 
     def test_no_river_in_district(self, app, client):
@@ -347,5 +347,5 @@ class TestWaterLevelIntegration:
 
         assert response.status_code == 201
         with app.app_context():
-            river = River.query.get(river_id)
+            river = db.session.get(River, river_id)
             assert river.current_level == 10.0

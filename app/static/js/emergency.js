@@ -118,7 +118,8 @@
         var level = SEVERITIES.indexOf(a.severity) >= 0 ? a.severity : 'high';
         var sev = document.getElementById('em-sev');
         sev.className = 'sev sev-' + level;
-        setText('em-sev-text', level.toUpperCase());
+        var labels = document.getElementById('em-sev-labels');
+        setText('em-sev-text', ((labels && labels.getAttribute('data-' + level)) || level).toUpperCase());
         var when = a.created_at ? new Date(a.created_at + (/[zZ]|[+-]\d\d:?\d\d$/.test(a.created_at) ? '' : 'Z')) : null;
         setText('em-time', when && !isNaN(when) ? when.toLocaleString() : '');
         var more = document.getElementById('em-more');

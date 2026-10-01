@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
 
 {% block title %}{{ 'Review Photo Reports'|t }} - {{ t('app_name') }}{% endblock %}
 
@@ -38,7 +39,7 @@
                 <div class="review-panels">
                     <section class="review-panel">
                         <h3>{{ 'Citizen report'|t }}</h3>
-                        <p><strong>{{ r.hazard_type|t }}</strong></p>
+                        <p><strong>{{ ui.hazard_name(r.hazard_type) }}</strong></p>
                         <p>{{ r.reporter.username if r.reporter else '' }} · {{ r.district.name }}</p>
                         {% if r.location %}<p>{{ r.location }}</p>{% endif %}
                         {% if r.latitude is not none %}<p>{{ '%.5f'|format(r.latitude) }}, {{ '%.5f'|format(r.longitude) }}</p>{% endif %}
@@ -49,9 +50,8 @@
                     <section class="review-panel">
                         <h3>{{ 'AI analysis'|t }}</h3>
                         {% if r.ai_status == 'completed' %}
-                            <p><strong>{{ r.ai_label|t }}</strong>
+                            <p><strong>{{ ui.ai_result(r.ai_label, r.ai_confidence) }}</strong>
                             {% if r.ai_label != 'unknown' and r.ai_label != r.hazard_type %}<span class="ai-disagree">· {{ 'differs from citizen'|t }}</span>{% endif %}</p>
-                            <p>{{ 'Model confidence'|t }}: {{ '%.2f'|format(r.ai_confidence) }}</p>
                             <p class="ai-note">{{ r.ai_model }} @ {{ r.ai_model_version }}</p>
                             <p class="ai-note">{{ r.ai_analyzed_at.strftime('%Y-%m-%d %H:%M') }} UTC</p>
                         {% elif r.ai_status == 'failed' %}

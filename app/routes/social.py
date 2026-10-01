@@ -7,6 +7,12 @@ from app.services.ai_service import AIService
 social_bp = Blueprint('social', __name__)
 ai_service = AIService()
 
+def _authors(posts):
+    """Only the users who wrote these posts (was: every user in the database, per page view)."""
+    ids = {p.user_id for p in posts}
+    return {u.id: u for u in User.query.filter(User.id.in_(ids))} if ids else {}
+
+
 @social_bp.route('/feed')
 @login_required
 def feed():
@@ -22,7 +28,7 @@ def feed():
     scope_id = None
     if district_id == 'all':
         scope_id = None                      # explicit "show every district"
-    elif district_id:
+    elif district_id and district_id.isascii() and district_id.isdigit():  # 'abc' used to be a 500
         scope_id = int(district_id)
     elif current_user.district_id:
         scope_id = current_user.district_id
@@ -47,10 +53,9 @@ def feed():
     trending = (trending_q.group_by(Post.category)
                 .order_by(db.func.count(Post.id).desc()).limit(5).all())
 
-    scope_district = District.query.get(scope_id) if scope_id else None
+    scope_district = db.session.get(District, scope_id) if scope_id else None
 
-    # Get all users for display
-    users = {u.id: u for u in User.query.all()}
+    users = _authors(posts)
     
     return render_template('pages/social_feed.html',
                          posts=posts,
@@ -65,10 +70,10 @@ def feed():
 @login_required
 def post_detail(post_id):
     """View single post with comments."""
-    post = Post.query.get_or_404(post_id)
+    post = db.get_or_404(Post, post_id)
     comments = Comment.query.filter_by(post_id=post_id).order_by(Comment.created_at).all()
     likes_count = Like.query.filter_by(post_id=post_id).count()
-    user = User.query.get(post.user_id)
+    user = db.session.get(User, post.user_id)
     
     return render_template('pages/social_post_detail.html',
                          post=post,
@@ -80,6 +85,7 @@ def post_detail(post_id):
 @login_required
 def like_post(post_id):
     """Like/unlike a post."""
+    db.get_or_404(Post, post_id)  # no likes on posts that don't exist (SQLite doesn't enforce the FK)
     existing_like = Like.query.filter_by(user_id=current_user.id, post_id=post_id).first()
     
     if existing_like:
@@ -96,9 +102,10 @@ def like_post(post_id):
 @login_required
 def comment_post(post_id):
     """Add comment to post."""
-    content = request.form.get('content')
-    
-    if content:
+    db.get_or_404(Post, post_id)
+    content = (request.form.get('content') or '').strip()
+
+    if content and len(content) <= 2000:
         comment = Comment(
             user_id=current_user.id,
             post_id=post_id,
@@ -114,12 +121,12 @@ def comment_post(post_id):
 @login_required
 def hashtag_feed(hashtag):
     """View posts by hashtag."""
-    posts = Post.query.filter(Post.content.contains(hashtag)).order_by(Post.created_at.desc()).all()
+    posts = Post.query.filter(Post.content.contains(hashtag[:100], autoescape=True))         .order_by(Post.created_at.desc()).limit(50).all()
     return render_template('pages/social_feed.html',
                          posts=posts,
                          districts=District.query.all(),
                          trending=[],
-                         users={u.id: u for u in User.query.all()},
+                         users=_authors(posts),
                          selected_district=None,
                          selected_category=None,
                          active_hashtag=hashtag)

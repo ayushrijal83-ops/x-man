@@ -355,7 +355,7 @@ class TestAuthorityDashboard:
         login(client, 'auth_a')
         status, body = page(client, '/authority/dashboard')
         assert status == 200
-        for text in ('Alpha flood ops', 'Alpha gauge', 'Close Alpha road', 'landslide · 0.91', 'Alpha Office'):
+        for text in ('Alpha flood ops', 'Alpha gauge', 'Close Alpha road', 'Landslide · Model confidence 0.91', 'Alpha Office'):
             assert text in body, text
         for text in ('Beta flood ops', 'Beta gauge', 'PRIVATE-A', IoTDevice.hash_api_key('ka'), 'api_key'):
             assert text not in body, text

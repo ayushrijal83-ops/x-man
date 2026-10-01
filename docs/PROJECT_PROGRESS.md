@@ -2833,7 +2833,7 @@ IoT / citizen report / authority
 - **No SMS.** Phone numbers stay unverified, stored only as preparation for a future SMS channel.
 
 ### Exact current state
-- **Uncommitted:** M11.5 and M12, both on top of `f09cece`.
+- **Committed** as `9fc5b38` (M11.5 + M12).
 - **Migration head:** `f3b8d2e6a417`.
 - **Hardware:** physical hardware is still not built or validated.
 
@@ -2842,3 +2842,171 @@ IoT / citizen report / authority
 
 ### 🏷️ Status
 **M12 — ADMIN CONTROL + EMERGENCY WEB PUSH COMPLETE · THREE NOTIFICATION LAYERS · NO SMS · NO HARDWARE CHANGES**
+
+---
+
+# FQA — Final Software QA / Pre-Hardware Freeze
+
+The last software pass before H01: find → fix → test → verify. No new features and no hardware or
+firmware work. Starting point: `9fc5b38`, **844 passed, 31 warnings**.
+
+### How it was tested
+- **Automated:**
+  - the full pytest suite
+  - the five standalone scripts from the README, run against a real database
+  - a migration round trip on a copy of the dev DB
+- **Route crawler** (a scratch script, not in the repo):
+  - every registered route × 7 roles (anonymous, citizen of district A, citizen of district B,
+    authority A, authority B, an unlinked authority, admin)
+  - valid / other-district / junk path ids
+  - empty, junk form, junk JSON (NaN-like, `1e309`, bools, negative/huge paging), malformed JSON
+    and JSON-array bodies
+  - flags any 5xx, and searches every response for secrets (VAPID private key, push endpoint/keys,
+    device API key and its hash, password hash, `source_reference`) and for owner-only data
+    (address, coordinates, report/complaint text, response actions)
+- **Live Chrome QA** on a copy of the dev DB, seeded through the real HTTP flows:
+  - flood and motion telemetry, citizen photo reports with the real SigLIP model, every role
+  - an in-page audit loaded every page in iframes at 390 px (phone), 844 px (phone landscape),
+    768 px (tablet) and 1280 px (desktop), for citizen, authority, admin, anonymous and Nepali UI
+  - it checked JS errors, broken images, horizontal overflow, clipped buttons/headings and dead
+    internal links, alongside the Chrome console
+- **Query counts:** SQL queries counted per page on the seeded DB (N+1 sanity).
+
+### Defects found and fixed
+| # | Defect | Fix | Regression test (`tests/test_final_qa.py` unless noted) |
+|---|---|---|---|
+| 1 | `GET /roads/<id>` → **500** (template never existed; nothing linked to it) | dead route removed (README updated) | `test_dead_road_detail_route_is_gone` |
+| 2 | `?district_id=abc` → **500** on `/authorities/directory`, `/projects/tracker`, `/social/feed` | same digit check as `/roads/status` | `test_junk_district_filters` |
+| 3 | JSON array/number body → **500** on `/ai/classify`, `/ai/generate`, `/language/translate` | `form_validation.json_text`: object body, string field, ≤ 4000 chars (text sent to Ollama) | `test_non_object_json_bodies` |
+| 4 | Complaint form: junk ids → **500**; unknown authority/district stored (SQLite doesn't enforce FKs) → orphan rows; empty category → **500**; unlisted category/urgency accepted | all validated against the form's options; unknown ids rejected | `test_invalid_complaints_are_rejected_without_rows` |
+| 5 | Complaint ticket = 4 random digits under a unique index: with ~100 complaints per district per year a collision (**500**) was about a coin flip | `PREFIX-YEAR-XXXXXX` from `secrets`, re-drawn until unused | `test_ticket_numbers_never_collide` |
+| 6 | **Privacy:** public profiles listed the user's complaints with description text to any logged-in user (complaint detail is private since M10) | complaints shown to the owner and admins only | `test_complaint_text_not_on_other_users_profiles` |
+| 7 | **Privacy:** community post photos were stored byte-for-byte in public `static/uploads`, **including the phone's EXIF GPS**; any file with an image extension was accepted | the M05 report pipeline (`process_image`, now public): type-checked, size/dimension-limited, re-encoded JPEG without EXIF | `test_post_photo_is_reencoded_without_exif_gps`, `test_non_images_rejected` |
+| 8 | Posts: unvalidated `district_id` (orphan rows; **500** for users without a district) | validated | `test_invalid_district_rejected` |
+| 9 | Like/comment on a non-existent post created orphan rows | 404 | `test_like_and_comment_need_a_real_post` |
+| 10 | River update of exactly 0 m (and project progress 0 %) stored as NULL in the update log | 0 kept | `test_zero_water_level_is_recorded` |
+| 11 | `/language/set/<lang>` redirected to the raw `Referer` (open redirect) | same-site referrer only | `test_language_switch_redirects_only_on_site` |
+| 12 | Service worker followed a notification's stored URL on click without re-checking it (push-time sanitising only) | URL re-checked on click: same-origin paths only | `test_service_worker_only_ever_opens_x_man_pages` (runs `sw.js` in Node against a mocked worker global) |
+| 13 | Emergency alert headline always English (stored text), even for Nepali readers, including the Web Push shown while X-MAN is closed | `notification_service.localized_title` builds the headline from structured fields in the reader's language (page: session/user language; push: recipient's saved language); severity label in the alert translated | `TestLocalisedAlerts` |
+| 14 | Alert message repeated the river name ("Rising detected: Kamala River · Kamala River") | names already in the title are skipped | `test_headline_in_reader_language` |
+| 15 | Raw keys shown as labels ("road_damage", "landslide") on the report form, My Reports, the review page and notifications | `ui.hazard_name` everywhere | `test_hazard_labels_are_human_readable` (+ updated M06/M11.5 assertions) |
+| 16 | Report page GPS: every failure showed one vague message | reuses the M11.5 location widget (denied / unavailable / timeout / unsupported / insecure, coordinates only on success) | `test_hazard_labels_are_human_readable` |
+| 17 | "unknown · Model confidence 0.02" read as "2 % sure it is unknown" (the number is the best hazard score below the threshold) | `ui.ai_result`: "No hazard recognised · best match 0.02 (needs 0.60)" on the review page, authority dashboard and monitoring | `test_unknown_ai_result_explains_the_threshold` |
+| 18 | Social feeds loaded **every user** per page view; the hashtag feed was unbounded and treated `%`/`_` as wildcards | only post authors loaded; hashtag feed limited to 50, wildcards escaped | `test_junk_district_filters` (hashtag `%`) |
+| 19 | 31 test warnings: legacy `Query.get()` in 7 routes and 2 test files | `db.session.get` / `db.get_or_404` | warning count 31 → 2 |
+| 20 | `test_ui.py` / `test_theme.py` asserted the pre-M11.5 vintage design (fonts, inline styles, "no blue") and failed | rewritten for the X-MAN design system (tokens in both themes, no FOUC, toggle, fonts) | both scripts pass |
+| 21 | `app/static/uploads/` not git-ignored (users' post photos could be committed); stray `EOF` line in `.gitignore` | ignored (the tracked demo image is kept); `EOF` removed | — |
+| 22 | 9 user-facing strings without Nepali (flash messages, AI wording) | added | — |
+
+### Verified without defects
+- **Authentication:**
+  - Registration covers every invalid case: username, duplicate username/email/mobile, Nepal mobile
+    format, password length/confirmation, district, address, coordinate range. It shows per-field
+    errors, keeps values and never echoes the password. Valid sign-up stores the optional location.
+  - Login gives the same message for an unknown user and a wrong password.
+  - "Account disabled" only appears after a correct password. A disabled account's open session ends.
+  - Forced change after an admin reset:
+    - the temporary password only opens change-password (pages redirect, API 403)
+    - after the change, the temporary password stops working and the new one works
+  - Protected pages redirect to `/auth/login?next=…`; APIs return 401 JSON.
+- **Authorization:**
+  - Authority B gets 403 on authority A's hazards: response page, history, actions, investigations,
+    status, PATCH, affected districts.
+  - Devices are 403 for authority B too: key rotation and enable/disable.
+  - Reports are 404 to other citizens and other districts' authorities, for both detail and photo.
+  - Admin routes return 403 to non-admins.
+  - Citizen-supplied `severity`, `status`, `source` and `incident_id` are ignored on reports.
+- **Uploads** (in Chrome, through the real API):
+  - JPG, PNG and WebP are accepted.
+  - Rejected: `.txt`, fake image content, a truncated JPEG, 11 MB, 12000×12000 px, content that
+    doesn't match the extension, no photo, bad hazard type, NaN/out-of-range coordinates, no CSRF
+    token.
+- **IoT** (CSRF enabled, as on the real server):
+  - Every bad input is 400: NaN, Infinity, `1e309`, bool, string, null, wrong unit, unknown sensor,
+    malformed JSON, array body, non-object reading, form body.
+  - Wrong/unknown device, rotated-out key and disabled device are 401.
+  - The flood sequence 4.2 → 5.7 m merges into **one** incident with 6 pieces of evidence and
+    exactly one "detected" + one "escalated" notification.
+  - Vibration produces one "abnormal ground motion" event. The UI and docs make no magnitude or
+    prediction claims.
+- **Vision AI** (real SigLIP model, local files):
+  - The landslide photo was labelled landslide at 0.997.
+  - A highway photo and an unrelated photo came back unknown.
+  - The citizen's hazard type, the report status and the hazard severity/status never change from
+    AI.
+  - Accepting a report changes only the report. Vision disabled → 503, and the report is kept.
+- **Notifications:**
+  - Layer 1 targeting and dedup hold, per the existing suites.
+  - Layer 2 in Chrome: a live critical hazard appeared within one poll. With the page interacted
+    with, the alarm sounded and stopped by itself after ~15 s. Without interaction, the "Play alarm"
+    fallback showed.
+  - Mute stops the alarm. Navigation doesn't replay it (once per alert per tab session). Dismiss
+    marks the alert read. "+N more" works. Mobile layout works.
+  - Layer 3: see *Web Push status* below.
+- **Service worker** (Chrome): registered at scope `/`, activated, controlling the page, `update()`
+  works; the push/click handlers are covered by the Node harness.
+- **Settings page:** reflects the real browser state (permission not requested, no subscription).
+  The sound preference persists across reload.
+- **Browser storage:** session and remember cookies are HttpOnly. localStorage holds only theme and
+  "Not now"; sessionStorage holds only alarmed alert ids. `/api/push/config` exposes only the public
+  key.
+- **Responsive / Nepali:** no overflow, clipped buttons, broken images, JS errors or dead links on
+  any audited page at any width, in English or Nepali.
+- **Performance:** query counts per page are 2–22 and bounded (no N+1). Synchronous Web Push
+  remains a documented scaling limit.
+- **Database:**
+  - linear migration chain, single head `f3b8d2e6a417`; `flask db check` clean
+  - upgrade → downgrade two revisions → upgrade on a copy of the dev DB
+  - fresh install via `init_db.py` (tests)
+  - dev DB: `PRAGMA integrity_check` ok, **no foreign-key violations**, no duplicate districts,
+    rivers, roads or authorities
+
+### Web Push real-service status (stated plainly)
+- **Covered by tests:**
+  - encryption is byte-exact against RFC 8291 Appendix A
+  - every test push is decrypted as a browser would
+  - the VAPID JWT signature is verified against the public key
+  - the service worker handlers are exercised (Node harness)
+  - registration in Chrome works
+- **Not covered:** **a real delivery through FCM/Mozilla was not validated.** Chrome's native
+  notification-permission prompt cannot be accepted by automation, so no real subscription could
+  be created in this environment. Validate by hand once:
+  1. `flask push-keys` → `.env`
+  2. "Enable Emergency Alerts"
+  3. "Test Emergency Notification"
+
+### Remaining limitations (genuine, documented)
+- **Web Push:** real-service delivery is unvalidated (above). Pushes are sent synchronously. Delivery
+  needs a supported browser, permission, HTTPS (or localhost) and network; the OS decides display
+  and sound. **No SMS.**
+- **Warnings:** the 2 remaining test warnings come from the third-party `sentencepiece` SWIG
+  bindings, loaded only when the real SigLIP model runs. Not fixable here.
+- **Dev DB:** still contains the stray `Test District` (id 78), so `test_nepal_data.py` (expects 77
+  districts) fails on that database; left for the owner to delete.
+- **Readings and hazard text are public by design:** `/api/iot/latest` readings are visible to any
+  logged-in user (M01 decision), and hazard `description` is a public field (authority-written;
+  citizens' report text is never copied into it).
+- **Newari/Maithili** page text falls back to Nepali. Free text (authority-typed titles, river/road
+  names) is not translated.
+- **Not validated:** no physical hardware has been built or validated (JSN-SR04T, MPU6050/GY-521).
+  SigLIP is zero-shot and not validated on Nepal imagery.
+
+### Tests
+- **Final:** **872 passed, 2 warnings, 0 failed, 0 skipped, 0 errors**: 844 + 28 new in
+  `tests/test_final_qa.py` (plus `tests/sw_harness.js`, which its Node-based test runs; skipped
+  automatically where Node isn't installed).
+- **Changed existing assertions (all to the corrected behaviour):**
+  - `test_admin_push_m12.py` fixture users have `language='en'`: pushes now use the recipient's
+    language, and those tests assert English text.
+  - `test_product_quality.py`, `test_vision_m06.py`: readable AI labels.
+  - `test_hazard_event_service.py`, `test_iot_water_level.py`: `db.session.get`.
+- **Standalone scripts:** `test_features.py`, `test_language.py`, `test_ui.py` and `test_theme.py`
+  pass. `test_nepal_data.py` fails only on the stray district.
+
+### Recommendation
+**Freeze the software and move to H01.** Every defect found in this pass was fixed and is covered by
+a regression test. The remaining items are documented limitations or need real hardware or a manual
+push check.
+
+### 🏷️ Status
+**FQA — FINAL SOFTWARE QA COMPLETE · READY TO FREEZE · NEXT: H01 (not started)**

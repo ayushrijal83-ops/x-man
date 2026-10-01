@@ -317,8 +317,9 @@ class TestReviewPage:
         _login(client, 'auth_a')
         client.get('/language/set/en')
         body = client.get('/reports/review').get_data(as_text=True)
-        for text in ('Citizen report', 'AI analysis', 'Hazard event', 'Crack near school', 'landslide',
-                     'differs from citizen', 'Model confidence: 0.84', 'google/siglip-base-patch16-224',
+        # labels are human-readable since the final QA pass ('Landslide · Model confidence 0.84', was raw keys)
+        for text in ('Citizen report', 'AI analysis', 'Hazard event', 'Crack near school', 'Landslide',
+                     'differs from citizen', 'Model confidence 0.84', 'google/siglip-base-patch16-224',
                      'data-status="accepted"', '/api/reports/'):
             assert text in body
         client.get('/language/set/ne')

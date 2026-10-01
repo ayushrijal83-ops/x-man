@@ -1,10 +1,13 @@
 from flask import Blueprint, jsonify, request, render_template
 from flask_login import login_required, current_user
+from app.extensions import db
 from app.services.ai_service import AIService
+from app.services.form_validation import json_text
 from app.models import Post, District, RoadSegment, River, Project, Incident
 from app.services.hazard_event_service import get_active_events_for_district
 
 ai_bp = Blueprint('ai', __name__)
+MAX_TEXT = 4000  # characters sent to the local model per request
 ai_service = AIService()
 
 @ai_bp.route('/assistant')
@@ -17,7 +20,7 @@ def assistant():
 @login_required
 def classify():
     """Classify a post using AI."""
-    content = request.json.get('content', '')
+    content = json_text(request, 'content', MAX_TEXT)
     
     if not content:
         return jsonify({'error': 'Content required'}), 400
@@ -41,7 +44,7 @@ def health():
 @login_required
 def generate():
     """Generate AI response."""
-    prompt = request.json.get('prompt', '')
+    prompt = json_text(request, 'prompt', MAX_TEXT)
     
     if not prompt:
         return jsonify({'error': 'Prompt required'}), 400
@@ -59,7 +62,7 @@ def test_classify():
 @login_required
 def district_summary(district_id):
     """Generate district summary."""
-    district = District.query.get_or_404(district_id)
+    district = db.get_or_404(District, district_id)
     roads = RoadSegment.query.filter_by(district_id=district_id).all()
     rivers = River.query.filter_by(district_id=district_id).all()
     projects = Project.query.filter_by(district_id=district_id).all()

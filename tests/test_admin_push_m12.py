@@ -109,7 +109,8 @@ def world(app):
                 ('auth_b', 'authority', b, auth_b), ('admin', 'admin', None, None)]):
             user = User(username=name, email=f'{name}@t.np', role=role, district_id=district.id if district else None,
                         authority_id=authority.id if authority else None, phone=f'+97798220000{i:02d}',
-                        full_name=f'Full {name}', current_latitude=27.123456, current_longitude=85.654321)
+                        full_name=f'Full {name}', current_latitude=27.123456, current_longitude=85.654321,
+                        language='en')  # pushes use the saved language; Nepali is covered in test_final_qa
             user.set_password('original-pw')
             db.session.add(user)
             users[name] = user

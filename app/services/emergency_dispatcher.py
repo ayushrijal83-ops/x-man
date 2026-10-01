@@ -76,10 +76,15 @@ def discard():
 
 
 def payload_for(notification):
-    """Public fields only (the notification title/message never contain private data)."""
+    """Public fields only (the notification title/message never contain private data). The headline
+    is in the recipient's saved language; the device shows it while X-MAN is closed."""
+    from app.services.notification_service import localized_title  # circular at import time
+    from app.services.page_strings import page_translation
     emergency = is_emergency(notification.type, notification.severity)
+    lang = (notification.user.language if notification.user else None) or 'ne'
+    prefix = page_translation(lang, 'X-MAN EMERGENCY ALERT') + ': ' if emergency else 'X-MAN: '
     return {
-        'title': ('X-MAN EMERGENCY ALERT: ' if emergency else 'X-MAN: ') + notification.title,
+        'title': prefix + localized_title(notification, lang),
         'body': notification.message or '',
         'url': notification.link or '/notifications',
         'tag': f'xman-hazard-{notification.incident_id}' if notification.incident_id else 'xman',

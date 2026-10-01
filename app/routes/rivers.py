@@ -33,7 +33,7 @@ def river_status():
 @login_required
 def update_river(river_id):
     """Update river status."""
-    river = River.query.get_or_404(river_id)
+    river = db.get_or_404(River, river_id)
     # M10: was open to any logged-in user; now admins and authorities of the river's district
     authority = current_user.authority if current_user.role == 'authority' else None
     if not (current_user.role == 'admin' or (authority is not None and authority.district_id == river.district_id)):
@@ -55,7 +55,7 @@ def update_river(river_id):
     update = RiverUpdate(
         river_id=river_id,
         user_id=current_user.id,
-        water_level=water_level if water_level else None,
+        water_level=water_level if water_level not in (None, '') else None,  # 0 m is a reading
         description=description
     )
 

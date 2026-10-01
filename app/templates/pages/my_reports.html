@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
 
 {% block title %}{{ 'My Reports'|t }} - {{ t('app_name') }}{% endblock %}
 
@@ -34,7 +35,7 @@
         <div class="card report-item">
             <img src="/api/reports/{{ r.id }}/image" alt="{{ 'Report photo'|t }}" loading="lazy">
             <div>
-                <h3>{{ r.hazard_type|t }}</h3>
+                <h3>{{ ui.hazard_name(r.hazard_type) }}</h3>
                 <div class="report-meta">
                     <span class="status-badge status-{{ r.status }}">{{ r.status|t }}</span>
                     <span>{{ r.district.name }}</span>

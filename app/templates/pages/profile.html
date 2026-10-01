@@ -128,7 +128,8 @@
             {% endif %}
         </div>
 
-        <!-- Recent Complaints -->
+        <!-- Recent Complaints: private to the owner (and admins) -->
+        {% if current_user.id == user.id or current_user.role == 'admin' %}
         <div class="card">
             <h2 class="card-title"><i data-lucide="clipboard-list"></i> {{ 'Recent Complaints'|t }}</h2>
             {% if complaints %}
@@ -149,6 +150,7 @@
                 <p>{{ 'No complaints filed.'|t }} <a href="/complaints/new">{{ 'File a complaint'|t }}</a></p>
             {% endif %}
         </div>
+        {% endif %}
     </div>
 </div>
 

@@ -12,7 +12,9 @@ projects_bp = Blueprint('projects', __name__)
 @login_required
 def project_tracker():
     """Show project tracker."""
-    district_id = request.args.get('district_id')
+    district_id = (request.args.get('district_id') or '').strip()
+    if not (district_id.isascii() and district_id.isdigit()):  # 'abc' used to be a 500
+        district_id = ''
 
     if district_id:
         projects = Project.query.filter_by(district_id=int(district_id)).all()
@@ -30,7 +32,7 @@ def project_tracker():
 @login_required
 def project_detail(project_id):
     """View project details."""
-    project = Project.query.get_or_404(project_id)
+    project = db.get_or_404(Project, project_id)
     updates = ProjectUpdate.query.filter_by(project_id=project_id).order_by(ProjectUpdate.created_at.desc()).all()
     return render_template('pages/project_detail.html', project=project, updates=updates)
 
@@ -38,7 +40,7 @@ def project_detail(project_id):
 @login_required
 def update_project(project_id):
     """Update project progress."""
-    project = Project.query.get_or_404(project_id)
+    project = db.get_or_404(Project, project_id)
     # M10: was open to any logged-in user (citizens could change any project's progress)
     if not (current_user.role == 'admin' or (current_user.role == 'authority' and current_user.authority_id
                                              and project.authority_id == current_user.authority_id)):
@@ -67,7 +69,7 @@ def update_project(project_id):
         authority_id=project.authority_id,
         update_type=update_type,
         description=description,
-        progress_percent=progress if progress else None
+        progress_percent=progress if progress not in (None, '') else None  # 0 % is a value
     )
 
     db.session.add(update)

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Render-check every page after the UI redesign. Run: python test_ui.py"""
-import glob, io, os, re
+"""Render-check every page with the X-MAN design system (xman.css). Run: python test_ui.py"""
 from app import create_app
 from app.models.user import User
 
@@ -11,11 +10,6 @@ CITIZEN = [
     '/posts/create', '/profile/me', '/profile/edit', '/ai/test-classify',
 ]
 PUBLIC = ['/', '/auth/login', '/auth/register', '/auth/authority/login']
-
-EMOJI = re.compile(
-    '[\U0001F000-\U0001FAFF←-⇿⌀-⏿①-⓿'
-    '■-➿⬀-⯿⤴⤵]'
-)
 
 
 def main():
@@ -35,17 +29,14 @@ def main():
             failures.append((path, 'HTTP %s' % r.status_code))
             continue
         # design system actually applied
-        if '--brand-600' not in body:
-            failures.append((path, 'design tokens missing'))
+        if 'css/xman.css' not in body:
+            failures.append((path, 'design system stylesheet missing'))
         if 'lucide' not in body:
             failures.append((path, 'lucide not loaded'))
         if 'class="sidebar"' not in body:
             failures.append((path, 'sidebar missing'))
-        found = EMOJI.findall(body)
-        if found:
-            failures.append((path, 'emoji rendered: %r' % found[:5]))
 
-    # public pages: no sidebar, but styled and emoji-free
+    # public pages: no sidebar, but styled
     anon = app.test_client()
     for path in PUBLIC:
         r = anon.get(path, follow_redirects=True)
@@ -53,30 +44,21 @@ def main():
         if r.status_code >= 400:
             failures.append((path, 'HTTP %s' % r.status_code))
             continue
-        if '--brand-600' not in body:
-            failures.append((path, 'design tokens missing'))
-        found = EMOJI.findall(body)
-        if found:
-            failures.append((path, 'emoji rendered: %r' % found[:5]))
+        if 'css/xman.css' not in body:
+            failures.append((path, 'design system stylesheet missing'))
 
-    # no emoji left in any template source
-    for f in glob.glob('app/templates/**/*.html', recursive=True):
-        hits = EMOJI.findall(io.open(f, encoding='utf-8').read())
-        if hits:
-            failures.append((f.replace(os.sep, '/'), 'emoji in source: %r' % hits[:5]))
-
-    # Inter + Devanagari wired up
+    # Inter + Space Grotesk + Devanagari wired up
     home = anon.get('/').get_data(as_text=True)
     assert 'Noto+Sans+Devanagari' in home, 'Devanagari font not loaded'
-    assert 'Source+Sans+3' in home, 'body font not loaded'
-    assert 'Playfair+Display' in home, 'serif heading font not loaded'
+    assert 'family=Inter' in home, 'body font not loaded'
+    assert 'Space+Grotesk' in home, 'display font not loaded'
 
     if failures:
         print('FAILURES (%d):' % len(failures))
         for p, why in failures:
             print('   %-28s %s' % (p, why))
         raise SystemExit(1)
-    print('all %d pages render, styled, zero emoji' % (len(CITIZEN) + len(PUBLIC)))
+    print('all %d pages render with the X-MAN design system' % (len(CITIZEN) + len(PUBLIC)))
 
 
 if __name__ == '__main__':

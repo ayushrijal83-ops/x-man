@@ -42,9 +42,12 @@
 | **AI assistant** | Ask about conditions in Nepali or English, answered by a local LLM — no API key, no data leaves the machine |
 | **Community feed** | District-scoped posts with photo upload and AI auto-classification (category, severity, language) |
 | **Authority panel** | Separate login where authorities update the roads, rivers, and projects they own |
+| **Citizen hazard reports** | `/report`: photo (JPG/PNG/WebP, re-encoded, EXIF/GPS stripped) + optional location for landslides and road damage; merged into the matching hazard event; private to the reporter, the district authority and admins |
+| **Emergency alerts** | Three layers for hazards affecting your district: in-app notification, on-screen emergency alert with an optional short alarm, and opt-in browser Web Push (see limitations) |
+| **Admin control center** | `/admin`: district-wise citizen directory, authority accounts (enable/disable, temporary-password reset), notification delivery status |
 | **Disaster monitoring** | `/monitoring`: role-scoped view of active hazards (summary, Leaflet map, list), IoT devices with latest readings and freshness, citizen photo reports with AI evidence, and your alerts. Periodically refreshed (30 s polling), not real-time |
 | **Four languages** | English, Nepali, Newari (Nepal Bhasa), Maithili |
-| **Light + dark themes** | Warm vintage palette, preference persisted in `localStorage` |
+| **Light + dark themes** | X-MAN design system (`static/css/xman.css`): glass surfaces, bento grid, severity always shown as icon + word + colour; preference persisted in `localStorage` |
 
 ### Screenshots
 
@@ -57,8 +60,16 @@
 - **Backend** — Flask 3.0 (application-factory pattern), SQLAlchemy, Flask-Login, Flask-WTF (CSRF), Flask-Migrate
 - **Database** — SQLite by default; any SQLAlchemy URL via `DATABASE_URL`
 - **Frontend** — Jinja2 templates, vanilla JavaScript, hand-written CSS design system (no framework, no build step)
-- **AI** — [Ollama](https://ollama.com) running `qwen2.5:0.5b` locally
-- **Icons / fonts** — Lucide, Playfair Display + Source Sans 3 + Noto Sans Devanagari
+- **AI** — see [AI in X-MAN](#ai-in-x-man)
+- **Icons / fonts** — Lucide, Inter + Space Grotesk + Noto Sans Devanagari
+
+### AI in X-MAN
+
+Three different things, stated precisely:
+
+- **Text assistant / post classification** — [Ollama](https://ollama.com) running `qwen2.5:0.5b` locally. No API key; no data leaves the machine.
+- **Vision AI (citizen photos)** — Google **SigLIP** (`google/siglip-base-patch16-224`) used **zero-shot**: it scores a photo against text prompts for landslide / road damage. It is **not trained or validated on Nepal-specific data**; below the confidence threshold (default 0.60) it says "no hazard recognised". Its result is evidence for a reviewer only: it never changes the citizen's hazard type, a report's status or a hazard's severity/status.
+- **Risk engine** — **deterministic rules**, not machine learning: river level vs. danger mark, trend over timestamps, corroboration between sources, and (when thresholds are configured) abnormal ground motion. MPU6050-class readings are reported as *abnormal ground motion*, never as an earthquake magnitude or prediction.
 
 ---
 
@@ -405,7 +416,7 @@ GET      /auth/logout
 GET      /dashboard
 GET      /districts        /district/<id>
 POST     /select-district
-GET      /roads/status     /roads/<id>
+GET      /roads/status
 GET      /rivers/status
 POST     /rivers/<id>/update
 GET      /projects/tracker /projects/<id>
@@ -473,13 +484,20 @@ POST     /authority/projects/<id>/update
 
 ## Testing
 
-Five suites, each runnable on its own. They need a database with a `demo_citizen` user (see [step 4](#4-create-a-user)).
+The main suite is pytest (in-memory SQLite, no network, no running server):
+
+```bash
+python -m pytest tests/ -q
+```
+
+Plus five standalone checks against a real database. They need a `demo_citizen` user (see [step 4](#4-create-a-user)),
+and `test_nepal_data.py` expects exactly the 77 imported districts.
 
 ```bash
 python test_nepal_data.py   # data integrity: counts, status/level consistency, no duplicates
 python test_features.py     # regression tests for previously-fixed bugs
-python test_ui.py           # every page renders, styled, zero emoji
-python test_theme.py        # no blue/purple survives, both themes defined, toggle everywhere
+python test_ui.py           # every page renders with the X-MAN design system
+python test_theme.py        # both themes define every token, no FOUC, toggle everywhere
 python test_language.py     # all four languages switch and persist
 ```
 
@@ -502,7 +520,7 @@ Stated plainly, because a demo that overstates itself is worse than one that doe
 - **The AI does not read the database.** `AIService.generate()` uses a hardcoded context string, so the assistant can contradict the app's own data — it may report no flood warning for a river the dashboard shows as `rising`.
 - **`qwen2.5:0.5b` is small.** Good enough for short factual answers; its free-text translation into Nepali is poor and into Newari/Maithili barely works. Set `AI_MODEL` to something larger if that matters.
 - **Authorities only exist for Sindhuli and Kathmandu** (7 rows), so the complaint form can offer an authority from the wrong district.
-- **Only navigation is translated.** Page body copy is still English in all four languages.
+- **Nepali covers the whole UI; Newari and Maithili fall back to Nepali** for page text (only navigation has its own Newari/Maithili strings). Hazard alert headlines are translated; free-text content (titles typed by authorities, river/road names) stays as entered.
 - **Newari and Maithili strings need a native speaker's review** — they are reasonable approximations, not verified translations.
 - **Travel routing is name and district matching**, not a real path search over the road network.
 - **Lucide and Google Fonts load from CDN**, so the UI needs network access for icons and fonts. Vendor them locally before an offline demo.
@@ -518,7 +536,7 @@ Stated plainly, because a demo that overstates itself is worse than one that doe
 - [ ] Parse DHM's published hydrology tables for real gauge readings
 - [ ] Feed live road/river rows into the AI prompt so answers match the database
 - [ ] Seed authorities for all 77 districts
-- [ ] Translate page body copy, not just navigation
+- [ ] Newari and Maithili page text (currently falls back to Nepali)
 - [ ] Native-speaker review of Newari and Maithili
 - [ ] Real routing over the road graph
 - [ ] Vendor Lucide and fonts for offline use

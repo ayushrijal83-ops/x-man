@@ -41,7 +41,8 @@ self.addEventListener('push', function (event) {
 
 self.addEventListener('notificationclick', function (event) {
     event.notification.close();
-    var path = (event.notification.data && event.notification.data.url) || '/notifications';
+    // re-checked here too: never trust a notification's stored URL to stay on this site
+    var path = sameOriginPath(event.notification.data && event.notification.data.url);
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clients) {
             for (var i = 0; i < clients.length; i++) {

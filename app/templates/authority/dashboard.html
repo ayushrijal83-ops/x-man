@@ -83,7 +83,7 @@
                         <div class="meta">
                             <span class="status-badge status-{{ r.status }}">{{ r.status|t }}</span>
                             {% if r.ai_analysis.status == 'completed' %}
-                            <span class="chip"><i data-lucide="scan-eye" class="icon-sm"></i> {{ 'AI'|t }}: {{ r.ai_analysis.label|t }} · {{ '%.2f'|format(r.ai_analysis.confidence) }}</span>
+                            <span class="chip"><i data-lucide="scan-eye" class="icon-sm"></i> {{ 'AI'|t }}: {{ ui.ai_result(r.ai_analysis.label, r.ai_analysis.confidence) }}</span>
                             {% if r.ai_analysis.label not in ('unknown', r.hazard_type) %}<span class="badge badge-warning">{{ 'differs from citizen'|t }}</span>{% endif %}
                             {% else %}<span class="chip">{{ 'AI'|t }}: {{ r.ai_analysis.status|replace('_', ' ') }}</span>{% endif %}
                         </div>

@@ -12,12 +12,12 @@ profile_bp = Blueprint('profile', __name__)
 @login_required
 def view_profile(user_id):
     """View user profile."""
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User, user_id)
     
     # Get user stats
     posts = Post.query.filter_by(user_id=user_id).order_by(Post.created_at.desc()).all()
-    complaints = Complaint.query.filter_by(user_id=user_id).all()
-    district = District.query.get(user.district_id) if user.district_id else None
+    complaints = Complaint.query.filter_by(user_id=user_id).order_by(Complaint.created_at.desc()).all()
+    district = db.session.get(District, user.district_id) if user.district_id else None
     
     # Calculate stats
     total_posts = len(posts)
@@ -43,7 +43,8 @@ def view_profile(user_id):
     return render_template('pages/profile.html',
                          user=user,
                          posts=posts[:10],
-                         complaints=complaints[:5],
+                         # complaint text is private to the complainant, the authority and admins (M10)
+                         complaints=complaints[:5] if current_user.id == user.id or current_user.role == 'admin' else [],
                          district=district,
                          total_posts=total_posts,
                          total_complaints=total_complaints,

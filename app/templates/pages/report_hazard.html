@@ -44,7 +44,7 @@
                 {% for h in hazard_types %}
                 <div>
                     <input type="radio" name="hazard_type" id="hz-{{ h }}" value="{{ h }}" {% if loop.first %}checked{% endif %}>
-                    <label for="hz-{{ h }}"><span class="emoji" aria-hidden="true">{{ '🏔️' if h == 'landslide' else '🚧' }}</span>{{ h|t }}</label>
+                    <label for="hz-{{ h }}"><span class="emoji" aria-hidden="true">{{ '🏔️' if h == 'landslide' else '🚧' }}</span>{{ ('Landslide' if h == 'landslide' else 'Road damage')|t }}</label>
                 </div>
                 {% endfor %}
             </div>
@@ -66,18 +66,19 @@
             </select>
         </div>
 
-        <div class="form-group">
+        <div class="form-group" data-location-widget>
             <span class="form-label">{{ 'Location'|t }}</span>
-            <button type="button" class="btn btn-outline" id="use-location">📍 {{ 'Use My Location'|t }}</button>
-            <span class="loc-status" id="loc-status" aria-live="polite"></span>
+            <button type="button" class="btn btn-outline" id="use-location" data-locate><i data-lucide="locate-fixed"></i> {{ 'Use My Location'|t }}</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-clear-location hidden>{{ 'Remove location'|t }}</button>
+            <span class="loc-status location-status" id="loc-status" data-location-status aria-live="polite"></span>
             <div class="coords" style="margin-top: var(--space-3);">
                 <div>
                     <label for="latitude">{{ 'Latitude'|t }}</label>
-                    <input type="number" step="any" min="-90" max="90" id="latitude" name="latitude" inputmode="decimal">
+                    <input type="number" step="any" min="-90" max="90" id="latitude" name="latitude" inputmode="decimal" data-lat>
                 </div>
                 <div>
                     <label for="longitude">{{ 'Longitude'|t }}</label>
-                    <input type="number" step="any" min="-180" max="180" id="longitude" name="longitude" inputmode="decimal">
+                    <input type="number" step="any" min="-180" max="180" id="longitude" name="longitude" inputmode="decimal" data-lon>
                 </div>
             </div>
             <small class="hint">{{ 'Optional. If location access is blocked, type the coordinates or leave them empty.'|t }}</small>
@@ -101,18 +102,15 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "components/location_js.html" %}
 <script>
 (function () {
     var form = document.getElementById('report-form');
     var errorBox = document.getElementById('form-error');
     var photo = document.getElementById('photo');
     var preview = document.getElementById('photo-preview');
-    var status = document.getElementById('loc-status');
     var submitBtn = document.getElementById('submit-btn');
     var text = {
-        locating: {{ 'Getting location…'|t|tojson }},
-        located: {{ 'Location added.'|t|tojson }},
-        denied: {{ 'Location unavailable. You can type it or leave it empty.'|t|tojson }},
         needPhoto: {{ 'Please add a photo.'|t|tojson }},
         sending: {{ 'Sending…'|t|tojson }},
         failed: {{ 'Could not send the report. Please try again.'|t|tojson }}
@@ -129,18 +127,6 @@
         if (!file) { preview.style.display = 'none'; return; }
         preview.src = URL.createObjectURL(file);
         preview.style.display = 'block';
-    });
-
-    document.getElementById('use-location').addEventListener('click', function () {
-        if (!navigator.geolocation) { status.textContent = text.denied; return; }
-        status.textContent = text.locating;
-        navigator.geolocation.getCurrentPosition(function (pos) {
-            document.getElementById('latitude').value = pos.coords.latitude.toFixed(6);
-            document.getElementById('longitude').value = pos.coords.longitude.toFixed(6);
-            status.textContent = text.located;
-        }, function () {
-            status.textContent = text.denied;
-        }, {enableHighAccuracy: true, timeout: 15000, maximumAge: 60000});
     });
 
     form.addEventListener('submit', function (e) {

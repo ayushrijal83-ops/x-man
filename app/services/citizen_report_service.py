@@ -84,7 +84,7 @@ def _parse_text(form, key, limit):
     return value or None
 
 
-def _process_image(file_storage):
+def process_image(file_storage):
     """Validate an untrusted upload and return clean JPEG bytes.
 
     The original bytes are never stored: the image is decoded, checked against
@@ -155,7 +155,7 @@ def submit_report(user, form, file_storage):
     latitude, longitude = _parse_location(form)
     description = _parse_text(form, 'description', MAX_DESCRIPTION)
     location = _parse_text(form, 'location', MAX_LOCATION)
-    jpeg = _process_image(file_storage)
+    jpeg = process_image(file_storage)
 
     directory = upload_dir()
     os.makedirs(directory, exist_ok=True)

@@ -444,7 +444,7 @@ class TestHazardEventService:
         river_id = _make_river(app, district_id, current_level=3.5, danger_level=4.0)  # rising
 
         with app.app_context():
-            river = River.query.get(river_id)
+            river = db.session.get(River, river_id)
             risk = {'risk_level': 2, 'status': 'rising', 'percentage': 87.5, 'reason': 'Water level at 87.5% of danger mark'}
             
             incident = auto_create_flood_event_from_river(river, risk)
@@ -461,7 +461,7 @@ class TestHazardEventService:
         river_id = _make_river(app, district_id, current_level=3.5, danger_level=4.0)
 
         with app.app_context():
-            river = River.query.get(river_id)
+            river = db.session.get(River, river_id)
             risk = {'risk_level': 2, 'status': 'rising', 'percentage': 87.5, 'reason': 'Water level at 87.5% of danger mark'}
             
             # Create first event
