@@ -2,55 +2,138 @@
 
 {% block title %}{{ 'Edit Profile'|t }} - {{ t('app_name') }}{% endblock %}
 
+{% macro value(name, fallback) -%}{{ form.get(name, '') if form is not none else (fallback or '') }}{%- endmacro %}
+{% macro field_error(name) -%}
+{% if errors.get(name) %}<p class="field-error" id="{{ name }}-error"><i data-lucide="circle-alert" class="icon-sm"></i>{{ errors[name]|t }}</p>{% endif %}
+{%- endmacro %}
+{% macro invalid(name) -%}{% if errors.get(name) %}aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}{%- endmacro %}
+
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="pencil"></i> {{ 'Edit Profile'|t }}</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">{{ 'Update your profile information'|t }}</p>
-    
-    <div class="card" style="max-width: 600px; margin: 0 auto;">
-        <form method="POST">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="user-cog"></i> {{ 'Account'|t }}</span>
+            <h1>{{ 'Edit Profile'|t }}</h1>
+            <p class="page-sub">{{ 'Your mobile number, address and location are private: only you and administrators can see them.'|t }}</p>
+        </div>
+        <a href="/profile/me" class="btn btn-secondary"><i data-lucide="arrow-left"></i> {{ 'Back to profile'|t }}</a>
+    </div>
+
+    {% if errors %}
+    <div class="form-errors" role="alert"><strong>{{ 'Please fix the highlighted fields.'|t }}</strong>
+        {% if errors.get('form') %}<p>{{ errors['form']|t }}</p>{% endif %}</div>
+    {% endif %}
+
+    <form method="POST" data-submit-busy novalidate class="bento">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <section class="card span-6" aria-labelledby="h-identity">
+            <h2 class="card-title" id="h-identity"><i data-lucide="id-card"></i> {{ 'Identity'|t }}</h2>
             <div class="form-group">
-                <label>{{ 'Username'|t }}</label>
-                <input type="text" name="username" class="form-input" value="{{ current_user.username }}" required>
+                <label for="full_name">{{ 'Full name'|t }}</label>
+                <input type="text" id="full_name" name="full_name" maxlength="120" autocomplete="name" class="form-input"
+                       value="{{ value('full_name', current_user.full_name) }}" {{ invalid('full_name') }}>
+                {{ field_error('full_name') }}
             </div>
-            
             <div class="form-group">
-                <label>{{ 'Email'|t }}</label>
-                <input type="email" name="email" class="form-input" value="{{ current_user.email }}" required>
+                <label for="username">{{ 'Username'|t }}</label>
+                <input type="text" id="username" name="username" required maxlength="30" autocomplete="username" class="form-input"
+                       value="{{ value('username', current_user.username) }}" {{ invalid('username') }}>
+                {{ field_error('username') }}
             </div>
-            
             <div class="form-group">
-                <label>{{ 'Phone (optional)'|t }}</label>
-                <input type="text" name="phone" class="form-input" value="{{ current_user.phone or '' }}" placeholder="e.g., 98XXXXXXXX">
+                <label for="bio">{{ 'Bio (optional)'|t }}</label>
+                <textarea id="bio" name="bio" rows="3" maxlength="1000" class="form-input" placeholder="{{ 'Tell us about yourself...'|t }}" {{ invalid('bio') }}>{{ value('bio', current_user.bio) }}</textarea>
+                {{ field_error('bio') }}
             </div>
-            
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-contact">
+            <h2 class="card-title" id="h-contact"><i data-lucide="phone"></i> {{ 'Contact'|t }}</h2>
             <div class="form-group">
-                <label>{{ 'District'|t }}</label>
-                <select name="district_id" class="form-input">
+                <label for="email">{{ 'Email'|t }}</label>
+                <input type="email" id="email" name="email" required maxlength="120" autocomplete="email" class="form-input"
+                       value="{{ value('email', current_user.email) }}" {{ invalid('email') }}>
+                {{ field_error('email') }}
+            </div>
+            <div class="form-group">
+                <label for="phone">{{ 'Mobile number'|t }}</label>
+                <input type="tel" id="phone" name="phone" inputmode="tel" autocomplete="tel" maxlength="20" class="form-input"
+                       placeholder="98XXXXXXXX" value="{{ value('phone', current_user.phone) }}" aria-describedby="phone-hint" {{ invalid('phone') }}>
+                <p class="form-hint" id="phone-hint">
+                    {% if current_user.phone and current_user.phone_verified %}<span class="badge badge-success"><i data-lucide="badge-check"></i> {{ 'Verified'|t }}</span>
+                    {% elif current_user.phone %}<span class="badge badge-neutral">{{ 'Not verified'|t }}</span> {{ 'SMS verification is not available yet.'|t }}
+                    {% endif %}
+                    {{ 'Stored for future emergency SMS alerts. Changing it resets verification.'|t }}
+                </p>
+                {{ field_error('phone') }}
+            </div>
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-address">
+            <h2 class="card-title" id="h-address"><i data-lucide="house"></i> {{ 'Where you live'|t }}</h2>
+            <div class="form-group">
+                <label for="district_id">{{ 'District'|t }}</label>
+                <select id="district_id" name="district_id" {{ invalid('district_id') }}>
                     <option value="">{{ 'Select District'|t }}</option>
-                    {% for district in districts %}
-                        <option value="{{ district.id }}" {% if current_user.district_id == district.id %}selected{% endif %}>
-                            {{ district.name }} ({{ district.province }})
-                        </option>
+                    {% set chosen = (form.get('district_id') if form is not none else current_user.district_id|string) %}
+                    {% for d in districts %}
+                    <option value="{{ d.id }}" {% if chosen == d.id|string %}selected{% endif %}>{{ d.name }} ({{ d.province }})</option>
                     {% endfor %}
                 </select>
+                {{ field_error('district_id') }}
             </div>
-            
             <div class="form-group">
-                <label>{{ 'Bio (optional)'|t }}</label>
-                <textarea name="bio" class="form-input" rows="3" placeholder="{{ 'Tell us about yourself...'|t }}">{{ current_user.bio or '' }}</textarea>
+                <label for="permanent_address">{{ 'Permanent address'|t }}</label>
+                <textarea id="permanent_address" name="permanent_address" rows="2" maxlength="300" autocomplete="street-address"
+                          class="form-input" {{ invalid('permanent_address') }}>{{ value('permanent_address', current_user.permanent_address) }}</textarea>
+                {{ field_error('permanent_address') }}
             </div>
-            
-            <button type="submit" class="btn btn-primary btn-block">{{ 'Save Changes'|t }}</button>
-        </form>
-        
-        <hr style="margin: 2rem 0;">
-        
-        <a href="/profile/change-password" class="btn btn-outline btn-block">{{ 'Change Password'|t }}</a>
-    </div>
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-location">
+            <h2 class="card-title" id="h-location"><i data-lucide="locate-fixed"></i> {{ 'Current location'|t }}</h2>
+            {% set has_location = current_user.current_latitude is not none %}
+            <div class="location-box" data-location-widget>
+                <p class="form-hint" style="margin-top:0">
+                    {% if has_location %}{{ 'Saved'|t }}: {{ '%.5f'|format(current_user.current_latitude) }}, {{ '%.5f'|format(current_user.current_longitude) }}
+                    {% if current_user.location_updated_at %}· {{ current_user.location_updated_at.strftime('%Y-%m-%d %H:%M') }} UTC{% endif %}
+                    {% else %}{{ 'No location saved. Sharing it is optional and separate from your permanent address.'|t }}{% endif %}
+                </p>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+                    <button type="button" class="btn btn-secondary" data-locate><i data-lucide="locate-fixed"></i> {{ 'Use my current location'|t }}</button>
+                    <button type="button" class="btn btn-ghost" data-clear-location hidden>{{ 'Remove location'|t }}</button>
+                </div>
+                <p class="location-status" data-location-status role="status" aria-live="polite"></p>
+                <input type="hidden" name="current_latitude" value="" data-lat>
+                <input type="hidden" name="current_longitude" value="" data-lon>
+                {{ field_error('current_location') }}
+                <div class="form-group" style="margin:12px 0 0;">
+                    <label for="current_address">{{ 'Describe where you are now'|t }} <span class="opt">({{ 'optional'|t }})</span></label>
+                    <input type="text" id="current_address" name="current_address" maxlength="300" class="form-input"
+                           value="{{ value('current_address', current_user.current_address) }}" {{ invalid('current_address') }}>
+                    {{ field_error('current_address') }}
+                </div>
+                {% if has_location %}
+                <div class="form-check" style="margin:12px 0 0;">
+                    <input type="checkbox" id="clear_location" name="clear_location" value="1">
+                    <label for="clear_location">{{ 'Delete my saved location'|t }}</label>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <div class="span-12" style="display:flex; gap:12px; flex-wrap:wrap; justify-content:flex-end;">
+            <a href="/profile/change-password" class="btn btn-secondary"><i data-lucide="key-round"></i> {{ 'Change Password'|t }}</a>
+            <button type="submit" class="btn btn-primary"><span class="btn-label">{{ 'Save Changes'|t }}</span></button>
+        </div>
+    </form>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "components/auth_form_js.html" %}
+{% include "components/location_js.html" %}
 {% endblock %}

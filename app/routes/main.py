@@ -1,102 +1,68 @@
-from flask import Blueprint, render_template, redirect, url_for, request
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+
 from app.extensions import db
-from app.models import District, Post, Authority, Project, RoadSegment, River, Incident
-from app.models.incident import ACTIVE_STATUSES
-from app.services.hazard_event_service import get_active_events_for_district
+from app.models import District
+from app.routes.auth import _safe_next
+from app.services import district_service, emergency_dispatcher
 
 main_bp = Blueprint('main', __name__)
+
 
 @main_bp.route('/')
 def index():
     """Landing page."""
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
-    return render_template('pages/landing.html')
+    return render_template('pages/landing.html', stats=district_service.public_stats())
+
 
 @main_bp.route('/dashboard')
 @login_required
 def dashboard():
-    """Main dashboard for NepalSathi."""
-    user_district = None
-    if current_user.district_id:
-        user_district = District.query.get(current_user.district_id)
-    
-    recent_posts = Post.query.order_by(Post.created_at.desc()).limit(10).all()
-    active_incidents = Incident.query.filter(Incident.status.in_(ACTIVE_STATUSES)).limit(5).all()
+    """Citizen home: the user's district, their alerts and their reports (real counts only)."""
+    districts = District.query.order_by(District.name).all() if not current_user.district_id else []
+    return render_template('pages/dashboard.html', home=district_service.citizen_home(current_user),
+                           districts=districts, push=emergency_dispatcher.push_state(current_user))
 
-    def local_first(model, limit=5):
-        """Prefer the user's own district; fall back to nationwide if it has none.
-
-        Without the district filter the page claimed 'Your District: X' while
-        listing another district's roads.
-        """
-        if user_district:
-            rows = model.query.filter_by(district_id=user_district.id).limit(limit).all()
-            if rows:
-                return rows, True
-        return model.query.limit(limit).all(), False
-
-    road_segments, roads_local = local_first(RoadSegment)
-    rivers, rivers_local = local_first(River)
-    projects, projects_local = local_first(Project)
-    authorities = Authority.query.limit(5).all()
-
-    return render_template('pages/dashboard.html',
-                         user_district=user_district,
-                         recent_posts=recent_posts,
-                         active_incidents=active_incidents,
-                         roads=road_segments,
-                         rivers=rivers,
-                         projects=projects,
-                         authorities=authorities,
-                         roads_local=roads_local,
-                         rivers_local=rivers_local,
-                         projects_local=projects_local)
 
 @main_bp.route('/select-district', methods=['POST'])
 @login_required
 def select_district():
-    """Select user's district."""
-    district_id = request.form.get('district_id')
-    if district_id:
-        current_user.district_id = int(district_id)
+    """Save the user's home district. Before this milestone no page called this route and it
+    crashed on an unimported flash(), so 'selecting' a district never stuck."""
+    raw = (request.form.get('district_id') or '').strip()
+    district = db.session.get(District, int(raw)) if raw.isascii() and raw.isdigit() else None
+    if district is None:
+        flash('Choose a valid district.', 'error')
+    else:
+        current_user.district_id = district.id
         db.session.commit()
-        flash('District selected successfully!', 'success')
-    return redirect(url_for('main.dashboard'))
+        flash('Your district is now set.', 'success')
+    return redirect(_safe_next(request.form.get('next')) or url_for('main.dashboard'))
+
 
 @main_bp.route('/districts')
 @login_required
 def districts():
-    """Show all districts."""
-    all_districts = District.query.order_by(District.province, District.name).all()
-    
+    """All districts grouped by province."""
     provinces = {}
-    for district in all_districts:
-        if district.province not in provinces:
-            provinces[district.province] = []
-        provinces[district.province].append(district)
-    
+    for district in District.query.order_by(District.province, District.name):
+        provinces.setdefault(district.province, []).append(district)
     return render_template('pages/districts.html', provinces=provinces)
+
 
 @main_bp.route('/district/<int:district_id>')
 @login_required
 def district_detail(district_id):
-    """District detail page."""
-    district = District.query.get_or_404(district_id)
-    
-    posts = Post.query.filter_by(district_id=district_id).order_by(Post.created_at.desc()).limit(20).all()
-    authorities = Authority.query.filter_by(district_id=district_id).all()
-    projects = Project.query.filter_by(district_id=district_id).all()
-    roads = RoadSegment.query.filter_by(district_id=district_id).all()
-    rivers = River.query.filter_by(district_id=district_id).all()
-    incidents = get_active_events_for_district(district_id)
-    
-    return render_template('pages/district_detail.html',
-                         district=district,
-                         posts=posts,
-                         authorities=authorities,
-                         projects=projects,
-                         roads=roads,
-                         rivers=rivers,
-                         incidents=incidents)
+    """Public information for one district: hazards, rivers, roads, projects, authorities."""
+    district = db.session.get(District, district_id)
+    if district is None:
+        abort(404)
+    return render_template('pages/district_detail.html', o=district_service.district_overview(district))
+
+
+@main_bp.route('/credits')
+def credits():
+    """Photo attribution (CC BY / CC BY-SA require it)."""
+    return render_template('pages/credits.html')

@@ -1,0 +1,17 @@
+{% from "components/photo.html" import photo, photo_credit with context %}
+<aside class="auth-visual" aria-label="{{ 'About NepalSathi'|t }}">
+    {{ photo(photo_name or 'auth-chola-valley.jpg', 'auth-photo', 'eager') }}
+    <a href="/" class="sidebar-brand" style="border:0; padding:0;">
+        <span class="brand-mark" aria-hidden="true"><i data-lucide="mountain-snow"></i></span>
+        <span><span class="sidebar-name">{{ t('app_name') }}</span><br><span class="sidebar-sub">{{ 'Disaster intelligence'|t }}</span></span>
+    </a>
+    <div>
+        <h2>{{ visual_title or 'Know what is happening in your district.'|t }}</h2>
+        <ul class="auth-points">
+            <li><i data-lucide="siren"></i><span>{{ 'Alerts for floods, landslides and road damage where you live'|t }}</span></li>
+            <li><i data-lucide="camera"></i><span>{{ 'Report hazards with a photo; authorities review every report'|t }}</span></li>
+            <li><i data-lucide="shield-check"></i><span>{{ 'Your phone, address and location are never shown publicly'|t }}</span></li>
+        </ul>
+    </div>
+    {{ photo_credit(photo_name or 'auth-chola-valley.jpg') }}
+</aside>

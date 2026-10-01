@@ -1,9 +1,10 @@
 from flask import Blueprint, abort, render_template, request, redirect, url_for, flash, g
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import Complaint, Authority, Project, RoadSegment, River, AuthorityResponse
+from app.models import Complaint, Authority, District, Project, RoadSegment, River, AuthorityResponse
 from datetime import datetime
 
+from app.services import dashboard_service
 from app.services.form_validation import finite_float, int_in_range
 
 # Values the panel forms offer; anything else is rejected (M10).
@@ -27,8 +28,11 @@ def require_linked_authority():
         flash('Authority account required.', 'error')
         return redirect(url_for('main.dashboard'))
 
-    g.authority = Authority.query.get(current_user.authority_id) if current_user.authority_id else None
+    g.authority = db.session.get(Authority, current_user.authority_id) if current_user.authority_id else None
     if g.authority is None:
+        if current_user.role == 'admin':
+            # admins have no single jurisdiction: their operational view is the system-wide console
+            return redirect(url_for('monitoring.monitoring_page'))
         flash('No authority is linked to your account. Contact an administrator.', 'error')
         return redirect(url_for('main.dashboard'))
 
@@ -36,37 +40,26 @@ def require_linked_authority():
 @authority_panel_bp.route('/dashboard')
 @login_required
 def dashboard():
-    """Authority dashboard."""
+    """Authority operations: hazards, response work, reports, devices (M02-M09) plus the
+    authority's complaints, projects, roads and rivers."""
     authority = get_authority()
-
-    # Get complaints for this authority
-    complaints = Complaint.query.filter_by(authority_id=authority.id).order_by(Complaint.created_at.desc()).all()
-
-    # Get projects
-    projects = Project.query.filter_by(authority_id=authority.id).all()
-
-    # Get roads in district
-    roads = RoadSegment.query.filter_by(district_id=authority.district_id).all()
-
-    # Get rivers in district
-    rivers = River.query.filter_by(district_id=authority.district_id).all()
-
-    # Stats
-    total_complaints = len(complaints)
-    pending = len([c for c in complaints if c.status == 'pending'])
-    in_progress = len([c for c in complaints if c.status == 'in_progress'])
-    resolved = len([c for c in complaints if c.status == 'resolved'])
-
-    return render_template('authority/dashboard.html',
-                         authority=authority,
-                         complaints=complaints[:10],
-                         projects=projects,
-                         roads=roads,
-                         rivers=rivers,
-                         total_complaints=total_complaints,
-                         pending=pending,
-                         in_progress=in_progress,
-                         resolved=resolved)
+    complaint_counts = dict(db.session.query(Complaint.status, db.func.count())
+                            .filter(Complaint.authority_id == authority.id).group_by(Complaint.status).all())
+    return render_template(
+        'authority/dashboard.html',
+        authority=authority,
+        district=db.session.get(District, authority.district_id),
+        ops=dashboard_service.authority_operations(current_user),
+        complaints=Complaint.query.filter_by(authority_id=authority.id)
+        .order_by(Complaint.created_at.desc()).limit(5).all(),
+        complaint_counts=complaint_counts,
+        total_complaints=sum(complaint_counts.values()),
+        projects=Project.query.filter_by(authority_id=authority.id).order_by(Project.name).all(),
+        rivers=River.query.filter_by(district_id=authority.district_id).order_by(River.name).all(),
+        road_status=dict(db.session.query(RoadSegment.status, db.func.count())
+                         .filter(RoadSegment.district_id == authority.district_id)
+                         .group_by(RoadSegment.status).all()),
+    )
 
 @authority_panel_bp.route('/complaints')
 @login_required

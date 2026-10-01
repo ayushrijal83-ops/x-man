@@ -3,19 +3,7 @@
 {% block title %}{{ 'Roads'|t }} - {{ 'Authority'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
-<nav class="navbar" style="background: var(--bg-dark);">
-    <a href="/" class="nav-brand"><i data-lucide="landmark"></i> {{ authority.name }}</a>
-    <div class="nav-links">
-        <a href="/authority/dashboard">{{ 'Dashboard'|t }}</a>
-        <a href="/authority/complaints">{{ 'Complaints'|t }}</a>
-        <a href="/authority/projects">{{ 'Projects'|t }}</a>
-        <a href="/authority/roads">{{ 'Roads'|t }}</a>
-        <a href="/authority/rivers">{{ 'Rivers'|t }}</a>
-        <a href="/notifications">{{ 'Notifications'|t }}{% if unread_notifications %} <span class="nav-badge">{{ unread_notifications }}</span>{% endif %}</a>
-        <a href="/auth/logout">{{ 'Logout'|t }}</a>
-        {% include "components/lang_selector.html" %}
-    </div>
-</nav>
+{% include "components/authority_nav.html" %}
 
 <div class="container">
     <h1><i data-lucide="route"></i> {{ 'Road Management'|t }}</h1>

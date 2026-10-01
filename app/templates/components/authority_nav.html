@@ -1,0 +1,17 @@
+<nav class="navbar" aria-label="{{ 'Authority panel'|t }}">
+    <a href="/authority/dashboard" class="nav-brand"><span class="brand-mark" aria-hidden="true" style="width:30px;height:30px;"><i data-lucide="landmark"></i></span> {{ (authority or g.authority).name }}</a>
+    <div class="nav-links">
+        <a href="/authority/dashboard"><i data-lucide="layout-dashboard" class="icon-sm"></i>{{ 'Dashboard'|t }}</a>
+        <a href="/monitoring"><i data-lucide="activity" class="icon-sm"></i>{{ 'Disaster Monitoring'|t }}</a>
+        <a href="/reports/review"><i data-lucide="scan-search" class="icon-sm"></i>{{ 'Review Photo Reports'|t }}</a>
+        <a href="/authority/complaints">{{ 'Complaints'|t }}</a>
+        <a href="/authority/projects">{{ 'Projects'|t }}</a>
+        <a href="/authority/roads">{{ 'Roads'|t }}</a>
+        <a href="/authority/rivers">{{ 'Rivers'|t }}</a>
+        <a href="/notifications"><i data-lucide="bell" class="icon-sm"></i>{{ 'Notifications'|t }}{% if unread_notifications %} <span class="nav-badge">{{ unread_notifications }}</span>{% endif %}</a>
+        <a href="/notifications/settings"><i data-lucide="bell-ring" class="icon-sm"></i>{{ 'Emergency alerts'|t }}</a>
+        <button type="button" class="theme-toggle" aria-label="{{ 'Switch to dark mode'|t }}" aria-pressed="false"><i data-lucide="moon"></i></button>
+        {% include "components/lang_selector.html" %}
+        <a href="/auth/logout"><i data-lucide="log-out" class="icon-sm"></i>{{ 'Logout'|t }}</a>
+    </div>
+</nav>

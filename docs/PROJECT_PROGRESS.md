@@ -2351,4 +2351,494 @@ Smartphone
 
 Physical hardware is still **not built or validated**.
 
-**Next milestone:** H01 — ESP32 Hardware Foundation (not started).
+**Next milestone:** M11.5 — Product Quality (see below), then M12 and H01.
+
+---
+
+# M11.5 — Product Quality: Accounts, Dashboards and Design System
+
+Inserted before H01. No ESP32, firmware or hardware architecture changes. No security or RBAC rule
+was weakened. Backend hazard, risk and notification logic is unchanged; only presentation and
+read-only aggregation were added.
+
+### Audit (before implementation)
+| Question | Finding |
+|---|---|
+| Profile data | `users` had `phone` (free text, not unique, unvalidated) and no name, address, location or verification flag |
+| Registration | username, email and password only. No district was ever set. Login is username-only |
+| District empty data — root cause | (1) **Code:** "Select your district" only linked to `/districts`, read-only pages; nothing saved the choice. `POST /select-district` existed but no page called it, **and it crashed** (`flash` not imported). Registration set no district, so the dashboard always said "Nationwide". (2) **Data:** the dev DB had never been seeded (0 roads, 0 projects, 0 authorities, 1 river), although the repo ships an offline OSM importer. (3) `app/routes/district.py` was a dead, unregistered duplicate blueprint |
+| Citizen dashboard | Stats counted the *displayed* lists (`roads|length` of a 5-item list). Active hazards were queried (unscoped) but **never rendered**. No own reports, alerts or map |
+| Authority dashboard | Pre-M02: complaints, projects, roads and rivers only. No hazards, reports, AI, devices, readings or response work. Admins could not open it |
+| Real vs placeholder | Landing stats were static ("77", "7", "4", "24/7"); `static/images/` was empty |
+| Reverse geocoding | Not available (only Nominatim forward search), so `current_address` is never auto-filled |
+
+### User/profile schema (migration `e7a2c4d9f310`, revises `c3d7f1a9b6e2`)
+- **New `users` columns:** `full_name`, `phone_verified` (NOT NULL, default false), `permanent_address`,
+  `current_latitude`, `current_longitude`, `current_address`, `location_updated_at`.
+- **Unique phone:** a unique index `uq_users_phone` on `phone`, now stored in **E.164**.
+- **Data migration:**
+  - Existing phones are normalized when they are valid Nepal mobiles; anything else is left as-is.
+  - If two users share a number, only the lowest user id keeps it and the duplicates become NULL
+    (otherwise the unique index can't be created).
+- **Verified:** on a DB copy with valid, invalid and duplicate legacy phones: upgrade → downgrade →
+  upgrade, `flask db check` clean. The local dev DB was backed up to
+  `instance/hackforge.pre-product-quality.db` and upgraded.
+
+### Mobile, address and GPS behaviour
+- **Mobile** (`account_service.normalize_mobile`):
+  - Nepal formats accepted: `98XXXXXXXX`, `977…`, `+977…`, `00977…`, with spaces, dashes or
+    brackets → `+977XXXXXXXXXX`.
+  - Valid Nepal mobiles have 10 digits starting 96/97/98. Other countries only as `+<code>…` (8–15
+    digits).
+  - Unique per account, enforced in the app and by the DB index.
+  - `phone_verified` is always false: **no SMS is sent and nothing is verified.** The number is
+    stored only to prepare for future emergency-SMS integration. Changing the number resets the
+    flag.
+- **Permanent address:** typed by the user, stored separately, required at registration.
+- **Current location:**
+  - Captured only when the user clicks **"Use my current location"**, using the browser
+    Geolocation API. It is never requested on page load.
+  - States shown: detecting, detected (coordinates and accuracy), permission denied, unavailable,
+    timeout, unsupported, insecure (non-HTTPS), with a retry button.
+  - Coordinate fields are filled only after a real success.
+  - The server re-validates finite numbers, ranges, and that latitude and longitude come together.
+  - `current_address` is saved only when the user types it, and only alongside real coordinates.
+  - It never overwrites the permanent address. It can be deleted on the profile page.
+- **Privacy:** phone, address, coordinates and full name appear only on the owner's and admins'
+  profile view. They are in no API response (tested across the dashboard, hazards, notifications
+  and reports APIs).
+
+### Authentication UX
+- **Login** (citizen and authority):
+  - Split layout: photo panel plus glass form card.
+  - Labelled inputs, a show/hide password toggle and a remember-me option.
+  - An inline error with `aria-invalid`. One message for an unknown user or a wrong password (no
+    account enumeration), returning **401** (was 200 with a flash).
+  - A busy state on submit, only after client-side validity passes.
+  - CSRF, the M10 same-site `next` rule and username-only login are unchanged.
+- **Registration:**
+  - Fields: full name, username (pattern), email (lower-cased, case-insensitive uniqueness),
+    mobile, password (≥ 8) and confirmation, district, permanent address, and an optional current
+    location with the explicit button.
+  - On errors the form re-renders (400) with per-field messages and kept values. The password is
+    never echoed.
+  - A uniqueness race at commit is handled.
+
+### District fix
+- **Saving the district:** `POST /select-district` now validates the id, saves it, and returns the
+  user to a same-site `next`. It is used by:
+  - the dashboard's "Set your district" form
+  - "Set as my district" on every district page
+  - registration, which now requires a district
+- **District page** (`district_service.district_overview`):
+  - active hazards (including M04 extra districts) with severity
+  - rivers with status and levels
+  - road segments with **real total counts** and status breakdown (list capped at 12)
+  - projects with progress
+  - authorities, recent community posts, and population/area (Wikidata)
+  - a map of hazards that have real coordinates
+- **Robustness:** an unknown district → 404. Bad `district_id` filters on `/roads/status` and
+  `/rivers/status` no longer 500.
+- **Data:** the dev DB now holds the repo's real offline data (`import_nepal_data.py`: 96 road
+  segments across 56 districts and 116 rivers across 67 districts, from the bundled OSM snapshot,
+  plus the seeded authorities and projects).
+- **Cleanup:** the dead `app/routes/district.py` was removed.
+
+### Citizen dashboard (`district_service.citizen_home`)
+- **Content:** every number is a COUNT over real rows.
+  - Local hazard status: active hazards affecting the user's district, the highest severity, and a
+    per-severity breakdown.
+  - The nationwide active count, unread alerts, the 6 latest alerts, and the user's own report
+    total, status counts and latest 5.
+  - Rivers and road segments in the district, and a local map.
+- **Empty states** for no hazards, alerts, reports, rivers, roads or coordinates, plus a district
+  prompt when none is set.
+- **Excluded from the citizen view:** other users' reports, private descriptions,
+  `source_reference`, devices, AI analysis and M09 notes.
+
+### Authority dashboard (`dashboard_service.authority_operations`)
+- **Content** (same scope rules as M07/M10):
+  - active hazards in the jurisdiction with M09 note and open-action counts, linking to the M09
+    response page
+  - severity summary and "awaiting investigation"; photo reports to review (M05 visibility) with
+    the M06 AI label and confidence and a "differs from citizen" flag
+  - open response actions, IoT devices owned by the authority (freshness, latest readings)
+  - the operational map
+  - complaints, projects, rivers and road status
+- **Navigation:** one shared navbar for all panel pages.
+- **Admins** have no single jurisdiction, so they are sent to the system-wide `/monitoring` console.
+- **Unlinked authorities and citizens** are turned away as before.
+
+### Design system (`app/static/css/xman.css`)
+- **Style mix:** aurora atmosphere (fixed radial gradients behind everything) + glass surfaces
+  (near-opaque fills: 86–94%) + bento grid (12 columns with span utilities) + a utilitarian
+  information layer. It replaces the ~740-line inline "vintage" theme in `base.html`; the old
+  unused `static/css/base.css`, `variables.css` and `js/main.js` were removed.
+- **Kept contract:** every old token and class name, so all ~40 templates restyle consistently.
+  Light and dark themes share tokens.
+- **Tokens:** typography (Inter, Space Grotesk for display, Noto Sans Devanagari), spacing, radii,
+  shadows, glass, status and **emergency severity** (critical/high/medium/low/normal). Severity
+  always shows as **text + icon + colour** (`ui.sev`), and map markers also encode it by size.
+- **Shared components:**
+  - `components/ui.html`: severity, status, hazard row, empty state, map
+  - `components/photo.html`: photo with credit
+  - `auth_visual`, `authority_nav`, `location_js`, `auth_form_js`
+- **Rewritten pages:** landing, login, register, authority login, citizen dashboard, districts,
+  district detail, profile/edit, authority dashboard, credits. All other pages inherit the system.
+
+### Real images (`app/static/images/`, `app/image_credits.py`, `/credits`)
+- **Source:** 7 photographs from **Wikimedia Commons** (CC BY 2.0/4.0, CC BY-SA 3.0/4.0):
+  Himalaya, Chola Valley, the Sunkoshi–Tamakoshi confluence and highway, a road through the
+  landslide-prone Trishuli cut, Sauraha after the 2017 flood, the Kathmandu valley, and terraced
+  hills.
+- **Processing:** downloaded once and resized/re-encoded locally (98–271 KB, no EXIF), so there
+  are no hot-links.
+- **Attribution:** author and licence shown next to each photo; `/credits` lists source and
+  licence links.
+- **Where used:** landing hero and hazard cards, auth visuals and empty states. Never behind dense
+  operational data.
+- **Citizen photos:** report photos remain private and are never used.
+
+### 3D / depth (CSS only, no 3D engine)
+- **Elements:**
+  - an isometric stack of terrain tiles with a hazard pin
+  - a floating glass orb
+  - tilted glass alert cards and subtle perspective tilt on hover
+  - layered shadows and inner highlights on cards, and a skewed brand mark
+- **Labelling:** the landing alert cards are labelled "Example alert" (not presented as real
+  data).
+- **Accessibility:** all animation and tilt are disabled under `prefers-reduced-motion`, and blur
+  under `prefers-reduced-transparency`.
+
+### Responsive and accessibility
+- **Checked in Chrome on a seeded scratch DB:**
+  - desktop, plus 390 px phone width via same-origin iframes (the window could not be resized)
+  - landing, login (error state), register (location timeout shown honestly), citizen dashboard
+  - district page, authority dashboard (light + dark)
+  - inherited road-status and notification pages
+  - no console errors
+- **Accessibility features:**
+  - skip link, landmarks, labelled inputs with `aria-invalid`/`aria-describedby` errors, and
+    visible `:focus-visible` rings
+  - status as text everywhere, nothing essential behind hover, and ≥ 44 px form controls
+- **Mobile:** the authority navbar becomes a scrollable row.
+- **Translations:** 152 new strings with Nepali translations.
+
+### Tests
+- **New:** `tests/test_product_quality.py`, **79 tests**:
+  - mobile normalization (8 valid, 14 invalid) and coordinates (8 invalid + valid)
+  - registration persistence, optional location (never invented), 17 rejection cases with nothing
+    created, password never echoed, explicit-click location control
+  - login: same 401 message for unknown user and wrong password, safe `next`, CSRF fields
+  - profile: E.164 + verification reset, duplicate phone, location set/clear without touching the
+    address, bad coordinates; private fields only for owner/admin and absent from 4 APIs
+  - citizen dashboard real counts/scope/own reports/map, zero-data states, district prompt and
+    persistence, invalid selection and `next` ignored
+  - district page with data (real total beyond the list cap), empty and 404, no private report data
+  - authority dashboard scoped data (no other-district hazards/devices/reports, no key hash),
+    admin → console, unlinked/citizen turned away, shared nav
+  - counted landing stats; every image exists, is small and is credited; design-system and
+    accessibility basics present
+- **Existing tests changed (2, both caused by intentional schema changes):**
+  - `test_security_m10.py` fixture: the six users shared phone `9800000000`, which the new unique
+    index forbids, so each now has a distinct E.164 number.
+  - `test_security_m10.py::test_fresh_install_is_migration_tracked`: it hard-coded the M09 head.
+    It now asks `flask db heads` and requires the fresh install to be stamped at exactly that head
+    (equally strict, and survives future migrations).
+
+**Full suite: 772 passed (693 existing + 79 new), 31 warnings** (was 44: the rewritten routes use `db.session.get` instead of legacy `Query.get()`; the remainder are pre-existing legacy `Query.get()` calls in untouched code)
+
+### Security status
+- **Unchanged rules:** M10 authorization, the CSRF exemption only for device telemetry, the CSP
+  and headers, and M05/M09 privacy.
+- **New private fields** (phone, address, coordinates, name) are owner/admin-only in HTML and
+  absent from every API.
+- **Selection redirects:** the district-selection redirect uses the same-site `next` rule.
+- **Images:** Commons photos are public illustrations only.
+
+### Known limitations
+- **No SMS and no phone verification:** `phone_verified` is always false. Login is still by
+  username (unchanged).
+- **No reverse geocoding**, so the current address is user-typed. Location capture needs HTTPS
+  (or localhost) in browsers.
+- **Maps** show only hazards with real coordinates. There are no district boundaries/centroids in
+  the data, and tiles need internet.
+- **Data coverage:** real data covers roads/rivers in 56/67 districts (OSM names, seeded statuses
+  per `import_nepal_data.py`). Authorities and projects exist only for Sindhuli/Kathmandu (seed
+  data).
+- **Stray dev-DB row:** the dev DB still contains a stray `Test District` (id 78, "Test Province")
+  that makes the landing page show 78 districts / 8 provinces. It was left in place pending the
+  owner's decision.
+- **Not fully restyled:** older inner pages (projects, travel, social, complaints) inherit the new
+  system but were not rebuilt; some still have inline layout styles.
+- **Visual review** was manual (Chrome); there is no automated visual regression.
+
+### Next milestone
+**M12 — Admin Control + Emergency Web Push** (below), then H01.
+
+### 🏷️ Status
+**M11.5 — PRODUCT QUALITY, ACCOUNTS, DASHBOARDS AND DESIGN SYSTEM COMPLETE · NO SMS · NO HARDWARE CHANGES**
+
+---
+
+# M12 — Admin Control + Emergency Web Push Notifications
+
+Software, account and notification infrastructure only. No H01 work, no firmware, no hardware changes.
+No new User/Authority/District/Incident/Notification systems: M12 extends the existing models and
+plugs into the existing M03/M04 notification service.
+
+### Baseline
+- **772 passed** before M12. That is the 693 committed at M11 plus the 79 uncommitted M11.5 tests;
+  both milestones are still uncommitted.
+
+### Admin control center (`/admin`, `app/routes/admin.py`, `app/services/admin_service.py`)
+- **Access:** a blueprint `before_request` guard. Anonymous users are sent to log in; any non-admin
+  gets **403**, including routes added later. A test walks every `/admin` rule as a citizen.
+  - Detail pages 404 when the id is not of the expected role, so citizen pages can't browse
+    authority or admin users.
+- **Overview** (all real counts): authorities and authority accounts, citizens, disabled accounts,
+  districts, active hazards, push-enabled users and active subscriptions, notifications in the last
+  24 h, recent emergency-level hazards, and per-layer delivery status (SMS shown as "Not implemented").
+- **Citizens** (`/admin/citizens`):
+  - A district list with database counts (citizens and push-enabled per district, plus "No district").
+  - Clicking a district filters the list. Search covers name, username and email (LIKE wildcards
+    escaped). Also an account-status filter.
+  - **25 per page**; filters survive paging.
+  - Columns: name, district, account status, notification-permission state, emergency push on/off,
+    registration date.
+- **Citizen detail:**
+  - Email, mobile (with verified flag), district, permanent address and registration/last login.
+  - Notification counts, emergency-alert state, sound preference, and push devices (browser
+    user-agent and dates only).
+  - **Current location:** only "shared / not shared" and when, never coordinates. The public profile
+    page now shows coordinates to the **owner only**; admins see "Current location shared". This
+    changes one M11.5 test.
+- **Authorities** (`/admin/authorities`): district filter, search (name/category), status filter
+  (has an active account / all accounts disabled / no account linked), pagination. Columns: district,
+  account status, emergency notification capability (in-app only vs in-app + push), device count,
+  last activity (latest `last_login_at`).
+- **Authority detail:** the district it controls, linked accounts (status, must-change-password,
+  alert state, push, last login), its IoT devices (`device_id`, status, last seen; never key hashes),
+  active hazards affecting its district (linked to the M09 response page), open response actions and
+  office details.
+- **Account actions** (POST + CSRF):
+  - Enable or disable citizen and authority accounts. Admin accounts and the admin themself are not
+    managed here.
+  - Reset an authority password.
+- **Notification status** (`/admin/notifications`), all read-only:
+  - Web Push configured or not, VAPID contact, emergency threshold and allowed push services
+    (environment settings).
+  - Permission-state breakdown, active/disabled/failing subscriptions and users with sound off.
+  - Recent hazard notifications grouped by hazard/event with recipient counts and which layers apply.
+- **Audit:** there is no audit table in the existing architecture, so admin actions are logged as
+  `admin_action admin=<id> action=<enable|disable|reset_password> target_user=<id>`, without secrets.
+
+### Account status and password reset
+- **New `users` fields:**
+  - `is_active` overrides Flask-Login's `UserMixin.is_active`. A disabled user can't log in, and
+    `user_loader` drops existing sessions.
+  - `must_change_password`.
+  - `last_login_at`, set on login.
+- **Disabled login:** the "account disabled" message only appears after a correct password (no
+  account probing).
+- **Password reset design:**
+  - The admin **never sees an existing password**: only the werkzeug one-way hash exists, and it is
+    never rendered.
+  - The admin types a temporary password twice (≥ 8 characters). It is stored only as a hash,
+    `must_change_password` is set, and the action is logged without the password.
+- **After a reset:**
+  - The temporary password opens only `/profile/change-password` (and logout). Every other page
+    redirects there, and `/api/*` returns 403.
+  - The change requires the temporary password, a new password of ≥ 8 characters (was 6) that differs
+    from the current one, and clears the flag.
+- **Restrictions:** reset is only offered for authority accounts. An authority calling the endpoint
+  gets 403.
+
+### Emergency notification architecture (three layers)
+```
+IoT / citizen report / authority
+  -> hazard_event_service (source of truth; M02 dedup)
+  -> notification_service.notify_hazard   LAYER 1: Notification rows (M03/M04 targeting + per-user dedup)
+       -> emergency_dispatcher.queue(rows actually created)
+  -> hazard commit (_commit_or_rollback) -> emergency_dispatcher.flush()
+       -> LAYER 3: Web Push to recipients' enabled subscriptions
+  LAYER 2: every open X-MAN page polls GET /api/emergency/active (the user's own unread emergency rows)
+  (future: an SMS sender inside the dispatcher; none exists)
+```
+- **No new targeting:** recipients are the existing `hazard_recipients`. That means citizens whose
+  home district is affected (primary + M04 additional districts), authorities responsible for those
+  districts, and admins. Unaffected citizens get nothing. Districts come from server-side
+  relationships, never from the client.
+- **No new dedup:** a push is only sent for a notification row that `notify_hazard` just created.
+  - Repeated evidence (no new row) → no push.
+  - High → critical (a new escalation row per severity) → a new push.
+  - An area expansion reaches only the newly covered users.
+- **Emergency threshold:** `EMERGENCY_MIN_SEVERITY` (default `high`). An invalid value falls back to
+  `high`; inside the dispatcher an unknown value means critical-only, never "everything".
+  - At or above it, detected/escalated/confirmed alerts raise the in-website alarm and an urgent
+    push (`Urgency: high`, `requireInteraction`).
+  - The all-clear (resolved) for an emergency-level hazard is pushed as a normal notification, with
+    no alarm.
+  - Lower severities stay in-app only, as before.
+- **Transaction safety:**
+  - Pushes go out **after** the hazard commit, so a failed or slow push never rolls back or blocks
+    the hazard.
+  - On rollback the queue is discarded. As a second guard, `flush()` re-loads each queued row and
+    requires `(id, user_id, dedup_key)` to match, so a rolled-back notification is never pushed.
+  - (A global `after_rollback` listener was rejected: savepoint rollbacks in `_save` fire it too.)
+- **Failure handling** (best-effort):
+  - 2xx → `last_used_at`. 404/410 → the subscription is disabled.
+  - Other failures increment `failure_count`; disabled after 5 consecutive.
+  - Network errors count as failures. Any unexpected error inside the dispatcher is caught, rolled
+    back and logged by exception type only.
+  - Endpoints and keys are never logged.
+- **Payload:** public notification fields only (the same title/message as layer 1: no description,
+  resolution notes or `source_reference`), plus a same-origin URL, tag `xman-hazard-<id>` and the
+  severity.
+
+### Web Push implementation (`app/services/web_push.py`)
+- **Crypto:** RFC 8291 aes128gcm encryption and an RFC 8292 VAPID ES256 JWT, on `cryptography` (now in
+  `requirements.txt`; it was already installed). No other new dependency.
+  - Verified **byte-exact against the RFC 8291 Appendix A test vector**. Tests also decrypt every push
+    as a browser would and verify the JWT signature against the public key.
+- **Server keys:** `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` from the environment.
+  `flask push-keys` prints a fresh pair. The private key is never stored in the DB, rendered or
+  returned (tested across every page and API for each role). Unset keys mean push is disabled, while
+  layers 1 and 2 still work.
+- **SSRF protection:** the server POSTs to client-supplied endpoints, so only `https` URLs on known
+  push services are accepted (`WEB_PUSH_ALLOWED_HOSTS`: FCM, Mozilla, Windows, Apple), with no
+  credentials and at most 1000 characters. Keys must decode to a valid P-256 point and a 16-byte
+  auth secret.
+
+### Subscriptions and preferences (`push_subscriptions`; `users.emergency_alert_state` / `emergency_sound_enabled`)
+- **`push_subscriptions` table:**
+  - Columns: `id, user_id (indexed), endpoint (unique), p256dh_key, auth_key, user_agent, enabled,
+    created_at, updated_at, last_used_at, failure_count`.
+  - The endpoint and keys are never returned by any API or page.
+- **`emergency_alert_state`:** `not_requested | granted | denied | unsupported | disabled_by_user`.
+  - Only a real subscription sets `granted`; turning alerts off sets `disabled_by_user`.
+  - A browser-reported `denied`/`unsupported` is recorded only when the user has no active
+    subscription and hasn't opted out (another device's report can't switch off a working phone).
+- **Reconciliation:** the page always reconciles browser `Notification.permission` + `PushManager`
+  subscription + the stored state. A database boolean is never taken as permission.
+- **APIs** (login required, own account only, CSRF via `X-CSRFToken`):
+  - `GET /api/push/config` · `POST /api/push/subscribe` (upsert by endpoint; always bound to the
+    session user, and a `user_id` in the body is ignored).
+  - `POST /api/push/unsubscribe` deletes all of the caller's subscriptions; notification history is
+    kept.
+  - `POST /api/push/state` · `POST /api/push/test` (own devices only, 1 per 30 s) ·
+    `POST /api/emergency/sound` · `GET /api/emergency/active`.
+- **Shared browsers:** a browser endpoint re-subscribed by another logged-in user moves to that user
+  (it's the same physical browser).
+
+### Browser side
+- **Service worker** (`/sw.js`, served from the root for full scope, `no-cache`):
+  - `push` → `showNotification` (tag, renotify, `requireInteraction` for emergencies, "Open X-MAN"
+    action) and a message to open tabs so the in-website alert appears immediately.
+  - `notificationclick` focuses or opens a **same-origin** path only.
+  - No caching or offline logic.
+- **Opt-in** (`components/emergency_optin.html` on the citizen dashboard):
+  - Shown only if push is configured, the state is `not_requested`, and the browser supports it on a
+    secure context.
+  - Shows the required explanation, an "Enable emergency alert sound" checkbox, **Enable Emergency
+    Alerts** and **Not Now** (snoozed for 7 days in that browser).
+  - `Notification.requestPermission()` is called only inside the click handler, never on load.
+- **Settings** (`/notifications/settings`, linked from both sidebars):
+  - Web emergency alerts ON/OFF, Emergency sound ON/OFF, browser permission, push subscription, and
+    device count.
+  - Enable, Test Emergency Notification, Turn Off Emergency Alerts, and Preview sound.
+  - Shows the required "notification records remain available" wording and the honest delivery
+    statement.
+- **In-website alert** (layer 2, `static/js/emergency.js` + `components/emergency_alert.html`, every
+  signed-in page):
+  - Content: "Emergency disaster alert", hazard title, public message, severity (icon + word +
+    colour), affected districts, local time, **View hazard** (marks read), **Mute alarm**, **Dismiss**
+    (marks read), and "+N more".
+  - All text is set with `textContent`. Polls every 30 s and on tab focus.
+- **Sound:**
+  - Web Audio beep-beep every 1.5 s, stopping by itself after 10 cycles (~15 s). Mute or Escape
+    stops it.
+  - Plays once per alert per browser session. Respects `emergency_sound_enabled`.
+  - If the browser hasn't allowed audio yet (autoplay policy), the alert says so and offers "Play
+    alarm" instead of trying to bypass it. Any click or key on the site unlocks audio.
+  - Muting sound never affects the database notification or push delivery (tested).
+
+### Security summary (all tested)
+- **Admin access:** citizens and authorities get 403 on every admin route; anonymous users are sent
+  to log in.
+- **Password reset:** an authority can't reset another authority's password. Passwords and hashes
+  never appear in pages or logs.
+- **Push isolation:** push routes require login. Subscriptions can't be attached to, tested against
+  or deleted for another user. Unsafe endpoints and keys are rejected.
+- **No secret leakage:** the VAPID private key and subscription secrets appear in no page or API.
+- **CSRF** is enforced on admin and push POSTs (tested with CSRF on).
+- **XSS:** admin pages escape user content (tested with `<script>`/`<img onerror>` names).
+- **Unchanged:** existing M05/M09/M10 rules.
+
+### Migration
+- **`f3b8d2e6a417_m12_admin_control_web_push`** (revises `e7a2c4d9f310`). Additive:
+  - five `users` columns with server defaults (existing users stay active, are not forced to change
+    their password, and start `not_requested`)
+  - the `push_subscriptions` table
+- **Verified:** upgrade → `flask db check` (clean) → downgrade → upgrade on a copy of the dev DB.
+  Fresh install via `init_db.py` is stamped at the new head (tests).
+- **Known pre-existing limitation:** a bare `flask db upgrade` on an empty file cannot run the whole
+  history (an early migration expects tables that `init_db.py` creates). The supported fresh path is
+  `init_db.py`, as before.
+
+### Tests
+- **New `tests/test_admin_push_m12.py` — 72 tests:**
+  - admin access for every route and role; real overview counts
+  - authority list/filter/search/status/pagination, detail without secrets, the full reset flow
+    (forced change, API 403, bad temp passwords, role restrictions, authority-to-authority blocked),
+    disable/enable ending sessions, audit log without secrets
+  - citizen list/district counts/filters/pagination/privacy/disable
+  - subscription binding, upsert, shared browser, 7 unsafe endpoints, 5 bad-key shapes, not
+    configured, unsubscribe isolation with history kept, permission states, test-push isolation and
+    rate limit, sound validation, auth on all push routes, service worker
+  - dispatch: all three layers with targeting, VAPID JWT verification, repeated evidence vs
+    escalation, below-threshold, configurable/invalid threshold, confirm/resolve lifecycle, area
+    expansion, opted-out/disabled users, muted user, read alert leaves layer 2, 410 cleanup, failure
+    limit, push failure never breaks hazards (no secrets in logs), rolled-back rows never pushed,
+    public-only payload
+  - pages and security: no auto-prompt, opt-in copy, overlay only when signed in, private key and
+    subscription secrets never exposed, escaping, CSRF
+  - fresh-install schema and the RFC 8291 vector
+  - A module-level autouse fake push service guarantees no test reaches the network.
+- **Changed existing test (1):** `test_product_quality.py::test_private_fields_only_for_owner_and_admin`.
+  Admins no longer see coordinates on the public profile (owner-only, per M12's privacy rule).
+- **Full suite:** **844 passed, 31 warnings** (772 before M12 + 72 new; warning count unchanged — all are pre-existing legacy `Query.get()` calls in untouched code)
+
+### Real-world limitations (stated plainly)
+- **Delivery claim:** X-MAN can deliver browser push emergency notifications outside the website when
+  the user's browser/device supports Web Push, permission is granted, and the device has network
+  connectivity. Delivery is **not guaranteed**, and nothing reaches an offline device until it
+  reconnects (TTL 1 h).
+- **Requirements:** Web Push needs HTTPS (localhost counts as secure for development), a supported
+  browser, an active service worker, user permission and a subscription. iOS Safari only supports it
+  for a site added to the Home Screen.
+- **OS/browser control:** the browser and OS decide whether notifications are shown, whether they
+  make a sound, focus/do-not-disturb, and battery/background restrictions. X-MAN requests normal
+  notification behaviour and does not try to force a sound.
+- **Alarm sound:** the website alarm only plays after the user has interacted with the page (browser
+  autoplay policy); this is not bypassed.
+- **Synchronous sending:** pushes are sent in the request that changed the hazard (5 s timeout per
+  endpoint). A worker queue is needed before very large subscriber counts.
+- **Not tested against a real push service in this environment:** a live push could not be completed
+  here because the browser's permission prompt cannot be accepted by automation. Encryption and VAPID
+  are verified against the RFC test vector and by decryption/signature checks.
+- **Admin settings are read-only:** emergency settings come from the environment. There is no audit
+  table (actions go to the application log), and admins can't create accounts in the UI (README
+  snippet, as before).
+- **No SMS.** Phone numbers stay unverified, stored only as preparation for a future SMS channel.
+
+### Exact current state
+- **Uncommitted:** M11.5 and M12, both on top of `f09cece`.
+- **Migration head:** `f3b8d2e6a417`.
+- **Hardware:** physical hardware is still not built or validated.
+
+### Next milestone
+**H01 — ESP32 Hardware Foundation** (not started).
+
+### 🏷️ Status
+**M12 — ADMIN CONTROL + EMERGENCY WEB PUSH COMPLETE · THREE NOTIFICATION LAYERS · NO SMS · NO HARDWARE CHANGES**

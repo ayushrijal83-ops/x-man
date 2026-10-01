@@ -181,6 +181,10 @@ cp .env.example .env           # copy .env.example on Windows
 | `AI_MODEL` | Ollama model tag | `qwen2.5:0.5b` |
 | `OLLAMA_URL` | Ollama endpoint | `http://localhost:11434` |
 | `FLASK_ENV` | `development` / `production` | `development` |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push server keys (generate with `flask push-keys`; keep the private key secret). Unset = browser push off, in-app and in-website alerts still work | unset |
+| `VAPID_SUBJECT` | Contact sent to push services | `mailto:admin@x-man.local` |
+| `EMERGENCY_MIN_SEVERITY` | Lowest hazard severity that raises the in-website alarm and an emergency push | `high` |
+| `WEB_PUSH_ALLOWED_HOSTS` | Push services the server may POST to (comma-separated) | FCM, Mozilla, Windows, Apple |
 
 ### 3. Create the database
 
@@ -232,6 +236,11 @@ with app.app_context():
 ```
 
 For a throwaway local demo only, `AUTHORITY_SELF_REGISTRATION=true` re-enables `/auth/authority/register`.
+
+**Administrators** use the same snippet with `role='admin'` (no `authority_id`). Admins sign in at
+`/auth/authority/login` and manage citizens, authority accounts (enable/disable, temporary-password reset)
+and emergency notification status at `/admin`. Citizens register themselves at `/auth/register`
+(name, username, email, Nepal mobile, password, district and permanent address; current location is optional).
 
 **Production:** `FLASK_ENV=production` refuses to start unless `SECRET_KEY` is set to your own random
 value (the development default would let anyone forge sessions and CSRF tokens). Production also sends
@@ -436,6 +445,20 @@ GET      /monitoring                          dashboard page (any logged-in user
 GET      /api/dashboard?district_id=<id>      JSON for the page; district_id is admin-only
 ```
 
+**Admin control center** (admin role only; everything else gets 403)
+```
+GET      /admin  /admin/citizens  /admin/citizens/<id>  /admin/authorities  /admin/authorities/<id>
+GET      /admin/notifications
+POST     /admin/users/<id>/status  /admin/users/<id>/reset-password
+```
+
+**Emergency alerts** (own account only)
+```
+GET      /notifications/settings  /sw.js
+GET      /api/push/config  /api/emergency/active
+POST     /api/push/subscribe  /api/push/unsubscribe  /api/push/state  /api/push/test  /api/emergency/sound
+```
+
 **Authority panel** (separate login)
 ```
 GET      /authority/dashboard  /authority/complaints  /authority/roads
@@ -483,6 +506,9 @@ Stated plainly, because a demo that overstates itself is worse than one that doe
 - **Newari and Maithili strings need a native speaker's review** — they are reasonable approximations, not verified translations.
 - **Travel routing is name and district matching**, not a real path search over the road network.
 - **Lucide and Google Fonts load from CDN**, so the UI needs network access for icons and fonts. Vendor them locally before an offline demo.
+- **Browser push is best-effort.** X-MAN can deliver browser push emergency notifications outside the website when the user's browser/device supports Web Push, permission is granted, and the device has network connectivity. It needs HTTPS (or localhost); the browser and OS decide whether a notification is shown and whether it makes a sound. Pushes are sent synchronously in the request that changes the hazard.
+- **The in-website alarm needs a user interaction first** (browser autoplay policy); until then the alert shows a "Play alarm" button instead of sounding.
+- **No SMS.** Mobile numbers are stored (unverified) as preparation only.
 - **`geo_routes.py` is dead code** — it defines `/geo/*` endpoints but the blueprint is never registered.
 
 ---

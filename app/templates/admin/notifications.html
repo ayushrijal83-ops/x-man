@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Notification status'|t }} - {{ 'Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="shield"></i> {{ 'Admin Control Center'|t }}</span>
+            <h1>{{ 'Notification status'|t }}</h1>
+            <p class="page-sub">{{ 'Emergency notification settings, push subscriptions and recent delivery.'|t }}</p>
+        </div>
+    </div>
+    {{ aui.tabs('notifications') }}
+
+    <div class="grid grid-4" style="margin-bottom:16px;">
+        <div class="stat-card"><i data-lucide="bell-ring"></i><div class="stat-value">{{ s.push_users }}</div><div class="stat-label">{{ 'Push-enabled users'|t }}</div></div>
+        <div class="stat-card"><i data-lucide="smartphone"></i><div class="stat-value">{{ s.subscriptions_enabled }}</div><div class="stat-label">{{ 'Active subscriptions'|t }}</div>
+            <div class="stat-note">{{ s.subscriptions_failing }} {{ 'with recent failures'|t }}</div></div>
+        <div class="stat-card"><i data-lucide="circle-off"></i><div class="stat-value">{{ s.subscriptions_disabled }}</div><div class="stat-label">{{ 'Disabled subscriptions'|t }}</div>
+            <div class="stat-note">{{ 'expired or repeatedly failing'|t }}</div></div>
+        <div class="stat-card"><i data-lucide="bell"></i><div class="stat-value">{{ s.notifications_24h }}</div><div class="stat-label">{{ 'Notifications (24 h)'|t }}</div></div>
+    </div>
+
+    <div class="bento">
+        <section class="card span-6" aria-labelledby="h-settings">
+            <h2 class="card-title" id="h-settings"><i data-lucide="sliders-horizontal"></i> {{ 'Emergency notification settings'|t }}</h2>
+            <dl class="kv">
+                <dt>{{ 'Web Push'|t }}</dt><dd>{% if s.push_configured %}<span class="badge badge-success"><i data-lucide="circle-check"></i>{{ 'Configured'|t }}</span>{% else %}<span class="badge badge-warning"><i data-lucide="circle-alert"></i>{{ 'Not configured: set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY'|t }}</span>{% endif %}</dd>
+                <dt>{{ 'VAPID contact'|t }}</dt><dd>{{ s.subject }}</dd>
+                <dt>{{ 'Emergency threshold'|t }}</dt><dd>{{ ui.sev(s.min_severity) }} {{ 'and above'|t }}</dd>
+                <dt>{{ 'Allowed push services'|t }}</dt><dd>{{ s.allowed_hosts|join(', ') }}</dd>
+                <dt>{{ 'Users with sound off'|t }}</dt><dd>{{ s.sound_off }}</dd>
+                <dt>{{ 'SMS'|t }}</dt><dd>{{ 'Not implemented'|t }}</dd>
+            </dl>
+            <p class="meta" style="margin-top:12px;">{{ 'Settings come from the server environment and are read-only here. The VAPID private key is never shown.'|t }}</p>
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-states">
+            <h2 class="card-title" id="h-states"><i data-lucide="users"></i> {{ 'Emergency alert permission (all users)'|t }}</h2>
+            <div class="list">
+                {% for state in states %}
+                <div class="list-item"><div class="grow">{{ aui.alert_state(state) }}</div><strong>{{ s.alert_states[state] }}</strong></div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-recent">
+            <h2 class="card-title" id="h-recent"><i data-lucide="history"></i> {{ 'Recent hazard notifications'|t }}</h2>
+            {% if s.recent %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'Hazard'|t }}</th><th scope="col">{{ 'Event'|t }}</th><th scope="col">{{ 'Severity'|t }}</th>
+                    <th scope="col">{{ 'Layers'|t }}</th><th scope="col">{{ 'Recipients'|t }}</th><th scope="col">{{ 'Sent'|t }}</th></tr></thead>
+                <tbody>{% for r in s.recent %}
+                <tr>
+                    <td>{% if r.incident %}<a href="/hazards/{{ r.incident.id }}/response">{{ r.incident.title or ui.hazard_name(r.incident.event_type) }}</a>{% else %}—{% endif %}</td>
+                    <td>{{ r.type.replace('hazard_', '')|t }}</td>
+                    <td>{{ ui.sev(r.severity) }}</td>
+                    <td>{{ 'In-app'|t }}{% if r.emergency %} + {{ 'website alert'|t }}{% endif %}{% if r.pushed %} + {{ 'push'|t }}{% endif %}</td>
+                    <td>{{ r.recipients }}</td>
+                    <td>{{ aui.when(r.at) }}</td>
+                </tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {% else %}{{ ui.empty('bell', 'No hazard notifications yet.') }}{% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}

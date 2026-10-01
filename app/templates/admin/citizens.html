@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Citizens'|t }} - {{ 'Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="shield"></i> {{ 'Admin Control Center'|t }}</span>
+            <h1>{{ 'Citizens'|t }}{% if selected %} · {{ selected.name }}{% elif f.district_id == 0 %} · {{ 'No district'|t }}{% endif %}</h1>
+            <p class="page-sub">{{ 'District-wise citizen directory. Counts come from the database.'|t }}</p>
+        </div>
+    </div>
+    {{ aui.tabs('citizens') }}
+
+    <div class="bento">
+        <section class="card span-4" aria-labelledby="h-districts">
+            <h2 class="card-title" id="h-districts"><i data-lucide="map"></i> {{ 'By district'|t }}</h2>
+            <nav class="district-list" aria-label="{{ 'Districts'|t }}">
+                <a href="{{ url_for('admin.citizens') }}" {% if f.district_id is none %}aria-current="true"{% endif %}>
+                    <span>{{ 'All districts'|t }}</span><span>{{ district_counts|sum(attribute='citizens') }}</span></a>
+                {% for row in district_counts %}
+                {% set did = row.district.id if row.district else 0 %}
+                <a href="{{ url_for('admin.citizens', district_id=did) }}" {% if f.district_id == did %}aria-current="true"{% endif %}>
+                    <span>{{ row.district.name if row.district else 'No district'|t }}</span>
+                    <span title="{{ 'citizens / push enabled'|t }}">{{ row.citizens }}{% if row.push_enabled %} · <i data-lucide="bell-ring" class="icon-sm" aria-label="{{ 'push enabled'|t }}"></i>{{ row.push_enabled }}{% endif %}</span></a>
+                {% else %}
+                <p class="meta">{{ 'No citizens yet.'|t }}</p>
+                {% endfor %}
+            </nav>
+        </section>
+
+        <section class="card span-8" aria-labelledby="h-list">
+            <h2 class="card-title" id="h-list"><i data-lucide="users"></i> {{ pagination.total }} {{ 'citizens'|t }}</h2>
+            <form method="get" class="filter-bar" role="search">
+                <div class="form-group"><label for="q">{{ 'Search'|t }}</label>
+                    <input id="q" name="q" class="form-input" value="{{ f.q }}" placeholder="{{ 'Name, username or email'|t }}"></div>
+                <div class="form-group"><label for="district_id">{{ 'District'|t }}</label>
+                    <select id="district_id" name="district_id" class="form-input">
+                        <option value="">{{ 'All districts'|t }}</option>
+                        <option value="0" {% if f.district_id == 0 %}selected{% endif %}>{{ 'No district'|t }}</option>
+                        {% for d in districts %}<option value="{{ d.id }}" {% if f.district_id == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+                    </select></div>
+                <div class="form-group"><label for="status">{{ 'Account status'|t }}</label>
+                    <select id="status" name="status" class="form-input">
+                        <option value="">{{ 'Any'|t }}</option>
+                        <option value="active" {% if f.status == 'active' %}selected{% endif %}>{{ 'Active'|t }}</option>
+                        <option value="disabled" {% if f.status == 'disabled' %}selected{% endif %}>{{ 'Disabled'|t }}</option>
+                    </select></div>
+                <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> {{ 'Filter'|t }}</button>
+            </form>
+
+            {% if pagination.items %}
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th scope="col">{{ 'Name'|t }}</th><th scope="col">{{ 'District'|t }}</th><th scope="col">{{ 'Account'|t }}</th>
+                        <th scope="col">{{ 'Notification permission'|t }}</th><th scope="col">{{ 'Emergency push'|t }}</th><th scope="col">{{ 'Registered'|t }}</th></tr></thead>
+                    <tbody>
+                    {% for u in pagination.items %}
+                    <tr>
+                        <td><a href="{{ url_for('admin.citizen_detail', user_id=u.id) }}">{{ u.full_name or u.username }}</a><div class="meta">@{{ u.username }}</div></td>
+                        <td>{{ u.district.name if u.district else '—' }}</td>
+                        <td>{{ aui.account_status(u) }}</td>
+                        <td>{{ aui.alert_state(u.emergency_alert_state) }}</td>
+                        <td>{{ aui.push(push_counts.get(u.id, 0) if u.emergency_alert_state == 'granted' else 0) }}</td>
+                        <td>{{ aui.when(u.created_at) }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {{ aui.pager(pagination, 'admin.citizens', f) }}
+            {% else %}{{ ui.empty('users', 'No citizens match these filters.') }}{% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}

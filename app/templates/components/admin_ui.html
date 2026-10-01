@@ -1,0 +1,45 @@
+{# M12 admin helpers. Import with: {% import "components/admin_ui.html" as aui with context %} #}
+
+{% macro tabs(active) -%}
+<nav class="filter-bar" aria-label="{{ 'Admin sections'|t }}">
+    {% for key, href, icon, label in [('home', '/admin', 'shield', 'Overview'), ('citizens', '/admin/citizens', 'users', 'Citizens'),
+                                      ('authorities', '/admin/authorities', 'landmark', 'Authorities'),
+                                      ('notifications', '/admin/notifications', 'radio-tower', 'Notification status')] %}
+    <a href="{{ href }}" class="btn btn-sm {{ 'btn-primary' if key == active else 'btn-secondary' }}" {% if key == active %}aria-current="page"{% endif %}><i data-lucide="{{ icon }}"></i> {{ label|t }}</a>
+    {% endfor %}
+</nav>
+{%- endmacro %}
+
+{% macro account_status(user) -%}
+{% if user.is_active %}<span class="badge badge-success"><i data-lucide="circle-check" aria-hidden="true"></i>{{ 'Active'|t }}</span>
+{% else %}<span class="badge badge-danger"><i data-lucide="ban" aria-hidden="true"></i>{{ 'Disabled'|t }}</span>{% endif %}
+{%- endmacro %}
+
+{% set ALERT_STATE = {'not_requested': ('circle-dashed', 'Not requested', 'neutral'), 'granted': ('bell-ring', 'Granted', 'success'),
+                      'denied': ('bell-off', 'Denied', 'warning'), 'unsupported': ('circle-slash', 'Unsupported', 'neutral'),
+                      'disabled_by_user': ('bell-off', 'Turned off', 'neutral')} %}
+{% macro alert_state(state) -%}
+{% set icon, label, kind = ALERT_STATE.get(state, ('circle', state, 'neutral')) %}
+<span class="badge badge-{{ kind }}"><i data-lucide="{{ icon }}" aria-hidden="true"></i>{{ label|t }}</span>
+{%- endmacro %}
+
+{% macro push(count) -%}
+{% if count %}<span class="badge badge-success"><i data-lucide="smartphone" aria-hidden="true"></i>{{ 'Push on'|t }} · {{ count }}</span>
+{% else %}<span class="badge badge-neutral"><i data-lucide="smartphone" aria-hidden="true"></i>{{ 'Push off'|t }}</span>{% endif %}
+{%- endmacro %}
+
+{# keeps the current filters when paging #}
+{% macro pager(pagination, endpoint, f) -%}
+{% if pagination.pages > 1 %}
+<nav class="pager" aria-label="{{ 'Pagination'|t }}">
+    <span class="meta">{{ 'Page'|t }} {{ pagination.page }} / {{ pagination.pages }} · {{ pagination.total }} {{ 'total'|t }}</span>
+    <span style="display:flex; gap:8px;">
+        {% set args = {'q': f.q or None, 'status': f.status, 'district_id': f.district_id} %}
+        {% if pagination.has_prev %}<a class="btn btn-sm btn-secondary" rel="prev" href="{{ url_for(endpoint, page=pagination.prev_num, **args) }}">← {{ 'Previous'|t }}</a>{% endif %}
+        {% if pagination.has_next %}<a class="btn btn-sm btn-secondary" rel="next" href="{{ url_for(endpoint, page=pagination.next_num, **args) }}">{{ 'Next'|t }} →</a>{% endif %}
+    </span>
+</nav>
+{% endif %}
+{%- endmacro %}
+
+{% macro when(dt) -%}{{ dt.strftime('%Y-%m-%d %H:%M') if dt else '—' }}{%- endmacro %}

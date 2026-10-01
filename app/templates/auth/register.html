@@ -2,43 +2,136 @@
 
 {% block title %}{{ 'Create account'|t }} - {{ t('app_name') }}{% endblock %}
 
+{% macro field_error(name) -%}
+{% if errors.get(name) %}<p class="field-error" id="{{ name }}-error"><i data-lucide="circle-alert" class="icon-sm"></i>{{ errors[name]|t }}</p>{% endif %}
+{%- endmacro %}
+{% macro invalid(name) -%}{% if errors.get(name) %}aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}{%- endmacro %}
+
 {% block content %}
-<div class="auth-container">
-    <div class="auth-card">
-        <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:1rem;">{% include "components/lang_selector.html" %}<button type="button" class="theme-toggle" aria-label="{{ 'Switch to dark mode'|t }}" aria-pressed="false"><i data-lucide="moon"></i></button></div>
-        <h2 class="auth-title">{{ 'Create Account'|t }}</h2>
-        <p class="auth-subtitle">{{ 'Join your district on NepalSathi'|t }}</p>
-        
-        <form method="POST">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            
-            <div class="form-group">
-                <label for="username">{{ 'Username'|t }}</label>
-                <input type="text" id="username" name="username" required 
-                       class="form-input" placeholder="{{ 'Choose a username'|t }}">
+<div class="auth-shell">
+    {% set photo_name = 'valley-kathmandu.jpg' %}
+    {% include "components/auth_visual.html" %}
+    <main class="auth-main" id="main-content" tabindex="-1">
+        <div class="auth-card wide">
+            <div class="auth-top">{% include "components/lang_selector.html" %}<button type="button" class="theme-toggle" aria-label="{{ 'Switch to dark mode'|t }}" aria-pressed="false"><i data-lucide="moon"></i></button></div>
+            <span class="eyebrow"><i data-lucide="user-plus"></i> {{ 'Citizen account'|t }}</span>
+            <h1 class="auth-title">{{ 'Create Account'|t }}</h1>
+            <p class="auth-subtitle">{{ 'Join your district on NepalSathi'|t }}</p>
+
+            {% if errors %}
+            <div class="form-errors" role="alert">
+                <strong>{{ 'Please fix the highlighted fields.'|t }}</strong>
+                {% if errors.get('form') %}<p>{{ errors['form']|t }}</p>{% endif %}
             </div>
-            
-            <div class="form-group">
-                <label for="email">{{ 'Email'|t }}</label>
-                <input type="email" id="email" name="email" required 
-                       class="form-input" placeholder="{{ 'Enter your email'|t }}">
-            </div>
-            
-            <div class="form-group">
-                <label for="password">{{ 'Password'|t }}</label>
-                <input type="password" id="password" name="password" required 
-                       class="form-input" placeholder="{{ 'Create a password'|t }}" minlength="6">
-            </div>
-            
-            <button type="submit" class="btn btn-primary btn-block">
-                {{ 'Register'|t }}
-            </button>
-        </form>
-        
-        <p class="auth-footer">
-            {{ 'Already have an account?'|t }} 
-            <a href="/auth/login">{{ 'Login here'|t }}</a>
-        </p>
-    </div>
+            {% endif %}
+
+            <form method="POST" data-submit-busy novalidate>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <h2 class="form-section-title">{{ 'You'|t }}</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="full_name">{{ 'Full name'|t }}</label>
+                        <input type="text" id="full_name" name="full_name" required maxlength="120" autocomplete="name"
+                               class="form-input" value="{{ form.get('full_name', '') }}" {{ invalid('full_name') }}>
+                        {{ field_error('full_name') }}
+                    </div>
+                    <div class="form-group">
+                        <label for="username">{{ 'Username'|t }}</label>
+                        <input type="text" id="username" name="username" required minlength="3" maxlength="30"
+                               pattern="[A-Za-z0-9_.\-]{3,30}" autocomplete="username" autocapitalize="none"
+                               class="form-input" value="{{ form.get('username', '') }}" aria-describedby="username-hint" {{ invalid('username') }}>
+                        <p class="form-hint" id="username-hint">{{ '3-30 letters, digits, dots, dashes or underscores'|t }}</p>
+                        {{ field_error('username') }}
+                    </div>
+                </div>
+
+                <h2 class="form-section-title">{{ 'Contact'|t }}</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="email">{{ 'Email'|t }}</label>
+                        <input type="email" id="email" name="email" required maxlength="120" autocomplete="email"
+                               class="form-input" value="{{ form.get('email', '') }}" {{ invalid('email') }}>
+                        {{ field_error('email') }}
+                    </div>
+                    <div class="form-group">
+                        <label for="mobile">{{ 'Mobile number'|t }}</label>
+                        <input type="tel" id="mobile" name="mobile" required inputmode="tel" autocomplete="tel"
+                               maxlength="20" placeholder="98XXXXXXXX" class="form-input"
+                               value="{{ form.get('mobile', '') }}" aria-describedby="mobile-hint" {{ invalid('mobile') }}>
+                        <p class="form-hint" id="mobile-hint">{{ 'Nepal mobile, or +country code. Kept private; for future emergency SMS.'|t }}</p>
+                        {{ field_error('mobile') }}
+                    </div>
+                </div>
+
+                <h2 class="form-section-title">{{ 'Password'|t }}</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="password">{{ 'Password'|t }}</label>
+                        <div class="password-wrap">
+                            <input type="password" id="password" name="password" required minlength="8"
+                                   autocomplete="new-password" class="form-input" aria-describedby="password-hint" {{ invalid('password') }}>
+                            <button type="button" class="btn btn-ghost btn-sm" data-toggle-password="password" aria-controls="password" aria-pressed="false">{{ 'Show'|t }}</button>
+                        </div>
+                        <p class="form-hint" id="password-hint">{{ 'At least 8 characters'|t }}</p>
+                        {{ field_error('password') }}
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm_password">{{ 'Confirm password'|t }}</label>
+                        <input type="password" id="confirm_password" name="confirm_password" required minlength="8"
+                               autocomplete="new-password" class="form-input" {{ invalid('confirm_password') }}>
+                        {{ field_error('confirm_password') }}
+                    </div>
+                </div>
+
+                <h2 class="form-section-title">{{ 'Where you live'|t }}</h2>
+                <div class="form-group">
+                    <label for="district_id">{{ 'District'|t }}</label>
+                    <select id="district_id" name="district_id" required {{ invalid('district_id') }}>
+                        <option value="">{{ 'Choose your district'|t }}</option>
+                        {% for d in districts %}
+                        <option value="{{ d.id }}" {% if form.get('district_id') == d.id|string %}selected{% endif %}>{{ d.name }}</option>
+                        {% endfor %}
+                    </select>
+                    {{ field_error('district_id') }}
+                </div>
+                <div class="form-group">
+                    <label for="permanent_address">{{ 'Permanent address'|t }}</label>
+                    <textarea id="permanent_address" name="permanent_address" required maxlength="300" rows="2"
+                              autocomplete="street-address" class="form-input" {{ invalid('permanent_address') }}>{{ form.get('permanent_address', '') }}</textarea>
+                    {{ field_error('permanent_address') }}
+                </div>
+
+                <h2 class="form-section-title">{{ 'Current location'|t }} <span class="opt">({{ 'optional'|t }})</span></h2>
+                <div class="location-box" data-location-widget>
+                    <p class="form-hint" style="margin-top:0">{{ 'Share where you are now so alerts can reach you. Your browser will ask for permission. This is separate from your permanent address.'|t }}</p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+                        <button type="button" class="btn btn-secondary" data-locate><i data-lucide="locate-fixed"></i> {{ 'Use my current location'|t }}</button>
+                        <button type="button" class="btn btn-ghost" data-clear-location {% if not form.get('current_latitude') %}hidden{% endif %}>{{ 'Remove location'|t }}</button>
+                    </div>
+                    <p class="location-status" data-location-status role="status" aria-live="polite"
+                       {% if form.get('current_latitude') %}data-state="ok"{% endif %}>{% if form.get('current_latitude') %}{{ 'Location detected'|t }}: {{ form.get('current_latitude') }}, {{ form.get('current_longitude') }}{% endif %}</p>
+                    <input type="hidden" name="current_latitude" value="{{ form.get('current_latitude', '') }}" data-lat>
+                    <input type="hidden" name="current_longitude" value="{{ form.get('current_longitude', '') }}" data-lon>
+                    {{ field_error('current_location') }}
+                    <div class="form-group" style="margin:12px 0 0;">
+                        <label for="current_address">{{ 'Describe where you are now'|t }} <span class="opt">({{ 'optional'|t }})</span></label>
+                        <input type="text" id="current_address" name="current_address" maxlength="300" class="form-input"
+                               value="{{ form.get('current_address', '') }}" placeholder="{{ 'e.g., staying with family near Bardibas bus park'|t }}" {{ invalid('current_address') }}>
+                        {{ field_error('current_address') }}
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block btn-lg" style="margin-top:24px;"><span class="btn-label">{{ 'Register'|t }}</span></button>
+            </form>
+
+            <p class="auth-footer">{{ 'Already have an account?'|t }} <a href="/auth/login">{{ 'Login here'|t }}</a></p>
+        </div>
+    </main>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "components/auth_form_js.html" %}
+{% include "components/location_js.html" %}
 {% endblock %}

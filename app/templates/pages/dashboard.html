@@ -1,181 +1,173 @@
 {% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% from "components/photo.html" import photo, photo_credit with context %}
 
-{% block title %}{{ 'Dashboard'|t }} - {{ t('app_name') }}{% endblock %}
+{% block title %}{{ t('dashboard') }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
+{% set o = home.overview %}
 
 <div class="container">
-    <h1>{{ 'Welcome,'|t }} {{ current_user.username }}! <i data-lucide="mountain-snow"></i></h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">
-        {% if user_district %}
-            {{ 'Your District:'|t }} <strong>{{ user_district.name }}</strong> ({{ user_district.province }} {{ 'Province'|t }})
-        {% else %}
-            <a href="/districts">{{ 'Select your district'|t }}</a>
-        {% endif %}
-    </p>
-    
-    <!-- Stats Grid -->
-    <div class="grid grid-4" style="margin-bottom: 2rem;">
-        <div class="stat-card">
-            <div class="stat-value">{{ roads|length }}</div>
-            <div class="stat-label">{{ 'Road Segments'|t }}</div>
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="layout-dashboard"></i> {{ 'Your dashboard'|t }}</span>
+            <h1>{{ 'Namaste'|t }}, {{ current_user.full_name or current_user.username }}</h1>
+            <p class="page-sub">
+                {% if home.district %}{{ 'Your District:'|t }} <strong>{{ home.district.name }}</strong> · {{ home.district.province }} {{ 'Province'|t }}
+                {% else %}{{ 'Choose your district to see local hazards, rivers and roads.'|t }}{% endif %}
+            </p>
         </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ rivers|length }}</div>
-            <div class="stat-label">{{ 'Rivers'|t }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ projects|length }}</div>
-            <div class="stat-label">{{ 'Projects'|t }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ recent_posts|length }}</div>
-            <div class="stat-label">{{ 'Recent Posts'|t }}</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="/report" class="btn btn-primary"><i data-lucide="camera"></i> {{ 'Report a Hazard'|t }}</a>
+            {% if home.district %}<a href="/district/{{ home.district.id }}" class="btn btn-secondary"><i data-lucide="map"></i> {{ 'District details'|t }}</a>{% endif %}
         </div>
     </div>
-    
-    <div class="grid grid-2">
-        <!-- Road Status -->
-        <div class="card">
-            <h2 class="card-title"><i data-lucide="route"></i> {{ 'Road Status'|t }}{% if roads_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ 'Nationwide'|t }}</span>{% endif %}</h2>
-            {% if roads %}
-                {% for road in roads %}
-                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <strong>{{ road.name }}</strong>
-                            <div>
-                                <span class="status-badge status-{{ road.status }}">{{ road.status|t }}</span>
-                                <span class="status-badge status-{{ road.traffic_level }}">{{ road.traffic_level|t }}</span>
-                            </div>
-                        </div>
-                        <small style="color: var(--text-muted);">{{ road.from_location }} <i data-lucide="move-right" class="icon-sm"></i> {{ road.to_location }}</small>
+
+    {% if not home.district %}
+    <section class="card surface-dark" aria-labelledby="h-choose">
+        <h2 class="card-title" id="h-choose" style="color:#F8FAFC;"><i data-lucide="map-pin"></i> {{ 'Set your district'|t }}</h2>
+        <p>{{ 'Alerts and local information are based on your home district.'|t }}</p>
+        <form method="POST" action="/select-district" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; max-width:520px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="choose-district" class="sr-only">{{ 'District'|t }}</label>
+            <select id="choose-district" name="district_id" required style="flex:1; min-width:200px;">
+                <option value="">{{ 'Choose your district'|t }}</option>
+                {% for d in districts %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary">{{ 'Save'|t }}</button>
+        </form>
+    </section>
+    {% endif %}
+
+    <div class="bento">
+        {% include "components/emergency_optin.html" %}
+        {# ---------------- local status hero #}
+        <section class="card span-8 depth-scene" aria-labelledby="h-status">
+            <h2 class="card-title" id="h-status"><i data-lucide="shield-alert"></i> {{ 'Local hazard status'|t }}</h2>
+            {% if o %}
+                {% if o.hazards %}
+                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                    <div>
+                        <div class="stat-value">{{ o.hazards|length }}</div>
+                        <div class="stat-label">{{ 'Active hazards affecting'|t }} {{ home.district.name }}</div>
                     </div>
-                {% endfor %}
-                <a href="/roads/status" class="btn btn-outline btn-block" style="margin-top: 1rem;">{{ 'View All Roads'|t }}</a>
+                    <div>{{ ui.sev(o.highest_severity) }} <span class="form-hint">{{ 'highest severity'|t }}</span></div>
+                </div>
+                <p class="meta" style="margin-top:12px;">
+                    {% for level, n in o.hazard_severity.items() if n %}<span class="chip">{{ ui.sev(level) }} × {{ n }}</span>{% endfor %}
+                </p>
+                {% else %}
+                <div style="display:flex; align-items:center; gap:12px;">
+                    {{ ui.sev('normal') }}
+                    <p><strong>{{ 'No active hazards in your district right now.'|t }}</strong></p>
+                </div>
+                {% endif %}
             {% else %}
-                <p>{{ 'No road data available.'|t }}</p>
+                <p>{{ 'Set your district above to see its hazard status.'|t }}</p>
             {% endif %}
+            <p class="form-hint" style="margin-top:12px;"><i data-lucide="globe" class="icon-sm"></i> {{ 'Nationwide active hazards'|t }}: <strong>{{ home.nationwide_active }}</strong> · <a href="/monitoring">{{ 'Disaster Monitoring'|t }}</a></p>
+        </section>
+
+        <div class="span-4" style="display:grid; gap:16px;">
+            <a class="stat-card" href="/notifications" style="text-decoration:none;">
+                <i data-lucide="bell"></i>
+                <div class="stat-value">{{ home.unread }}</div>
+                <div class="stat-label">{{ 'Unread alerts'|t }}</div>
+            </a>
+            <a class="stat-card" href="/reports/mine" style="text-decoration:none;">
+                <i data-lucide="clipboard-list"></i>
+                <div class="stat-value">{{ home.my_report_total }}</div>
+                <div class="stat-label">{{ 'My photo reports'|t }}</div>
+                {% if home.my_report_total %}<div class="stat-note">{% for s, n in home.my_report_counts.items() %}{{ s|t }}: {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+            </a>
         </div>
-        
-        <!-- River Status -->
-        <div class="card">
-            <h2 class="card-title"><i data-lucide="waves"></i> {{ 'River Status'|t }}{% if rivers_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ 'Nationwide'|t }}</span>{% endif %}</h2>
-            {% if rivers %}
-                {% for river in rivers %}
-                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <strong>{{ river.name }}</strong>
-                            <span class="status-badge status-{{ river.status }}">{{ river.status|t }}</span>
-                        </div>
-                        <small style="color: var(--text-muted);">{{ 'Level:'|t }} {{ river.current_level|metres }} | {{ 'Danger:'|t }} {{ river.danger_level|metres }}</small>
+
+        {# ---------------- local hazards + map #}
+        <section class="card span-7" aria-labelledby="h-hazards">
+            <h2 class="card-title" id="h-hazards"><i data-lucide="triangle-alert"></i> {{ 'Active hazards in your district'|t }}</h2>
+            {% if o and o.hazards %}
+            <div class="list">{% for h in o.hazards[:6] %}{{ ui.hazard_row(h) }}{% endfor %}</div>
+            {% else %}
+            <div class="empty-state">
+                {{ photo('hills-rice-terraces.jpg', 'empty-photo') }}
+                <p><strong>{{ 'Nothing to report here.'|t }}</strong></p>
+                <p>{{ 'When a flood, landslide, road damage or abnormal ground motion is detected in your district, it appears here.'|t }}</p>
+                {{ photo_credit('hills-rice-terraces.jpg') }}
+            </div>
+            {% endif %}
+        </section>
+        <section class="card span-5" aria-labelledby="h-map">
+            <h2 class="card-title" id="h-map"><i data-lucide="map"></i> {{ 'Local map'|t }}</h2>
+            {{ ui.hazard_map(o.map_points if o else [], 'home-map', 300) }}
+        </section>
+
+        {# ---------------- alerts + my reports #}
+        <section class="card span-6" aria-labelledby="h-alerts">
+            <h2 class="card-title" id="h-alerts"><i data-lucide="bell-ring"></i> {{ 'Recent alerts'|t }} <a class="card-action" href="/notifications">{{ 'View all'|t }}</a></h2>
+            {% if home.alerts %}
+            <div class="list">
+                {% for n in home.alerts %}
+                <div class="list-item">
+                    <span class="icon-lg" style="color: var(--sev-{{ n.severity or 'low' }});"><i data-lucide="{{ 'bell-dot' if not n.is_read else 'bell' }}" aria-hidden="true"></i></span>
+                    <div class="grow">
+                        <h3>{{ n.title }}{% if not n.is_read %} <span class="badge badge-info">{{ 'unread'|t }}</span>{% endif %}</h3>
+                        <div class="meta">{% if n.severity %}{{ ui.sev(n.severity) }}{% endif %}<time datetime="{{ n.created_at.isoformat() }}Z">{{ n.created_at.strftime('%d %b %H:%M') }} UTC</time></div>
                     </div>
+                </div>
                 {% endfor %}
-                <a href="/rivers/status" class="btn btn-outline btn-block" style="margin-top: 1rem;">{{ 'View All Rivers'|t }}</a>
-            {% else %}
-                <p>{{ 'No river data available.'|t }}</p>
-            {% endif %}
-        </div>
-        
-        <!-- Development Projects -->
-        <div class="card">
-            <h2 class="card-title"><i data-lucide="building-2"></i> {{ 'Development Projects'|t }}{% if projects_local %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ user_district.name }}</span>{% else %}<span class="badge badge-neutral" style="margin-left:auto;font-size:10.5px;">{{ 'Nationwide'|t }}</span>{% endif %}</h2>
-            {% if projects %}
-                {% for project in projects %}
-                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <strong>{{ project.name }}</strong>
-                            <span class="status-badge status-{{ project.status }}">{{ project.status|t }}</span>
-                        </div>
-                        <div class="progress-bar" style="margin: 0.5rem 0;">
-                            <div class="progress-fill" style="width: {{ project.progress_percent }}%;"></div>
-                        </div>
-                        <small>{{ project.progress_percent }}% {{ 'complete'|t }}</small>
+            </div>
+            {% else %}{{ ui.empty('bell', 'No alerts yet.', 'You will be notified about hazards affecting your district.') }}{% endif %}
+        </section>
+        <section class="card span-6" aria-labelledby="h-reports">
+            <h2 class="card-title" id="h-reports"><i data-lucide="camera"></i> {{ 'My reports'|t }} <a class="card-action" href="/reports/mine">{{ 'View all'|t }}</a></h2>
+            {% if home.my_reports %}
+            <div class="list">
+                {% for r in home.my_reports %}
+                <div class="list-item">
+                    <span class="icon-lg" style="color: var(--brand-primary);">{{ ui.hazard_icon(r.hazard_type) }}</span>
+                    <div class="grow">
+                        <h3>{{ ui.hazard_name(r.hazard_type) }}{% if r.location %} · {{ r.location }}{% endif %}</h3>
+                        <div class="meta"><span class="status-badge status-{{ r.status }}">{{ r.status|t }}</span>
+                            {% if r.incident %}<span>{{ 'Hazard'|t }} #{{ r.incident.id }} {{ ui.status(r.incident.status) }}</span>{% endif %}
+                            <time datetime="{{ r.created_at.isoformat() }}Z">{{ r.created_at.strftime('%d %b %H:%M') }} UTC</time></div>
                     </div>
+                </div>
                 {% endfor %}
-                <a href="/projects/tracker" class="btn btn-outline btn-block" style="margin-top: 1rem;">{{ 'View All Projects'|t }}</a>
+            </div>
             {% else %}
-                <p>{{ 'No projects available.'|t }}</p>
+            {% call ui.empty('camera', 'You have not sent any reports yet.') %}<a href="/report" class="btn btn-secondary btn-sm">{{ 'Report a Hazard'|t }}</a>{% endcall %}
             {% endif %}
-        </div>
-        
-        <!-- Community Feed with AI Tags -->
-        <div class="card">
-            <h2 class="card-title"><i data-lucide="newspaper"></i> {{ 'Community Feed'|t }}</h2>
-            {% if recent_posts %}
-                {% for post in recent_posts %}
-                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <strong><i data-lucide="user"></i> {{ 'User #'|t }}{{  post.user_id }}</strong>
-                            <small style="color: var(--text-muted);">{{ post.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
-                        </div>
-                        
-                        <p style="margin: 0.5rem 0;">{{ post.content[:100] }}{% if post.content|length > 100 %}...{% endif %}</p>
-                        
-                        <!-- AI Tags -->
-                        <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.5rem;">
-                            <span class="status-badge status-{{ post.category or 'general' }}">{{ (post.category or 'general')|t }}</span>
-                            
-                            {% if post.is_ai_classified %}
-                                <span class="status-badge status-open" title="{{ 'Classified by AI'|t }}"><i data-lucide="bot"></i> AI</span>
-                            {% endif %}
-                            
-                            {% if post.severity %}
-                                <span class="status-badge status-{{ post.severity }}">{{ post.severity|t }}</span>
-                            {% endif %}
-                            
-                            {% if post.language == 'ne' %}
-                                <span class="status-badge" title="{{ 'Nepali'|t }}"><i data-lucide="mountain-snow"></i> नेपाली</span>
-                            {% elif post.language == 'en' %}
-                                <span class="status-badge" title="{{ 'English'|t }}">{{ 'English'|t }}</span>
-                            {% endif %}
-                            
-                            {% if post.location %}
-                                <span class="status-badge" title="{{ 'Location'|t }}"><i data-lucide="map-pin"></i> {{ post.location }}</span>
-                            {% endif %}
-                        </div>
-                        
-                        <div style="margin-top: 0.5rem;">
-                            <a href="/posts/{{ post.id }}" style="color: var(--brand-primary); text-decoration: none;">{{ 'View Post'|t }} <i data-lucide="arrow-right" class="icon-sm"></i></a>
-                        </div>
-                    </div>
+        </section>
+
+        {# ---------------- rivers + roads in the district #}
+        {% if o %}
+        <section class="card span-6" aria-labelledby="h-rivers">
+            <h2 class="card-title" id="h-rivers"><i data-lucide="waves"></i> {{ 'Rivers'|t }} · {{ home.district.name }}</h2>
+            {% if o.rivers %}
+            <div class="list">
+                {% for r in o.rivers[:6] %}
+                <div class="list-item"><div class="grow"><h3>{{ r.name }}</h3>
+                    <div class="meta"><span class="status-badge status-{{ r.status or 'unknown' }}">{{ (r.status or 'unknown')|t }}</span>
+                        {% if r.current_level is not none %}<span class="num">{{ r.current_level }} m{% if r.danger_level %} / {{ 'danger'|t }} {{ r.danger_level }} m{% endif %}</span>{% endif %}</div></div></div>
                 {% endfor %}
-                <a href="/posts/create" class="btn btn-primary btn-block" style="margin-top: 1rem;">{{ 'Create Post'|t }}</a>
-            {% else %}
-                <p>{{ 'No posts yet.'|t }}</p>
-                <a href="/posts/create" class="btn btn-primary" style="margin-top: 0.5rem;">{{ 'Create First Post'|t }}</a>
-            {% endif %}
-        </div>
+            </div>
+            {% else %}{{ ui.empty('waves', 'No rivers recorded for this district.') }}{% endif %}
+        </section>
+        <section class="card span-6" aria-labelledby="h-roads">
+            <h2 class="card-title" id="h-roads"><i data-lucide="route"></i> {{ 'Road Segments'|t }} · {{ home.district.name }}
+                {% if o.road_total %}<span class="card-action">{{ o.road_total }} {{ 'segments'|t }}</span>{% endif %}</h2>
+            {% if o.road_total %}
+            <p class="meta" style="margin-bottom:8px;">{% for s, n in o.road_status.items() %}<span class="status-badge status-{{ s }}">{{ s|t }}: {{ n }}</span>{% endfor %}</p>
+            <div class="list">
+                {% for r in o.roads[:5] %}<div class="list-item"><div class="grow"><h3>{{ r.name }}</h3><div class="meta"><span class="status-badge status-{{ r.status }}">{{ r.status|t }}</span>{% if r.traffic_level %}<span>{{ r.traffic_level|t }}</span>{% endif %}</div></div></div>{% endfor %}
+            </div>
+            <a href="/roads/status?district_id={{ home.district.id }}" class="btn btn-ghost btn-sm">{{ 'All roads'|t }}</a>
+            {% else %}{{ ui.empty('route', 'No road segments recorded for this district.') }}{% endif %}
+        </section>
+        {% endif %}
     </div>
 </div>
-
-<style>
-    .status-open { background: var(--success-bg); color: var(--success-text); }
-    .status-partial { background: var(--warning-bg); color: var(--warning-text); }
-    .status-blocked { background: var(--danger-bg); color: var(--danger-text); }
-    .status-normal { background: var(--success-bg); color: var(--success-text); }
-    .status-rising { background: var(--warning-bg); color: var(--warning-text); }
-    .status-flooding { background: var(--danger-bg); color: var(--danger-text); }
-    .status-low { background: var(--success-bg); color: var(--success-text); }
-    .status-medium { background: var(--warning-bg); color: var(--warning-text); }
-    .status-high { background: var(--danger-bg); color: var(--danger-text); }
-    .status-critical { background: var(--danger); color: white; }
-    .status-traffic { background: var(--warning-bg); color: var(--warning-text); }
-    .status-road_condition { background: var(--info-bg); color: var(--info-text); }
-    .status-weather { background: var(--info-bg); color: var(--info-text); }
-    .status-landslide { background: var(--danger-bg); color: var(--danger-text); }
-    .status-flood { background: var(--info-bg); color: var(--info-text); }
-    .status-emergency { background: var(--danger); color: white; }
-    .status-development { background: var(--success-bg); color: var(--success-text); }
-    .status-news { background: var(--bg-surface-hover); color: var(--text-secondary); }
-    .status-announcement { background: var(--warning-bg); color: var(--warning-text); }
-    .status-general { background: var(--bg-surface-hover); color: var(--text-secondary); }
-    .status-on_schedule { background: var(--success-bg); color: var(--success-text); }
-    .status-delayed { background: var(--warning-bg); color: var(--warning-text); }
-    .status-completed { background: var(--success-bg); color: var(--success-text); }
-    .status-pending { background: var(--warning-bg); color: var(--warning-text); }
-    .status-in_progress { background: var(--info-bg); color: var(--info-text); }
-    .status-resolved { background: var(--success-bg); color: var(--success-text); }
-    .status-rejected { background: var(--danger-bg); color: var(--danger-text); }
-</style>
 {% endblock %}
+
+{% block extra_js %}{{ ui.leaflet_assets() }}{% endblock %}

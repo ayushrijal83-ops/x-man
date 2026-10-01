@@ -10,7 +10,9 @@ road_bp = Blueprint('roads', __name__)
 @login_required
 def road_status():
     """Show live road status."""
-    district_id = request.args.get('district_id')
+    district_id = request.args.get('district_id', '').strip()
+    if not (district_id.isascii() and district_id.isdigit()):  # 'abc' used to be a 500
+        district_id = ''
     
     if district_id:
         roads = RoadSegment.query.filter_by(district_id=int(district_id)).all()

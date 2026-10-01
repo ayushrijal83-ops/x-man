@@ -1,0 +1,32 @@
+<script>
+(function () {
+    'use strict';
+    // show/hide password
+    document.querySelectorAll('[data-toggle-password]').forEach(function (button) {
+        var input = document.getElementById(button.dataset.togglePassword);
+        var showText = button.textContent.trim();
+        button.addEventListener('click', function () {
+            var hidden = input.type === 'password';
+            input.type = hidden ? 'text' : 'password';
+            button.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+            button.textContent = hidden ? {{ 'Hide'|t|tojson }} : showText;
+        });
+    });
+    // submission state: only once the browser accepts the form, so errors stay usable
+    document.querySelectorAll('form[data-submit-busy]').forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            var invalid = Array.prototype.find.call(form.elements, function (el) {
+                return el.willValidate && !el.checkValidity();
+            });
+            if (invalid) {
+                event.preventDefault();
+                invalid.setAttribute('aria-invalid', 'true');
+                invalid.focus();
+                return;
+            }
+            var submit = form.querySelector('[type="submit"]');
+            if (submit) { submit.disabled = true; submit.setAttribute('aria-busy', 'true'); }
+        });
+    });
+})();
+</script>

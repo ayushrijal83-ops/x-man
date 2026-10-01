@@ -1,28 +1,75 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'Districts'|t }} - {{ t('app_name') }}{% endblock %}
+{% block title %}{{ t('districts') }} - {{ t('app_name') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .district-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+    .district-link {
+        display: block; padding: 12px 14px; border-radius: var(--radius-md);
+        background: var(--bg-surface); border: 1px solid var(--border);
+        text-decoration: none; color: var(--text-primary);
+        transition: border-color .15s, transform .15s, box-shadow .15s;
+    }
+    .district-link:hover { border-color: var(--brand-primary); transform: translateY(-1px); box-shadow: var(--shadow-sm); color: var(--text-primary); }
+    .district-link small { display: block; }
+    .district-link.mine { border-color: var(--brand-primary); box-shadow: inset 0 0 0 1px var(--brand-primary); }
+</style>
+{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="mountain-snow"></i> {{ "Nepal's 77 Districts"|t }}</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">{{ 'Select your district to see local information'|t }}</p>
-    
-    {% for province, district_list in provinces.items() %}
-        <div class="card">
-            <h2 class="card-title">{{ province }} {{ 'Province'|t }}</h2>
-            <div class="grid grid-4">
-                {% for district in district_list %}
-                    <a href="/district/{{ district.id }}" style="text-decoration: none; color: inherit;">
-                        <div class="stat-card">
-                            <strong>{{ district.name }}</strong>
-                            <p style="font-size: 0.875rem; color: var(--text-muted);">{{ district.headquarters }}</p>
-                        </div>
-                    </a>
-                {% endfor %}
-            </div>
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="map"></i> {{ t('districts') }}</span>
+            <h1>{{ 'Districts of Nepal'|t }}</h1>
+            <p class="page-sub">{{ 'Select your district to see local information'|t }}</p>
         </div>
+        <div style="min-width:240px;">
+            <label for="district-filter" class="sr-only">{{ 'Find a district'|t }}</label>
+            <input type="search" id="district-filter" class="form-input" placeholder="{{ 'Find a district'|t }}" autocomplete="off">
+        </div>
+    </div>
+
+    {% for province, district_list in provinces.items() %}
+    <section class="card" data-province aria-labelledby="prov-{{ loop.index }}">
+        <h2 class="card-title" id="prov-{{ loop.index }}"><i data-lucide="landmark"></i> {{ province }} {{ 'Province'|t }}
+            <span class="card-action">{{ district_list|length }}</span></h2>
+        <div class="district-grid">
+            {% for district in district_list %}
+            <a href="/district/{{ district.id }}" class="district-link{% if district.id == current_user.district_id %} mine{% endif %}" data-name="{{ district.name|lower }}">
+                <strong>{{ district.name }}</strong>
+                <small>{% if district.id == current_user.district_id %}<i data-lucide="house" class="icon-sm"></i> {{ 'Your district'|t }}{% else %}{{ district.headquarters or '' }}{% endif %}</small>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
     {% endfor %}
+    <p class="empty-state" data-no-match hidden>{{ 'No district matches that name.'|t }}</p>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var input = document.getElementById('district-filter');
+    var none = document.querySelector('[data-no-match]');
+    input.addEventListener('input', function () {
+        var q = input.value.trim().toLowerCase(), shown = 0;
+        document.querySelectorAll('[data-province]').forEach(function (section) {
+            var visible = 0;
+            section.querySelectorAll('.district-link').forEach(function (a) {
+                var match = !q || a.dataset.name.indexOf(q) !== -1;
+                a.hidden = !match;
+                visible += match ? 1 : 0;
+            });
+            section.hidden = visible === 0;
+            shown += visible;
+        });
+        none.hidden = shown !== 0;
+    });
+})();
+</script>
 {% endblock %}

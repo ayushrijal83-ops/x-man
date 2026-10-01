@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Admin Control Center'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="shield"></i> {{ 'Administrator'|t }}</span>
+            <h1>{{ 'Admin Control Center'|t }}</h1>
+            <p class="page-sub">{{ 'Accounts, authorities and emergency notification delivery across all districts.'|t }}</p>
+        </div>
+        <a href="/monitoring" class="btn btn-primary"><i data-lucide="activity"></i> {{ 'Disaster Monitoring'|t }}</a>
+    </div>
+    {{ aui.tabs('home') }}
+
+    <div class="grid grid-4" style="margin-bottom:16px;">
+        <a class="stat-card tilt" href="/admin/authorities" style="text-decoration:none; color:inherit;"><i data-lucide="landmark"></i>
+            <div class="stat-value">{{ o.authorities }}</div><div class="stat-label">{{ 'Authorities'|t }}</div>
+            <div class="stat-note">{{ o.authority_accounts }} {{ 'authority accounts'|t }}</div></a>
+        <a class="stat-card tilt" href="/admin/citizens" style="text-decoration:none; color:inherit;"><i data-lucide="users"></i>
+            <div class="stat-value">{{ o.citizens }}</div><div class="stat-label">{{ 'Citizens'|t }}</div>
+            <div class="stat-note">{{ o.disabled_accounts }} {{ 'disabled accounts'|t }}</div></a>
+        <a class="stat-card tilt" href="/monitoring" style="text-decoration:none; color:inherit;"><i data-lucide="siren"></i>
+            <div class="stat-value">{{ o.active_hazards }}</div><div class="stat-label">{{ 'Active hazards'|t }}</div>
+            <div class="stat-note">{{ o.districts }} {{ 'districts'|t }}</div></a>
+        <a class="stat-card tilt" href="/admin/notifications" style="text-decoration:none; color:inherit;"><i data-lucide="bell-ring"></i>
+            <div class="stat-value">{{ o.push_users }}</div><div class="stat-label">{{ 'Push-enabled users'|t }}</div>
+            <div class="stat-note">{{ o.active_subscriptions }} {{ 'active subscriptions'|t }}</div></a>
+    </div>
+
+    <div class="bento">
+        <section class="card span-7" aria-labelledby="h-emerg">
+            <h2 class="card-title" id="h-emerg"><i data-lucide="triangle-alert"></i> {{ 'Recent emergency events'|t }}</h2>
+            {% if o.recent_emergencies %}
+            <div class="list">
+                {% for h in o.recent_emergencies %}{{ ui.hazard_row(h, '/hazards/' ~ h.id ~ '/response') }}{% endfor %}
+            </div>
+            {% else %}{{ ui.empty('shield-check', 'No emergency-level hazards recorded.') }}{% endif %}
+        </section>
+        <section class="card span-5" aria-labelledby="h-delivery">
+            <h2 class="card-title" id="h-delivery"><i data-lucide="radio-tower"></i> {{ 'Notification delivery'|t }}</h2>
+            <dl class="kv">
+                <dt>{{ 'In-app notifications'|t }}</dt><dd><span class="badge badge-success"><i data-lucide="circle-check"></i>{{ 'Active'|t }}</span></dd>
+                <dt>{{ 'In-website emergency alert'|t }}</dt><dd><span class="badge badge-success"><i data-lucide="circle-check"></i>{{ 'Active'|t }}</span></dd>
+                <dt>{{ 'Web Push'|t }}</dt><dd>{% if o.push_configured %}<span class="badge badge-success"><i data-lucide="circle-check"></i>{{ 'Configured'|t }}</span>{% else %}<span class="badge badge-warning"><i data-lucide="circle-alert"></i>{{ 'Not configured'|t }}</span>{% endif %}</dd>
+                <dt>{{ 'SMS'|t }}</dt><dd><span class="badge badge-neutral"><i data-lucide="circle-minus"></i>{{ 'Not implemented'|t }}</span></dd>
+                <dt>{{ 'Notifications (24 h)'|t }}</dt><dd>{{ o.notifications_24h }}</dd>
+            </dl>
+            <p style="margin-top:12px;"><a href="/admin/notifications">{{ 'Notification status'|t }} →</a></p>
+        </section>
+    </div>
+</div>
+{% endblock %}

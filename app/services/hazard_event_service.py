@@ -13,7 +13,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 
 from app.extensions import db
 from app.models import Incident, IncidentAffectedDistrict, IncidentStatusHistory, River, RoadSegment, District
-from app.services import notification_service
+from app.services import emergency_dispatcher, notification_service
 from app.models.incident import (
     HAZARD_TYPES, HAZARD_SOURCES, HAZARD_SEVERITY, HAZARD_STATUS,
     ACTIVE_STATUSES, VALID_STATUS_TRANSITIONS,
@@ -131,7 +131,7 @@ def create_hazard_event(event_type, severity, source, district_id=None, location
     db.session.add(incident)
     db.session.flush()  # need incident.id for the notification link
     notification_service.notify_hazard_detected(incident, notify_exclude_user_ids)
-    db.session.commit()
+    _commit_or_rollback()
     return incident
 
 
@@ -178,7 +178,7 @@ def add_evidence(incident, severity=None, source_reference=None):
     if source_reference:
         incident.source_reference = source_reference
     incident.updated_at = datetime.utcnow()
-    db.session.commit()
+    _commit_or_rollback()
     return incident
 
 
@@ -249,11 +249,14 @@ def _apply_transition(incident, new_status, actor_id=None, note=None):
 
 
 def _commit_or_rollback():
+    """Commit, then deliver the Web Push queued by the notifications in it (M12, best-effort)."""
     try:
         db.session.commit()
     except Exception:
         db.session.rollback()
+        emergency_dispatcher.discard()
         raise
+    emergency_dispatcher.flush()
 
 
 def transition_event_status(incident, new_status, actor_id=None, note=None):
@@ -263,6 +266,7 @@ def transition_event_status(incident, new_status, actor_id=None, note=None):
         old_status = _apply_transition(incident, new_status, actor_id, note)
     except Exception:
         db.session.rollback()
+        emergency_dispatcher.discard()
         raise
     _commit_or_rollback()
     return old_status
@@ -311,7 +315,7 @@ def add_affected_district(incident, district_id):
     db.session.flush()
     db.session.expire(incident, ['additional_districts'])
     sent = notification_service.notify_area_expanded(incident)
-    db.session.commit()
+    _commit_or_rollback()
     return sent
 
 

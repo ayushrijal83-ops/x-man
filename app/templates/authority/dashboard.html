@@ -1,81 +1,148 @@
 {% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
 
 {% block title %}{{ 'Authority Dashboard'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
-<nav class="navbar" style="background: var(--bg-dark);">
-    <a href="/" class="nav-brand"><i data-lucide="landmark"></i> {{ authority.name }}</a>
-    <div class="nav-links">
-        <a href="/authority/dashboard">{{ 'Dashboard'|t }}</a>
-        <a href="/monitoring">{{ 'Disaster Monitoring'|t }}</a>
-        <a href="/reports/review">{{ 'Review Photo Reports'|t }}</a>
-        <a href="/authority/complaints">{{ 'Complaints'|t }}</a>
-        <a href="/authority/projects">{{ 'Projects'|t }}</a>
-        <a href="/authority/roads">{{ 'Roads'|t }}</a>
-        <a href="/authority/rivers">{{ 'Rivers'|t }}</a>
-        <a href="/notifications">{{ 'Notifications'|t }}{% if unread_notifications %} <span class="nav-badge">{{ unread_notifications }}</span>{% endif %}</a>
-        <a href="/auth/logout">{{ 'Logout'|t }}</a>
-        {% include "components/lang_selector.html" %}
-    </div>
-</nav>
+{% include "components/authority_nav.html" %}
 
 <div class="container">
-    <h1><i data-lucide="landmark"></i> {{ 'Authority Dashboard'|t }}</h1>
-    <p style="color: var(--text-muted);">{{ authority.name }} | {{ authority.category|t|upper }}</p>
-    
-    <div class="grid grid-4" style="margin: 2rem 0;">
-        <div class="stat-card">
-            <div class="stat-value">{{ total_complaints }}</div>
-            <div class="stat-label">{{ 'Total Complaints'|t }}</div>
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="landmark"></i> {{ authority.category|t }} · {{ district.name if district else '' }}</span>
+            <h1>{{ 'Authority Dashboard'|t }}</h1>
+            <p class="page-sub">{{ authority.name }}</p>
         </div>
-        <div class="stat-card">
-            <div class="stat-value" style="color: var(--warning);">{{ pending }}</div>
-            <div class="stat-label">{{ 'Pending'|t }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value" style="color: var(--info);">{{ in_progress }}</div>
-            <div class="stat-label">{{ 'In Progress'|t }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value" style="color: var(--success);">{{ resolved }}</div>
-            <div class="stat-label">{{ 'Resolved'|t }}</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="/monitoring" class="btn btn-primary"><i data-lucide="activity"></i> {{ 'Disaster Monitoring'|t }}</a>
+            <a href="/reports/review" class="btn btn-secondary"><i data-lucide="scan-search"></i> {{ 'Review Photo Reports'|t }}</a>
         </div>
     </div>
-    
-    <div class="grid grid-2">
-        <div class="card">
-            <h2 class="card-title"><i data-lucide="clipboard-list"></i> {{ 'Recent Complaints'|t }}</h2>
-            {% if complaints %}
-                {% for complaint in complaints[:5] %}
-                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
-                        <strong>{{ complaint.ticket_number }}</strong>
-                        <span class="status-badge status-{{ complaint.status }}">{{ complaint.status|t }}</span>
-                        <p style="font-size: 0.875rem;">{{ complaint.description[:80] }}...</p>
-                    </div>
+
+    {# ---------------- unresolved work, at a glance #}
+    <div class="grid grid-4" style="margin-bottom:16px;">
+        <div class="stat-card"><i data-lucide="siren"></i><div class="stat-value">{{ ops.summary.total }}</div><div class="stat-label">{{ 'Active hazards'|t }}</div>
+            <div class="stat-note">{% for level, n in ops.summary.by_severity.items() if n %}{{ ui.sev(level) }} {{ n }} {% else %}{{ ui.sev('normal') }}{% endfor %}</div></div>
+        <div class="stat-card"><i data-lucide="search"></i><div class="stat-value">{{ ops.needs_investigation }}</div><div class="stat-label">{{ 'Awaiting investigation'|t }}</div>
+            <div class="stat-note">{% for s in ['investigating', 'confirmed', 'response'] %}{{ ui.status(s) }} {{ ops.by_status.get(s, 0) }} {% endfor %}</div></div>
+        <div class="stat-card"><i data-lucide="camera"></i><div class="stat-value">{{ ops.pending_reports }}</div><div class="stat-label">{{ 'Photo reports to review'|t }}</div></div>
+        <div class="stat-card"><i data-lucide="clipboard-check"></i><div class="stat-value">{{ ops.open_actions|length }}</div><div class="stat-label">{{ 'Open response actions'|t }}</div></div>
+    </div>
+
+    <div class="bento">
+        {# ---------------- hazards in jurisdiction #}
+        <section class="card span-7" aria-labelledby="h-hazards">
+            <h2 class="card-title" id="h-hazards"><i data-lucide="triangle-alert"></i> {{ 'Active hazards in your jurisdiction'|t }}</h2>
+            {% if ops.hazards %}
+            <div class="list">
+                {% for h in ops.hazards[:8] %}
+                {% set r = ops.response.get(h.id, {}) %}
+                <div>
+                    {{ ui.hazard_row(h, '/hazards/' ~ h.id ~ '/response') }}
+                    <p class="meta" style="margin:-4px 0 8px 46px;">
+                        <span><i data-lucide="notebook-pen" class="icon-sm"></i> {{ r.get('notes', 0) }} {{ 'notes'|t }}</span>
+                        <span><i data-lucide="list-checks" class="icon-sm"></i> {{ r.get('open_actions', 0) }} {{ 'open actions'|t }}</span>
+                        <a href="/hazards/{{ h.id }}/response">{{ 'Open response'|t }} →</a>
+                    </p>
+                </div>
                 {% endfor %}
-                <a href="/authority/complaints" class="btn btn-outline btn-block" style="margin-top: 1rem;">{{ 'View All'|t }}</a>
-            {% else %}
-                <p>{{ 'No complaints.'|t }}</p>
-            {% endif %}
-        </div>
-        
-        <div class="card">
-            <h2 class="card-title"><i data-lucide="building-2"></i> {{ 'Projects'|t }}</h2>
-            {% if projects %}
-                {% for project in projects %}
-                    <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
-                        <strong>{{ project.name }}</strong>
-                        <div class="progress-bar" style="margin: 0.5rem 0;">
-                            <div class="progress-fill" style="width: {{ project.progress_percent }}%;"></div>
+            </div>
+            {% else %}{{ ui.empty('shield-check', 'No active hazards in your jurisdiction.', 'New detections from sensors, citizens or your team will appear here.') }}{% endif %}
+        </section>
+        <section class="card span-5" aria-labelledby="h-map">
+            <h2 class="card-title" id="h-map"><i data-lucide="map"></i> {{ 'Operational map'|t }}</h2>
+            {{ ui.hazard_map(ops.map_points, 'ops-map', 300) }}
+        </section>
+
+        {# ---------------- response work #}
+        <section class="card span-6" aria-labelledby="h-actions">
+            <h2 class="card-title" id="h-actions"><i data-lucide="list-checks"></i> {{ 'Open response actions'|t }}</h2>
+            {% if ops.open_actions %}
+            <div class="list">
+                {% for a in ops.open_actions %}
+                <div class="list-item"><div class="grow">
+                    <h3><a href="/hazards/{{ a.incident_id }}/response">{{ a.action_type|replace('_', ' ')|capitalize }}</a></h3>
+                    <p>{{ a.description[:120] }}</p>
+                    <div class="meta"><span class="status-badge status-{{ a.status }}">{{ a.status|replace('_', ' ') }}</span><span>{{ 'Hazard'|t }} #{{ a.incident_id }}</span><span>{{ a.author.username if a.author else '' }}</span></div>
+                </div></div>
+                {% endfor %}
+            </div>
+            {% else %}{{ ui.empty('list-checks', 'No open response actions.') }}{% endif %}
+        </section>
+
+        {# ---------------- citizen reports + AI #}
+        <section class="card span-6" aria-labelledby="h-reports">
+            <h2 class="card-title" id="h-reports"><i data-lucide="camera"></i> {{ 'Citizen photo reports'|t }} <a class="card-action" href="/reports/review">{{ 'Review'|t }}</a></h2>
+            {% if ops.reports %}
+            <div class="list">
+                {% for r in ops.reports[:6] %}
+                <div class="list-item">
+                    <span class="icon-lg" style="color: var(--brand-primary);">{{ ui.hazard_icon(r.hazard_type) }}</span>
+                    <div class="grow">
+                        <h3>{{ ui.hazard_name(r.hazard_type) }}{% if r.location %} · {{ r.location }}{% endif %}</h3>
+                        <div class="meta">
+                            <span class="status-badge status-{{ r.status }}">{{ r.status|t }}</span>
+                            {% if r.ai_analysis.status == 'completed' %}
+                            <span class="chip"><i data-lucide="scan-eye" class="icon-sm"></i> {{ 'AI'|t }}: {{ r.ai_analysis.label|t }} · {{ '%.2f'|format(r.ai_analysis.confidence) }}</span>
+                            {% if r.ai_analysis.label not in ('unknown', r.hazard_type) %}<span class="badge badge-warning">{{ 'differs from citizen'|t }}</span>{% endif %}
+                            {% else %}<span class="chip">{{ 'AI'|t }}: {{ r.ai_analysis.status|replace('_', ' ') }}</span>{% endif %}
                         </div>
-                        <small>{{ project.progress_percent }}% complete</small>
                     </div>
+                </div>
                 {% endfor %}
-                <a href="/authority/projects" class="btn btn-outline btn-block" style="margin-top: 1rem;">{{ 'Manage Projects'|t }}</a>
-            {% else %}
-                <p>{{ 'No projects assigned.'|t }}</p>
-            {% endif %}
-        </div>
+            </div>
+            <p class="form-hint">{{ 'AI analysis is evidence only. It never confirms a hazard or changes its severity.'|t }}</p>
+            {% else %}{{ ui.empty('camera', 'No photo reports.') }}{% endif %}
+        </section>
+
+        {# ---------------- devices #}
+        <section class="card span-12" aria-labelledby="h-devices">
+            <h2 class="card-title" id="h-devices"><i data-lucide="radio-tower"></i> {{ 'IoT devices'|t }}
+                <span class="card-action">{% for label, n in ops.device_freshness.items() if n %}{{ label|t }} {{ n }} {% endfor %}</span></h2>
+            {% if ops.devices %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'Device'|t }}</th><th scope="col">{{ 'Freshness'|t }}</th><th scope="col">{{ 'Status'|t }}</th><th scope="col">{{ 'Latest readings'|t }}</th><th scope="col">{{ 'Last seen'|t }}</th></tr></thead>
+                <tbody>
+                {% for d in ops.devices %}
+                <tr>
+                    <td><strong>{{ d.name }}</strong><br><small>{{ d.river_name or d.location_description or '' }}</small></td>
+                    <td><span class="status-badge status-{{ {'online': 'open', 'stale': 'pending', 'offline': 'blocked', 'never': 'unknown'}[d.freshness] }}">{{ d.freshness|t }}</span>{% if not d.enabled %} <span class="badge badge-neutral">{{ 'Disabled'|t }}</span>{% endif %}</td>
+                    <td>{{ d.status|t }}</td>
+                    <td class="num">{% for r in d.readings %}{{ r.sensor_type|replace('_', ' ') }} <strong>{{ r.value }} {{ r.unit }}</strong>{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</td>
+                    <td>{{ d.last_seen[:16]|replace('T', ' ') if d.last_seen else '—' }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table></div>
+            <p class="form-hint">{{ 'Sensor readings are telemetry only. A vibration or tilt value is not an earthquake detection.'|t }}</p>
+            {% else %}{{ ui.empty('radio-tower', 'No devices are registered to your authority.') }}{% endif %}
+        </section>
+
+        {# ---------------- legacy civic work #}
+        <section class="card span-4" aria-labelledby="h-complaints">
+            <h2 class="card-title" id="h-complaints"><i data-lucide="megaphone"></i> {{ 'Complaints'|t }} <a class="card-action" href="/authority/complaints">{{ total_complaints }}</a></h2>
+            <p class="meta" style="margin-bottom:8px;">{% for s in ['pending', 'in_progress', 'resolved', 'rejected'] %}<span class="status-badge status-{{ s }}">{{ s|replace('_', ' ')|t }}: {{ complaint_counts.get(s, 0) }}</span>{% endfor %}</p>
+            {% if complaints %}
+            <div class="list">{% for c in complaints %}<div class="list-item"><div class="grow"><h3><a href="/authority/complaints/{{ c.id }}">{{ c.ticket_number }}</a></h3><p>{{ c.description[:80] }}</p></div></div>{% endfor %}</div>
+            {% else %}{{ ui.empty('megaphone', 'No complaints.') }}{% endif %}
+        </section>
+        <section class="card span-4" aria-labelledby="h-projects">
+            <h2 class="card-title" id="h-projects"><i data-lucide="building-2"></i> {{ 'Projects'|t }} <a class="card-action" href="/authority/projects">{{ projects|length }}</a></h2>
+            {% if projects %}
+            <div class="list">{% for p in projects[:5] %}<div class="list-item"><div class="grow"><h3>{{ p.name }}</h3>
+                <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ p.progress_percent or 0 }}" aria-label="{{ p.name }}"><div class="progress-fill" style="width: {{ p.progress_percent or 0 }}%;"></div></div>
+                <small class="num">{{ p.progress_percent or 0 }}%</small></div></div>{% endfor %}</div>
+            {% else %}{{ ui.empty('building-2', 'No projects assigned.') }}{% endif %}
+        </section>
+        <section class="card span-4" aria-labelledby="h-district">
+            <h2 class="card-title" id="h-district"><i data-lucide="waves"></i> {{ 'Rivers and roads'|t }}</h2>
+            {% if rivers %}
+            <div class="list">{% for r in rivers[:5] %}<div class="list-item"><div class="grow"><h3>{{ r.name }}</h3><div class="meta"><span class="status-badge status-{{ r.status or 'unknown' }}">{{ (r.status or 'unknown')|t }}</span>{% if r.current_level is not none %}<span class="num">{{ r.current_level }} m</span>{% endif %}</div></div></div>{% endfor %}</div>
+            {% else %}<p class="form-hint">{{ 'No rivers recorded for this district.'|t }}</p>{% endif %}
+            <p class="meta" style="margin-top:8px;">{{ 'Road Segments'|t }}: {% for s, n in road_status.items() %}<span class="status-badge status-{{ s }}">{{ s|t }} {{ n }}</span>{% else %}—{% endfor %}</p>
+        </section>
     </div>
 </div>
 {% endblock %}
+
+{% block extra_js %}{{ ui.leaflet_assets() }}{% endblock %}

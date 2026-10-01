@@ -1,0 +1,42 @@
+{# M12 emergency-alert onboarding. Never prompts on load: the browser permission dialog only opens
+   from the "Enable Emergency Alerts" click. Hidden when unsupported, not configured, already decided,
+   or snoozed with "Not now" (7 days, this browser only). Requires components/emergency_alert.html. #}
+{% if push.configured and push.state == 'not_requested' %}
+<section class="card span-12" id="emergency-optin" aria-labelledby="optin-title" hidden>
+    <h2 class="card-title" id="optin-title"><i data-lucide="siren"></i> {{ 'Enable Emergency Alerts'|t }}</h2>
+    <p>{{ 'X-MAN can send emergency disaster alerts even when this website is closed. You can disable this anytime from notification settings.'|t }}</p>
+    <label class="form-check"><input type="checkbox" id="optin-sound" checked> {{ 'Enable emergency alert sound'|t }}</label>
+    <p class="meta" id="optin-status" role="status" aria-live="polite"></p>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-primary" id="optin-enable"><i data-lucide="bell-ring"></i> {{ 'Enable Emergency Alerts'|t }}</button>
+        <button type="button" class="btn btn-ghost" id="optin-later">{{ 'Not Now'|t }}</button>
+    </div>
+    <span hidden id="optin-msg-ok">{{ 'Emergency alerts enabled.'|t }}</span>
+    <span hidden id="optin-msg-denied">{{ 'Notifications are blocked for this site. Allow them in your browser settings to receive alerts outside X-MAN.'|t }}</span>
+    <span hidden id="optin-msg-fail">{{ 'Could not enable emergency alerts on this browser.'|t }}</span>
+</section>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var card = document.getElementById('emergency-optin');
+    var SNOOZE_MS = 7 * 24 * 3600 * 1000;
+    var snoozed = false;
+    try { snoozed = Date.now() - Number(localStorage.getItem('xman-optin-later') || 0) < SNOOZE_MS; } catch (e) {}
+    if (!window.XmanPush || !XmanPush.supported() || !XmanPush.secure() || snoozed) return;
+    if (Notification.permission === 'denied') return;
+    card.hidden = false;
+    var status = document.getElementById('optin-status');
+    document.getElementById('optin-later').addEventListener('click', function () {
+        try { localStorage.setItem('xman-optin-later', String(Date.now())); } catch (e) {}
+        card.hidden = true;
+    });
+    document.getElementById('optin-enable').addEventListener('click', function () {
+        var button = this;
+        button.disabled = true;
+        XmanPush.enable({{ push.public_key|tojson }}, document.getElementById('optin-sound').checked).then(function (r) {
+            status.textContent = document.getElementById(r.ok ? 'optin-msg-ok' : r.reason === 'denied' ? 'optin-msg-denied' : 'optin-msg-fail').textContent;
+            if (r.ok) setTimeout(function () { card.hidden = true; }, 2500); else button.disabled = false;
+        });
+    });
+});
+</script>
+{% endif %}

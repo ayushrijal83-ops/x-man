@@ -36,6 +36,13 @@
         <a href="/reports/review"><i data-lucide="scan-search"></i>{{ 'Review Photo Reports'|t }}</a>
         {% endif %}
         <a href="/complaints/new"><i data-lucide="megaphone"></i>{{ t('file_complaint') }}</a>
+        {% if current_user.is_authenticated and current_user.role == 'admin' %}
+        <div class="sidebar-label">{{ 'Administration'|t }}</div>
+        <a href="/admin"><i data-lucide="shield"></i>{{ 'Admin Control Center'|t }}</a>
+        <a href="/admin/citizens"><i data-lucide="users"></i>{{ 'Citizens'|t }}</a>
+        <a href="/admin/authorities"><i data-lucide="landmark"></i>{{ 'Authorities'|t }}</a>
+        <a href="/admin/notifications"><i data-lucide="radio-tower"></i>{{ 'Notification status'|t }}</a>
+        {% endif %}
     </nav>
 
     <div class="sidebar-foot">
@@ -45,6 +52,7 @@
         </button>
         <nav class="nav-links" aria-label="{{ 'Account'|t }}">
             <a href="/notifications"><i data-lucide="bell"></i>{{ 'Notifications'|t }}{% if unread_notifications %}<span class="nav-badge" aria-label="{{ 'unread'|t }}">{{ unread_notifications }}</span>{% endif %}</a>
+            <a href="/notifications/settings"><i data-lucide="bell-ring"></i>{{ 'Emergency alerts'|t }}</a>
             <a href="/profile/me"><i data-lucide="user"></i>{{ t('my_profile') }}</a>
             <a href="/auth/logout"><i data-lucide="log-out"></i>{{ t('logout') }}</a>
         </nav>

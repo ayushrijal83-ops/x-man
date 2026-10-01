@@ -2,7 +2,9 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, Post, Complaint, District, Like, Comment
-from werkzeug.security import generate_password_hash
+from sqlalchemy.exc import IntegrityError
+
+from app.services import account_service
 
 profile_bp = Blueprint('profile', __name__)
 
@@ -59,72 +61,45 @@ def my_profile():
 @login_required
 def edit_profile():
     """Edit profile information."""
+    districts = District.query.order_by(District.name).all()
     if request.method == 'POST':
-        username = request.form.get('username')
-        email = request.form.get('email')
-        district_id = request.form.get('district_id')
-        bio = request.form.get('bio')
-        phone = request.form.get('phone')
-        
-        # Validate username
-        if username and username != current_user.username:
-            existing = User.query.filter_by(username=username).first()
-            if existing:
-                flash('Username already taken.', 'error')
-                return redirect(url_for('profile.edit_profile'))
-            current_user.username = username
-        
-        # Validate email
-        if email and email != current_user.email:
-            existing = User.query.filter_by(email=email).first()
-            if existing:
-                flash('Email already registered.', 'error')
-                return redirect(url_for('profile.edit_profile'))
-            current_user.email = email
-        
-        if district_id:
-            # M10: non-numeric or unknown ids used to raise a 500 / store a dangling id
-            if not (district_id.isascii() and district_id.isdigit()) or not db.session.get(District, int(district_id)):
-                flash('Invalid district.', 'error')
-                return redirect(url_for('profile.edit_profile'))
-            current_user.district_id = int(district_id)
-        
-        # Store additional info in a simple way (could add columns to User model)
-        current_user.bio = bio if bio else None
-        current_user.phone = phone if phone else None
-        
-        db.session.commit()
+        changes, errors = account_service.validate_profile_update(current_user, request.form, User, District, db)
+        if errors:
+            return render_template('pages/edit_profile.html', districts=districts, errors=errors,
+                                   form=request.form), 400
+        account_service.apply_profile_update(current_user, changes)
+        try:
+            db.session.commit()
+        except IntegrityError:  # uniqueness race on username/email/mobile
+            db.session.rollback()
+            return render_template('pages/edit_profile.html', districts=districts, form=request.form,
+                                   errors={'form': 'That username, email or mobile number was just taken.'}), 400
         flash('Profile updated successfully!', 'success')
         return redirect(url_for('profile.my_profile'))
-    
-    districts = District.query.order_by(District.name).all()
-    return render_template('pages/edit_profile.html', districts=districts)
+
+    return render_template('pages/edit_profile.html', districts=districts, errors={}, form=None)
 
 @profile_bp.route('/change-password', methods=['GET', 'POST'])
 @login_required
 def change_password():
-    """Change password."""
+    """Change password. Also the only page open after an admin reset (must_change_password, M12)."""
+    error = None
     if request.method == 'POST':
-        current_password = request.form.get('current_password')
-        new_password = request.form.get('new_password')
-        confirm_password = request.form.get('confirm_password')
-        
+        current_password = request.form.get('current_password') or ''
+        new_password = request.form.get('new_password') or ''
         if not current_user.check_password(current_password):
-            flash('Current password is incorrect.', 'error')
-            return redirect(url_for('profile.change_password'))
-        
-        if new_password != confirm_password:
-            flash('New passwords do not match.', 'error')
-            return redirect(url_for('profile.change_password'))
-        
-        if len(new_password) < 6:
-            flash('Password must be at least 6 characters.', 'error')
-            return redirect(url_for('profile.change_password'))
-        
-        current_user.password_hash = generate_password_hash(new_password)
-        db.session.commit()
-        
-        flash('Password changed successfully!', 'success')
-        return redirect(url_for('profile.my_profile'))
-    
-    return render_template('pages/change_password.html')
+            error = 'Current password is incorrect.'
+        elif new_password != request.form.get('confirm_password'):
+            error = 'New passwords do not match.'
+        elif len(new_password) < account_service.MIN_PASSWORD:
+            error = 'Password must be at least 8 characters.'
+        elif new_password == current_password:
+            error = 'Choose a password different from the current one.'
+        else:
+            current_user.set_password(new_password)
+            current_user.must_change_password = False
+            db.session.commit()
+            flash('Password changed successfully!', 'success')
+            return redirect(url_for('profile.my_profile'))
+    return render_template('pages/change_password.html', error=error,
+                           forced=current_user.must_change_password), 400 if error else 200

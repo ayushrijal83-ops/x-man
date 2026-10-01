@@ -26,7 +26,19 @@ def create_app(config_name=None):
 
     @login_manager.user_loader
     def load_user(user_id):
-        return db.session.get(User, int(user_id))
+        user = db.session.get(User, int(user_id))
+        return user if user is not None and user.is_active else None  # M12: disabling ends sessions
+
+    from flask import jsonify as _jsonify, redirect as _redirect, request as _request, url_for as _url_for
+
+    @app.before_request
+    def require_password_change():
+        """M12: after an admin reset, the temporary password only opens the change-password page."""
+        if current_user.is_authenticated and current_user.must_change_password and _request.endpoint not in (
+                'profile.change_password', 'auth.logout', 'static'):
+            if _request.path.startswith('/api/'):
+                return _jsonify({'error': 'Password change required'}), 403
+            return _redirect(_url_for('profile.change_password'))
 
     # Register all blueprints
     from app.routes.main import main_bp
@@ -49,6 +61,7 @@ def create_app(config_name=None):
     from app.routes.notifications import notifications_bp
     from app.routes.reports import reports_bp
     from app.routes.monitoring import monitoring_bp
+    from app.routes.admin import admin_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -70,6 +83,7 @@ def create_app(config_name=None):
     app.register_blueprint(notifications_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(monitoring_bp)
+    app.register_blueprint(admin_bp, url_prefix='/admin')
 
     from app.services.translation_service import TranslationService
     translation_service = TranslationService()
@@ -104,6 +118,19 @@ def create_app(config_name=None):
         """
         return translation_service.get_translation(active_language(), text)
 
+    @app.cli.command('push-keys')
+    def push_keys():
+        """Print a new VAPID key pair for .env (M12 Web Push). Keep the private key secret."""
+        from app.services.web_push import generate_vapid_keys
+        public, private = generate_vapid_keys()
+        print(f'VAPID_PUBLIC_KEY={public}\nVAPID_PRIVATE_KEY={private}\nVAPID_SUBJECT=mailto:you@example.org')
+
+    from app.image_credits import IMAGE_CREDITS
+
+    @app.context_processor
+    def inject_image_credits():
+        return {'image_credits': IMAGE_CREDITS}
+
     @app.context_processor
     def inject_translations():
         """Expose t() / current_lang / languages to every template."""
@@ -124,6 +151,7 @@ def create_app(config_name=None):
         app context across several requests (tests, scripts)."""
         if error is not None:
             db.session.rollback()
+            db.session.info.pop('emergency_push_outbox', None)  # M12: never push rolled-back alerts
 
     @app.errorhandler(HTTPException)
     def api_errors_as_json(error):

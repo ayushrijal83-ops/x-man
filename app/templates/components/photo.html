@@ -1,0 +1,13 @@
+{# Photo with visible attribution. Usage:
+   {% from "components/photo.html" import photo, photo_credit with context %}
+   {{ photo('flood-sauraha-2017.jpg', 'empty-photo') }}                 -> <img> only
+   {{ photo_credit('flood-sauraha-2017.jpg') }}                         -> "Photo: author, licence" #}
+{% macro photo(name, cls='', loading='lazy') -%}
+{%- set c = image_credits[name] -%}
+<img src="{{ url_for('static', filename='images/' ~ name) }}" alt="{{ c.alt }}" class="{{ cls }}" loading="{{ loading }}" decoding="async">
+{%- endmacro %}
+
+{% macro photo_credit(name, cls='credit') -%}
+{%- set c = image_credits[name] -%}
+<span class="{{ cls }}">{{ 'Photo'|t }}: <a href="{{ c.source }}" rel="noopener" target="_blank">{{ c.author }}</a>, <a href="{{ c.license_url }}" rel="noopener license" target="_blank">{{ c.license }}</a></span>
+{%- endmacro %}

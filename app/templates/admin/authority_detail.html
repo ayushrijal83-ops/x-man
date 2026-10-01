@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ authority.name }} - {{ 'Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="landmark"></i> {{ authority.category|t }} · {{ d.district.name if d.district else '' }}</span>
+            <h1>{{ authority.name }}</h1>
+            <p class="page-sub">{{ 'Controls district'|t }}: {{ d.district.name if d.district else '—' }}</p>
+        </div>
+        <a href="{{ url_for('admin.authorities', district_id=authority.district_id) }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> {{ 'Back to authorities'|t }}</a>
+    </div>
+    {{ aui.tabs('authorities') }}
+
+    <div class="grid grid-4" style="margin-bottom:16px;">
+        <div class="stat-card"><i data-lucide="user-cog"></i><div class="stat-value">{{ d.accounts|length }}</div><div class="stat-label">{{ 'Accounts'|t }}</div></div>
+        <div class="stat-card"><i data-lucide="cpu"></i><div class="stat-value">{{ d.devices|length }}</div><div class="stat-label">{{ 'IoT devices'|t }}</div></div>
+        <div class="stat-card"><i data-lucide="siren"></i><div class="stat-value">{{ d.hazard_total }}</div><div class="stat-label">{{ 'Active hazards in district'|t }}</div></div>
+        <div class="stat-card"><i data-lucide="list-checks"></i><div class="stat-value">{{ d.open_actions }}</div><div class="stat-label">{{ 'Open response actions'|t }}</div></div>
+    </div>
+
+    <div class="bento">
+        <section class="card span-12" aria-labelledby="h-accounts">
+            <h2 class="card-title" id="h-accounts"><i data-lucide="user-cog"></i> {{ 'Authority accounts'|t }}</h2>
+            <p class="meta">{{ 'Passwords are stored only as one-way hashes and cannot be viewed. A reset sets a temporary password that the authority must change at next login.'|t }}</p>
+            {% if d.accounts %}
+            <div class="list">
+            {% for u in d.accounts %}
+                <div class="list-item" style="flex-wrap:wrap; gap:12px;">
+                    <div class="grow">
+                        <h3>{{ u.full_name or u.username }} <span class="meta">@{{ u.username }}</span></h3>
+                        <div class="meta">
+                            {{ aui.account_status(u) }}
+                            {% if u.must_change_password %}<span class="badge badge-warning"><i data-lucide="key-round"></i>{{ 'Must change password'|t }}</span>{% endif %}
+                            {{ aui.alert_state(u.emergency_alert_state) }} {{ aui.push(d.push_counts.get(u.id, 0) if u.emergency_alert_state == 'granted' else 0) }}
+                            <span>{{ 'Last login'|t }}: {{ aui.when(u.last_login_at) }}</span>
+                        </div>
+                    </div>
+                    <form method="post" action="{{ url_for('admin.set_status', user_id=u.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="active" value="{{ '0' if u.is_active else '1' }}">
+                        {% if u.is_active %}<button class="btn btn-sm btn-danger" type="submit"><i data-lucide="ban"></i> {{ 'Disable'|t }}</button>
+                        {% else %}<button class="btn btn-sm btn-success" type="submit"><i data-lucide="circle-check"></i> {{ 'Enable'|t }}</button>{% endif %}
+                    </form>
+                    <details style="flex-basis:100%;">
+                        <summary>{{ 'Reset password'|t }}</summary>
+                        <form method="post" action="{{ url_for('admin.reset_password', user_id=u.id) }}" class="form-row" style="margin-top:8px;" autocomplete="off">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="form-group"><label for="tp-{{ u.id }}">{{ 'Temporary password'|t }}</label>
+                                <input type="password" id="tp-{{ u.id }}" name="temporary_password" class="form-input" minlength="8" required autocomplete="new-password"></div>
+                            <div class="form-group"><label for="tc-{{ u.id }}">{{ 'Confirm temporary password'|t }}</label>
+                                <input type="password" id="tc-{{ u.id }}" name="confirm_password" class="form-input" minlength="8" required autocomplete="new-password"></div>
+                            <div class="form-group" style="align-self:end;"><button class="btn btn-secondary" type="submit"><i data-lucide="key-round"></i> {{ 'Set temporary password'|t }}</button></div>
+                        </form>
+                    </details>
+                </div>
+            {% endfor %}
+            </div>
+            {% else %}{{ ui.empty('unlink', 'No user account is linked to this authority.') }}{% endif %}
+        </section>
+
+        <section class="card span-7" aria-labelledby="h-hazards">
+            <h2 class="card-title" id="h-hazards"><i data-lucide="triangle-alert"></i> {{ 'Active hazards in this district'|t }}</h2>
+            {% if d.hazards %}
+            <div class="list">{% for h in d.hazards %}{{ ui.hazard_row(h, '/hazards/' ~ h.id ~ '/response') }}{% endfor %}</div>
+            {% else %}{{ ui.empty('shield-check', 'No active hazards.') }}{% endif %}
+        </section>
+
+        <section class="card span-5" aria-labelledby="h-devices">
+            <h2 class="card-title" id="h-devices"><i data-lucide="cpu"></i> {{ 'IoT devices'|t }}</h2>
+            {% if d.devices %}
+            <div class="list">{% for dev in d.devices %}
+                <div class="list-item"><div class="grow"><h3>{{ dev.name }}</h3>
+                    <div class="meta"><code>{{ dev.device_id }}</code>
+                        {% if dev.enabled %}<span class="badge badge-success"><i data-lucide="circle-check"></i>{{ dev.status|t }}</span>{% else %}<span class="badge badge-neutral"><i data-lucide="circle-minus"></i>{{ 'Disabled'|t }}</span>{% endif %}
+                        <span>{{ 'Last seen'|t }}: {{ aui.when(dev.last_seen) }}</span></div></div></div>
+            {% endfor %}</div>
+            {% else %}{{ ui.empty('cpu', 'No devices registered to this authority.') }}{% endif %}
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-contact">
+            <h2 class="card-title" id="h-contact"><i data-lucide="phone"></i> {{ 'Office details'|t }}</h2>
+            <dl class="kv">
+                <dt>{{ 'Category'|t }}</dt><dd>{{ authority.category|t }}</dd>
+                <dt>{{ 'Verified office'|t }}</dt><dd>{{ 'Yes'|t if authority.is_verified else 'No'|t }}</dd>
+                <dt>{{ 'Phone'|t }}</dt><dd>{{ authority.phone or '—' }}</dd>
+                <dt>{{ 'Email'|t }}</dt><dd>{{ authority.email or '—' }}</dd>
+                <dt>{{ 'Address'|t }}</dt><dd>{{ authority.address or '—' }}</dd>
+            </dl>
+        </section>
+    </div>
+</div>
+{% endblock %}

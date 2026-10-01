@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Authorities'|t }} - {{ 'Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="shield"></i> {{ 'Admin Control Center'|t }}</span>
+            <h1>{{ 'Authorities'|t }}</h1>
+            <p class="page-sub">{{ 'Authority offices, their accounts, devices and emergency notification capability.'|t }}</p>
+        </div>
+    </div>
+    {{ aui.tabs('authorities') }}
+
+    <section class="card" aria-labelledby="h-list">
+        <h2 class="card-title" id="h-list"><i data-lucide="landmark"></i> {{ pagination.total }} {{ 'authorities'|t }}</h2>
+        <form method="get" class="filter-bar" role="search">
+            <div class="form-group"><label for="q">{{ 'Search'|t }}</label>
+                <input id="q" name="q" class="form-input" value="{{ f.q }}" placeholder="{{ 'Name or category'|t }}"></div>
+            <div class="form-group"><label for="district_id">{{ 'District'|t }}</label>
+                <select id="district_id" name="district_id" class="form-input">
+                    <option value="">{{ 'All districts'|t }}</option>
+                    {% for d in districts %}<option value="{{ d.id }}" {% if f.district_id == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+                </select></div>
+            <div class="form-group"><label for="status">{{ 'Account status'|t }}</label>
+                <select id="status" name="status" class="form-input">
+                    <option value="">{{ 'Any'|t }}</option>
+                    <option value="active" {% if f.status == 'active' %}selected{% endif %}>{{ 'Has an active account'|t }}</option>
+                    <option value="disabled" {% if f.status == 'disabled' %}selected{% endif %}>{{ 'All accounts disabled'|t }}</option>
+                    <option value="unlinked" {% if f.status == 'unlinked' %}selected{% endif %}>{{ 'No account linked'|t }}</option>
+                </select></div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> {{ 'Filter'|t }}</button>
+        </form>
+
+        {% if pagination.items %}
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th scope="col">{{ 'Authority'|t }}</th><th scope="col">{{ 'District'|t }}</th><th scope="col">{{ 'Status'|t }}</th>
+                    <th scope="col">{{ 'Emergency notifications'|t }}</th><th scope="col">{{ 'Devices'|t }}</th><th scope="col">{{ 'Last activity'|t }}</th></tr></thead>
+                <tbody>
+                {% for a in pagination.items %}
+                {% set r = rows[a.id] %}
+                <tr>
+                    <td><a href="{{ url_for('admin.authority_detail', authority_id=a.id) }}">{{ a.name }}</a><div class="meta">{{ a.category|t }}</div></td>
+                    <td>{{ a.district.name if a.district else '—' }}</td>
+                    <td>{% if not r.accounts %}<span class="badge badge-neutral"><i data-lucide="unlink"></i>{{ 'No account'|t }}</span>
+                        {% elif r.active_accounts %}<span class="badge badge-success"><i data-lucide="circle-check"></i>{{ 'Active'|t }} · {{ r.active_accounts }}/{{ r.accounts }}</span>
+                        {% else %}<span class="badge badge-danger"><i data-lucide="ban"></i>{{ 'Disabled'|t }}</span>{% endif %}</td>
+                    <td>{% if r.push_accounts %}<span class="badge badge-success"><i data-lucide="bell-ring"></i>{{ 'In-app + push'|t }}</span>
+                        {% elif r.accounts %}<span class="badge badge-info"><i data-lucide="bell"></i>{{ 'In-app only'|t }}</span>{% else %}—{% endif %}</td>
+                    <td>{{ r.devices }}</td>
+                    <td>{{ aui.when(r.last_login) }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {{ aui.pager(pagination, 'admin.authorities', f) }}
+        {% else %}{{ ui.empty('landmark', 'No authorities match these filters.') }}{% endif %}
+    </section>
+</div>
+{% endblock %}

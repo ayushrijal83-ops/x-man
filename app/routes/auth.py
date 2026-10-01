@@ -1,8 +1,13 @@
 from flask import Blueprint, current_app, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, login_required, current_user
+from datetime import datetime
+
+from sqlalchemy.exc import IntegrityError
+
 from app.extensions import db
 from app.models.user import User
-from app.models import Authority
+from app.models import Authority, District
+from app.services import account_service
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -14,39 +19,48 @@ def _safe_next(target):
         return None
     return target
 
+DISABLED_MESSAGE = 'This account has been disabled. Contact an administrator.'
+
+
+def _login(user, remember):
+    login_user(user, remember=remember)
+    user.last_login_at = datetime.utcnow()  # M12: "last activity" in the admin directory
+    db.session.commit()
+
+
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
     """User registration."""
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
 
+    districts = District.query.order_by(District.name).all()
     if request.method == 'POST':
-        username = request.form.get('username')
-        email = request.form.get('email')
-        password = request.form.get('password')
+        data, errors = account_service.validate_registration(request.form, User, District, db)
+        if errors:
+            # re-render with what the user typed (never the password) and per-field messages
+            return render_template('auth/register.html', districts=districts, errors=errors,
+                                   form=request.form), 400
 
-        if not username or not email or not password:
-            flash('All fields are required.', 'error')
-            return redirect(url_for('auth.register'))
-
-        if User.query.filter_by(username=username).first():
-            flash('Username already exists.', 'error')
-            return redirect(url_for('auth.register'))
-
-        if User.query.filter_by(email=email).first():
-            flash('Email already registered.', 'error')
-            return redirect(url_for('auth.register'))
-
-        user = User(username=username, email=email, role='citizen')
-        user.set_password(password)
-
+        user = User(username=data['username'], email=data['email'], role='citizen',
+                    full_name=data['full_name'], phone=data['mobile'], phone_verified=False,
+                    permanent_address=data['permanent_address'], district_id=data['district_id'])
+        account_service.set_current_location(user, data['current_latitude'], data['current_longitude'],
+                                             data['current_address'] if data['current_latitude'] is not None
+                                             else None)
+        user.set_password(data['password'])
         db.session.add(user)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:  # lost a race on username/email/mobile uniqueness
+            db.session.rollback()
+            return render_template('auth/register.html', districts=districts, form=request.form,
+                                   errors={'form': 'That username, email or mobile number was just taken.'}), 400
 
         flash('Registration successful! Please login.', 'success')
         return redirect(url_for('auth.login'))
 
-    return render_template('auth/register.html')
+    return render_template('auth/register.html', districts=districts, errors={}, form={})
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -64,8 +78,12 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user and user.check_password(password):
-            login_user(user, remember=remember)
+            if not user.is_active:  # only revealed to someone who knows the password
+                return render_template('auth/login.html', error=DISABLED_MESSAGE, username=username), 403
+            _login(user, remember)
             next_page = _safe_next(request.args.get('next'))
+            if user.must_change_password:
+                return redirect(url_for('profile.change_password'))
 
             # Redirect based on role
             if user.role == 'authority':
@@ -74,10 +92,11 @@ def login():
                 return redirect(next_page or url_for('main.dashboard'))
             else:
                 return redirect(next_page or url_for('main.dashboard'))
-        else:
-            flash('Invalid username or password.', 'error')
+        # one message for unknown user and wrong password: no account enumeration
+        return render_template('auth/login.html', error='Invalid username or password.',
+                               username=username or ''), 401
 
-    return render_template('auth/login.html')
+    return render_template('auth/login.html', error=None, username='')
 
 @auth_bp.route('/authority/login', methods=['GET', 'POST'])
 def authority_login():
@@ -95,8 +114,12 @@ def authority_login():
         user = User.query.filter_by(username=username).first()
 
         if user and user.check_password(password):
-            if user.role == 'authority' or user.role == 'admin':
-                login_user(user, remember=remember)
+            if not user.is_active:
+                flash(DISABLED_MESSAGE, 'error')
+            elif user.role == 'authority' or user.role == 'admin':
+                _login(user, remember)
+                if user.must_change_password:
+                    return redirect(url_for('profile.change_password'))
                 flash('Welcome to Authority Panel!', 'success')
                 return redirect(url_for('authority_panel.dashboard'))
             else:

@@ -1,0 +1,68 @@
+<script>
+/* Explicit, user-initiated location capture. Never runs on page load; never fills the
+   coordinate fields unless the browser actually returned a position. */
+(function () {
+    'use strict';
+    var T = {
+        busy: {{ 'Detecting your location…'|t|tojson }},
+        ok: {{ 'Location detected'|t|tojson }},
+        accuracy: {{ 'accuracy about'|t|tojson }},
+        denied: {{ 'Location permission was denied. You can allow it in your browser settings and try again, or skip this step.'|t|tojson }},
+        unavailable: {{ 'Your location is unavailable right now. Try again, or skip this step.'|t|tojson }},
+        timeout: {{ 'Finding your location took too long. Try again, or skip this step.'|t|tojson }},
+        unsupported: {{ 'This browser cannot share location. You can skip this step.'|t|tojson }},
+        insecure: {{ 'Location needs a secure (HTTPS) connection on this device. You can skip this step.'|t|tojson }},
+        retry: {{ 'Try again'|t|tojson }},
+        removed: {{ 'Location removed.'|t|tojson }}
+    };
+    document.querySelectorAll('[data-location-widget]').forEach(function (box) {
+        var button = box.querySelector('[data-locate]');
+        var clear = box.querySelector('[data-clear-location]');
+        var status = box.querySelector('[data-location-status]');
+        var lat = box.querySelector('[data-lat]');
+        var lon = box.querySelector('[data-lon]');
+        var label = button.innerHTML;
+
+        function show(state, text) {
+            status.dataset.state = state;
+            status.textContent = text;
+        }
+        function done() { button.disabled = false; button.removeAttribute('aria-busy'); }
+        function fail(text) {
+            done();
+            show('error', text);
+            button.textContent = T.retry;
+        }
+
+        button.addEventListener('click', function () {
+            if (!('geolocation' in navigator)) { show('error', T.unsupported); return; }
+            if (!window.isSecureContext) { show('error', T.insecure); return; }
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+            show('busy', T.busy);
+            navigator.geolocation.getCurrentPosition(function (position) {
+                var c = position.coords;
+                lat.value = c.latitude.toFixed(6);
+                lon.value = c.longitude.toFixed(6);
+                done();
+                button.innerHTML = label;
+                clear.hidden = false;
+                show('ok', T.ok + ': ' + lat.value + ', ' + lon.value +
+                     (c.accuracy ? ' (' + T.accuracy + ' ' + Math.round(c.accuracy) + ' m)' : ''));
+            }, function (error) {
+                lat.value = ''; lon.value = '';
+                if (error.code === error.PERMISSION_DENIED) { fail(T.denied); }
+                else if (error.code === error.TIMEOUT) { fail(T.timeout); }
+                else { fail(T.unavailable); }
+            }, {enableHighAccuracy: true, timeout: 15000, maximumAge: 0});
+        });
+
+        clear.addEventListener('click', function () {
+            lat.value = ''; lon.value = '';
+            clear.hidden = true;
+            button.innerHTML = label;
+            show('', T.removed);
+        });
+    });
+})();
+</script>

@@ -1,0 +1,29 @@
+{# M12 layer 2: in-website emergency alert. Filled by static/js/emergency.js from the user's own
+   /api/emergency/active feed (textContent only). Severity is shown as icon + word + colour. #}
+<div id="xman-emergency" class="emergency-alert" role="alertdialog" aria-modal="false"
+     aria-labelledby="em-title" aria-describedby="em-body" hidden>
+    <div class="emergency-card">
+        <div class="emergency-head">
+            <span class="emergency-siren" aria-hidden="true"><i data-lucide="siren"></i></span>
+            <span>{{ 'Emergency disaster alert'|t }}</span>
+        </div>
+        <h2 id="em-title" tabindex="-1"></h2>
+        <p id="em-body" class="emergency-body"></p>
+        <dl class="emergency-facts">
+            <div><dt>{{ 'Severity'|t }}</dt><dd><span id="em-sev" class="sev sev-high"><i data-lucide="triangle-alert" aria-hidden="true"></i><span id="em-sev-text"></span></span></dd></div>
+            <div><dt>{{ 'Affected area'|t }}</dt><dd id="em-area"></dd></div>
+            <div><dt>{{ 'Time'|t }}</dt><dd id="em-time"></dd></div>
+        </dl>
+        <p id="em-more" class="meta" hidden>+<span id="em-more-count"></span> {{ 'more active emergency alerts'|t }} · <a href="/notifications">{{ 'Notifications'|t }}</a></p>
+        <p id="em-sound-blocked" class="emergency-sound-note" hidden>
+            <i data-lucide="volume-x" aria-hidden="true"></i> {{ 'Your browser blocked the alarm sound until you interact with the page.'|t }}
+            <button type="button" id="em-play" class="btn btn-sm btn-secondary">{{ 'Play alarm'|t }}</button>
+        </p>
+        <div class="emergency-actions">
+            <a id="em-view" href="/notifications" class="btn btn-danger"><i data-lucide="map-pin"></i> {{ 'View hazard'|t }}</a>
+            <button type="button" id="em-mute" class="btn btn-secondary"><i data-lucide="volume-x"></i> {{ 'Mute alarm'|t }}</button>
+            <button type="button" id="em-dismiss" class="btn btn-ghost">{{ 'Dismiss'|t }}</button>
+        </div>
+    </div>
+</div>
+<script src="{{ url_for('static', filename='js/emergency.js') }}"></script>

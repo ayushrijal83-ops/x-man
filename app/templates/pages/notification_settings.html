@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Emergency alert settings'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="bell-ring"></i> {{ 'Notifications'|t }}</span>
+            <h1>{{ 'Emergency alert settings'|t }}</h1>
+            <p class="page-sub">{{ 'Alerts are sent for hazards affecting your registered district.'|t }}</p>
+        </div>
+        <a href="/notifications" class="btn btn-secondary"><i data-lucide="bell"></i> {{ 'Notification history'|t }}</a>
+    </div>
+
+    <div class="bento">
+        <section class="card span-7" aria-labelledby="h-alerts">
+            <h2 class="card-title" id="h-alerts"><i data-lucide="siren"></i> {{ 'Emergency alerts'|t }}</h2>
+
+            <div class="toggle-row">
+                <div>
+                    <strong>{{ 'Web emergency alerts (outside the website)'|t }}</strong>
+                    <p class="meta" id="push-line"></p>
+                </div>
+                <span class="state-pill" id="push-pill"></span>
+            </div>
+            <div class="toggle-row">
+                <div>
+                    <strong>{{ 'Emergency sound'|t }}</strong>
+                    <p class="meta">{{ 'A short beep pattern while an emergency alert is shown on this website. It stops by itself and can be muted.'|t }}</p>
+                </div>
+                <button type="button" class="btn btn-secondary" id="sound-toggle" aria-pressed="{{ 'true' if push.sound_enabled else 'false' }}"></button>
+            </div>
+            <div class="toggle-row">
+                <div><strong>{{ 'Browser permission'|t }}</strong></div>
+                <span class="state-pill" id="perm-pill">…</span>
+            </div>
+            <div class="toggle-row">
+                <div><strong>{{ 'Push subscription'|t }}</strong><p class="meta">{{ 'Devices with emergency alerts enabled:'|t }} <span id="device-count">{{ push.subscriptions }}</span></p></div>
+                <span class="state-pill" id="sub-pill"></span>
+            </div>
+
+            <p id="settings-status" class="alert alert-info" role="status" aria-live="polite" hidden></p>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+                <button type="button" class="btn btn-primary" id="btn-enable"><i data-lucide="bell-ring"></i> {{ 'Enable Emergency Alerts'|t }}</button>
+                <button type="button" class="btn btn-secondary" id="btn-test"><i data-lucide="send"></i> {{ 'Test Emergency Notification'|t }}</button>
+                <button type="button" class="btn btn-danger" id="btn-disable"><i data-lucide="bell-off"></i> {{ 'Turn Off Emergency Alerts'|t }}</button>
+                <button type="button" class="btn btn-ghost" id="btn-sound-preview"><i data-lucide="volume-2"></i> {{ 'Preview sound'|t }}</button>
+            </div>
+            <p class="meta" style="margin-top:12px;">{{ 'Turning off emergency alerts stops optional browser push/sound alerts. X-MAN notification records remain available in your account.'|t }}</p>
+        </section>
+
+        <section class="card span-5" aria-labelledby="h-how">
+            <h2 class="card-title" id="h-how"><i data-lucide="info"></i> {{ 'How delivery works'|t }}</h2>
+            <ol class="list" style="padding-left:18px;">
+                <li>{{ 'Every alert is saved in your X-MAN notifications.'|t }}</li>
+                <li>{{ 'While X-MAN is open, emergencies appear as an on-screen alert with optional sound.'|t }}</li>
+                <li>{{ 'With emergency alerts enabled, your browser can show them even when X-MAN is closed.'|t }}</li>
+            </ol>
+            <p class="meta">{{ 'X-MAN can deliver browser push emergency notifications outside the website when your browser/device supports Web Push, permission is granted, and the device has network connectivity. Your browser and operating system control whether notifications are shown and whether they make a sound.'|t }}</p>
+            <p class="meta">{{ 'SMS alerts are not available yet.'|t }}</p>
+        </section>
+    </div>
+
+    {# labels for the script (translated server-side) #}
+    <div hidden>
+        <span id="m-on">{{ 'ON'|t }}</span><span id="m-off">{{ 'OFF'|t }}</span>
+        <span id="m-sound-on">{{ 'Emergency sound ON'|t }}</span><span id="m-sound-off">{{ 'Emergency sound OFF'|t }}</span>
+        <span id="m-granted">{{ 'Granted'|t }}</span><span id="m-denied">{{ 'Denied'|t }}</span>
+        <span id="m-default">{{ 'Not requested'|t }}</span><span id="m-unsupported">{{ 'Not supported by this browser'|t }}</span>
+        <span id="m-insecure">{{ 'Needs a secure (HTTPS) connection'|t }}</span>
+        <span id="m-active">{{ 'Active on this device'|t }}</span><span id="m-inactive">{{ 'Not active on this device'|t }}</span>
+        <span id="m-push-on">{{ 'On: alerts can reach this account even when the website is closed.'|t }}</span>
+        <span id="m-push-off">{{ 'Off: alerts appear only inside X-MAN.'|t }}</span>
+        <span id="m-push-optout">{{ 'Turned off by you.'|t }}</span>
+        <span id="m-not-configured">{{ 'Browser push is not configured on this server. In-website alerts still work.'|t }}</span>
+        <span id="m-enabled">{{ 'Emergency alerts enabled.'|t }}</span>
+        <span id="m-disabled">{{ 'Emergency alerts turned off. Your notification history is unchanged.'|t }}</span>
+        <span id="m-denied-help">{{ 'Notifications are blocked for this site. Allow them in your browser settings to receive alerts outside X-MAN.'|t }}</span>
+        <span id="m-fail">{{ 'Could not enable emergency alerts on this browser.'|t }}</span>
+        <span id="m-test-sent">{{ 'Test notification sent. It may take a few seconds to appear.'|t }}</span>
+        <span id="m-test-fail">{{ 'Test notification could not be sent.'|t }}</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var server = {{ push|tojson }};
+    function msg(id) { return document.getElementById('m-' + id).textContent; }
+    function say(text, kind) {
+        var el = document.getElementById('settings-status');
+        el.textContent = text;
+        el.className = 'alert alert-' + (kind || 'info');
+        el.hidden = false;
+    }
+    function pill(id, ok, text) {
+        var el = document.getElementById(id);
+        el.textContent = '';
+        var icon = document.createElement('i');
+        icon.setAttribute('data-lucide', ok ? 'circle-check' : 'circle-minus');
+        icon.setAttribute('aria-hidden', 'true');
+        el.appendChild(icon);
+        el.appendChild(document.createTextNode(' ' + text));
+        el.style.color = ok ? 'var(--success-text)' : 'var(--text-secondary)';
+    }
+    function draw(browser) {
+        var pushOn = server.state === 'granted' && server.subscriptions > 0;
+        pill('push-pill', pushOn, msg(pushOn ? 'on' : 'off'));
+        document.getElementById('push-line').textContent = !server.configured ? msg('not-configured')
+            : pushOn ? msg('push-on') : server.state === 'disabled_by_user' ? msg('push-optout') : msg('push-off');
+        var p = browser.permission;
+        pill('perm-pill', p === 'granted', msg(p === 'default' ? 'default' : p));
+        pill('sub-pill', browser.subscribed && pushOn, msg(browser.subscribed && pushOn ? 'active' : 'inactive'));
+        document.getElementById('device-count').textContent = String(server.subscriptions);
+        var sound = document.getElementById('sound-toggle');
+        sound.textContent = (server.sound_enabled ? '🔊 ' : '🔇 ') + msg(server.sound_enabled ? 'sound-on' : 'sound-off');
+        sound.setAttribute('aria-pressed', server.sound_enabled ? 'true' : 'false');
+        var usable = server.configured && p !== 'unsupported' && p !== 'insecure';
+        document.getElementById('btn-enable').hidden = !usable || (browser.subscribed && pushOn);
+        document.getElementById('btn-test').hidden = !pushOn || !server.configured;
+        document.getElementById('btn-disable').hidden = !pushOn && server.state !== 'granted';
+        if (p === 'denied') say(msg('denied-help'), 'warning');
+        if (window.lucide) window.lucide.createIcons();
+    }
+    function refresh() {
+        return fetch('/api/push/config', { credentials: 'same-origin' }).then(function (r) { return r.json(); })
+            .then(function (s) { server = s; return XmanPush.browserState(); }).then(draw);
+    }
+
+    XmanPush.reconcile(server).then(refresh);
+
+    document.getElementById('btn-enable').addEventListener('click', function () {
+        var button = this;
+        button.disabled = true;
+        XmanPush.enable(server.public_key, server.sound_enabled).then(function (r) {
+            say(r.ok ? msg('enabled') : r.reason === 'denied' ? msg('denied-help') : msg('fail'), r.ok ? 'success' : 'warning');
+            button.disabled = false;
+            return refresh();
+        });
+    });
+    document.getElementById('btn-disable').addEventListener('click', function () {
+        XmanPush.disable().then(function () { say(msg('disabled'), 'success'); return refresh(); });
+    });
+    document.getElementById('btn-test').addEventListener('click', function () {
+        XmanPush.test().then(function (r) { say(r.sent ? msg('test-sent') : (r.error || msg('test-fail')), r.sent ? 'success' : 'warning'); });
+    });
+    document.getElementById('sound-toggle').addEventListener('click', function () {
+        XmanPush.setSound(!server.sound_enabled).then(function (r) {
+            server.sound_enabled = !!r.sound_enabled;
+            return XmanPush.browserState().then(draw);
+        });
+    });
+    document.getElementById('btn-sound-preview').addEventListener('click', function () { XmanPush.previewSound(); });
+})();
+</script>
+{% endblock %}

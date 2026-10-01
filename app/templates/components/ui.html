@@ -1,0 +1,90 @@
+{# Shared X-MAN UI macros. Import with:  {% import "components/ui.html" as ui with context %} #}
+
+{% set SEV_ICON = {'critical': 'octagon-alert', 'high': 'triangle-alert', 'medium': 'circle-alert',
+                   'low': 'info', 'normal': 'circle-check'} %}
+{% set HAZARD_ICON = {'flood': 'waves', 'earthquake': 'activity', 'landslide': 'mountain',
+                      'road_damage': 'construction'} %}
+{% set HAZARD_LABEL = {'flood': 'Flood', 'earthquake': 'Earthquake / abnormal ground motion',
+                       'landslide': 'Landslide', 'road_damage': 'Road damage'} %}
+{% set STATUS_LABEL = {'detected': 'Detected', 'investigating': 'Investigating', 'confirmed': 'Confirmed',
+                       'response': 'Response in progress', 'resolved': 'Resolved', 'rejected': 'Rejected'} %}
+
+{# severity: always icon + word + colour #}
+{% macro sev(level) -%}
+{%- set level = level or 'normal' -%}
+<span class="sev sev-{{ level }}"><i data-lucide="{{ SEV_ICON.get(level, 'circle') }}" aria-hidden="true"></i>{{ level|t }}</span>
+{%- endmacro %}
+
+{% macro hazard_name(event_type) -%}{{ HAZARD_LABEL.get(event_type, event_type)|t }}{%- endmacro %}
+{% macro hazard_icon(event_type) -%}<i data-lucide="{{ HAZARD_ICON.get(event_type, 'triangle-alert') }}" aria-hidden="true"></i>{%- endmacro %}
+{% macro status(value) -%}<span class="status-badge status-{{ value }}">{{ STATUS_LABEL.get(value, value)|t }}</span>{%- endmacro %}
+
+{% macro empty(icon, text, sub=None) -%}
+<div class="empty-state">
+    <i data-lucide="{{ icon }}" aria-hidden="true"></i>
+    <p><strong>{{ text|t }}</strong></p>
+    {% if sub %}<p>{{ sub|t }}</p>{% endif %}
+    {{ caller() if caller else '' }}
+</div>
+{%- endmacro %}
+
+{# hazard row used by citizen, district and authority pages (public fields only) #}
+{% macro hazard_row(h, link=None) -%}
+<div class="list-item sev-bar sev-{{ h.severity }}-edge" style="padding-left:12px;">
+    <span class="icon-lg" style="color: var(--sev-{{ h.severity }}); margin-top:2px;">{{ hazard_icon(h.event_type) }}</span>
+    <div class="grow">
+        <h3>{% if link %}<a href="{{ link }}">{{ h.title or hazard_name(h.event_type) }}</a>{% else %}{{ h.title or hazard_name(h.event_type) }}{% endif %}</h3>
+        <div class="meta">
+            {{ sev(h.severity) }} {{ status(h.status) }}
+            <span>{{ hazard_name(h.event_type) }}</span>
+            <span><i data-lucide="map-pin" class="icon-sm" aria-hidden="true"></i> {{ h.affected_districts|map(attribute='name')|join(', ') }}</span>
+            <time datetime="{{ h.detected_at.isoformat() }}Z">{{ h.detected_at.strftime('%d %b %H:%M') }} UTC</time>
+        </div>
+    </div>
+</div>
+{%- endmacro %}
+
+{# map of real coordinates only; points = [{'lat','lon','severity','title','type','status'}] #}
+{% macro hazard_map(points, map_id='hazard-map', height=320) -%}
+{% if points %}
+<div class="map-frame" style="height: {{ height }}px;"><div id="{{ map_id }}" role="img" aria-label="{{ 'Map of hazards with known coordinates'|t }}"></div></div>
+<p class="map-legend">{% for level in ['critical', 'high', 'medium', 'low'] %}{{ sev(level) }}{% endfor %}</p>
+<script type="application/json" id="{{ map_id }}-data">{{ points|tojson }}</script>
+{% else %}
+<p class="form-hint">{{ 'No hazard here has map coordinates yet. Hazards reported with GPS appear on the map.'|t }}</p>
+{% endif %}
+{%- endmacro %}
+
+{% macro leaflet_assets() -%}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+/* Draws every [data hazard map] on the page. Display only: colours come from the server's severity. */
+document.querySelectorAll('script[id$="-data"]').forEach(function (node) {
+    if (typeof L === 'undefined') { return; }
+    var el = document.getElementById(node.id.replace(/-data$/, ''));
+    if (!el) { return; }
+    var points = JSON.parse(node.textContent);
+    var css = getComputedStyle(document.documentElement);
+    var map = L.map(el, {scrollWheelZoom: false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18,
+        attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+    var bounds = [];
+    points.forEach(function (p) {
+        var color = css.getPropertyValue('--sev-' + p.severity).trim() || '#64748b';
+        var popup = document.createElement('div');
+        var strong = document.createElement('strong');
+        strong.textContent = p.title;
+        popup.appendChild(strong);
+        popup.appendChild(document.createElement('br'));
+        popup.appendChild(document.createTextNode(p.severity + ' · ' + p.status));
+        // size also encodes severity, so the map never relies on colour alone
+        var radius = {critical: 13, high: 11, medium: 8, low: 6}[p.severity] || 7;
+        L.circleMarker([p.lat, p.lon], {radius: radius, color: color, fillColor: color, fillOpacity: 0.55, weight: 2})
+            .bindPopup(popup).addTo(map);
+        bounds.push([p.lat, p.lon]);
+    });
+    map.fitBounds(bounds, {maxZoom: 12, padding: [30, 30]});
+});
+</script>
+{%- endmacro %}

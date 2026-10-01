@@ -1,85 +1,130 @@
 {% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% from "components/photo.html" import photo, photo_credit with context %}
 
+{% set district = o.district %}
 {% block title %}{{ district.name }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <h1><i data-lucide="map-pin"></i> {{ district.name }}</h1>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">
-        {{ district.province }} {{ 'Province'|t }} | {{ 'Headquarters:'|t }} {{ district.headquarters }}
-    </p>
-    
-    <div class="grid grid-4" style="margin-bottom: 2rem;">
-        <div class="stat-card">
-            <div class="stat-value">{{ authorities|length }}</div>
-            <div class="stat-label">{{ 'Authorities'|t }}</div>
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="map-pin"></i> {{ district.province }} {{ 'Province'|t }}</span>
+            <h1>{{ district.name }}</h1>
+            <p class="page-sub">
+                {% if district.headquarters %}{{ 'Headquarters:'|t }} {{ district.headquarters }}{% endif %}
+                {% if district.population %} · {{ 'Population'|t }} <span class="num">{{ '{:,}'.format(district.population) }}</span>{% endif %}
+                {% if district.area_sq_km %} · <span class="num">{{ '{:,.0f}'.format(district.area_sq_km) }}</span> km²{% endif %}
+            </p>
         </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ roads|length }}</div>
-            <div class="stat-label">{{ 'Road Segments'|t }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ rivers|length }}</div>
-            <div class="stat-label">{{ 'Rivers'|t }}</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ projects|length }}</div>
-            <div class="stat-label">{{ 'Projects'|t }}</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            {% if current_user.district_id == district.id %}
+            <span class="badge badge-success"><i data-lucide="house"></i> {{ 'Your district'|t }}</span>
+            {% else %}
+            <form method="POST" action="/select-district">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="district_id" value="{{ district.id }}">
+                <input type="hidden" name="next" value="/district/{{ district.id }}">
+                <button type="submit" class="btn btn-secondary"><i data-lucide="house-plus"></i> {{ 'Set as my district'|t }}</button>
+            </form>
+            {% endif %}
+            <a href="/districts" class="btn btn-ghost"><i data-lucide="arrow-left"></i> {{ t('districts') }}</a>
         </div>
     </div>
-    
-    <div class="grid grid-2">
-        <div class="card">
-            <h2 class="card-title"><i data-lucide="landmark"></i> {{ 'Authorities'|t }}</h2>
-            {% for authority in authorities %}
-                <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-                    <strong>{{ authority.name }}</strong>
-                    <p style="font-size: 0.875rem; color: var(--text-muted);"> <i data-lucide="phone"></i> {{ authority.phone }} | <i data-lucide="mail"></i> {{ authority.email }}
-                    </p>
-                </div>
-            {% endfor %}
-        </div>
-        
-        <div class="card">
-            <h2 class="card-title"><i data-lucide="route"></i> {{ 'Road Segments'|t }}</h2>
-            {% for road in roads %}
-                <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-                    <strong>{{ road.name }}</strong>
-                    <span class="status-badge status-{{ road.status }}">{{ road.status|t }}</span>
-                    <p style="font-size: 0.875rem; color: var(--text-muted);">
-                        {{ road.from_location }} <i data-lucide="move-right" class="icon-sm"></i> {{ road.to_location }} ({{ road.distance_km or '—' }} {{ 'km'|t }})
-                    </p>
-                </div>
-            {% endfor %}
-        </div>
-        
-        <div class="card">
-            <h2 class="card-title"><i data-lucide="waves"></i> {{ 'Rivers'|t }}</h2>
-            {% for river in rivers %}
-                <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-                    <strong>{{ river.name }}</strong>
-                    <span class="status-badge status-{{ river.status }}">{{ river.status|t }}</span>
-                    <p style="font-size: 0.875rem; color: var(--text-muted);">
-                        {{ 'Level:'|t }} {{ river.current_level|metres }} | {{ 'Danger:'|t }} {{ river.danger_level|metres }}
-                    </p>
-                </div>
-            {% endfor %}
-        </div>
-        
-        <div class="card">
-            <h2 class="card-title"><i data-lucide="building-2"></i> {{ 'Projects'|t }}</h2>
-            {% for project in projects %}
-                <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
-                    <strong>{{ project.name }}</strong>
-                    <div class="progress-bar" style="margin: 0.5rem 0;">
-                        <div class="progress-fill" style="width: {{ project.progress_percent }}%;"></div>
-                    </div>
-                    <small>{{ project.progress_percent }}% {{ 'complete'|t }}</small>
-                </div>
-            {% endfor %}
-        </div>
+
+    <div class="grid grid-4" style="margin-bottom:16px;">
+        <div class="stat-card"><i data-lucide="triangle-alert"></i><div class="stat-value">{{ o.hazards|length }}</div><div class="stat-label">{{ 'Active hazards'|t }}</div>
+            <div class="stat-note">{% if o.hazards %}{{ ui.sev(o.highest_severity) }}{% else %}{{ ui.sev('normal') }}{% endif %}</div></div>
+        <div class="stat-card"><i data-lucide="waves"></i><div class="stat-value">{{ o.rivers|length }}</div><div class="stat-label">{{ 'Rivers'|t }}</div>
+            {% if o.river_status %}<div class="stat-note">{% for s, n in o.river_status.items() %}{{ (s or 'unknown')|t }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}</div>
+        <div class="stat-card"><i data-lucide="route"></i><div class="stat-value">{{ o.road_total }}</div><div class="stat-label">{{ 'Road Segments'|t }}</div>
+            {% if o.road_status %}<div class="stat-note">{% for s, n in o.road_status.items() %}{{ s|t }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</div>{% endif %}</div>
+        <div class="stat-card"><i data-lucide="building-2"></i><div class="stat-value">{{ o.projects|length }}</div><div class="stat-label">{{ 'Projects'|t }}</div></div>
+    </div>
+
+    <div class="bento">
+        <section class="card span-7" aria-labelledby="h-hazards">
+            <h2 class="card-title" id="h-hazards"><i data-lucide="siren"></i> {{ 'Active hazards'|t }}</h2>
+            {% if o.hazards %}
+            <div class="list">{% for h in o.hazards %}{{ ui.hazard_row(h) }}{% endfor %}</div>
+            {% else %}
+            <div class="empty-state">
+                {{ photo('hills-rice-terraces.jpg', 'empty-photo') }}
+                <p><strong>{{ 'No active hazards in this district.'|t }}</strong></p>
+                {{ photo_credit('hills-rice-terraces.jpg') }}
+            </div>
+            {% endif %}
+        </section>
+        <section class="card span-5" aria-labelledby="h-map">
+            <h2 class="card-title" id="h-map"><i data-lucide="map"></i> {{ 'Map'|t }}</h2>
+            {{ ui.hazard_map(o.map_points, 'district-map', 300) }}
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-rivers">
+            <h2 class="card-title" id="h-rivers"><i data-lucide="waves"></i> {{ 'Rivers'|t }}</h2>
+            {% if o.rivers %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'River'|t }}</th><th scope="col">{{ 'Status'|t }}</th><th scope="col">{{ 'Level'|t }}</th></tr></thead>
+                <tbody>{% for r in o.rivers %}
+                <tr><td><strong>{{ r.name }}</strong></td>
+                    <td><span class="status-badge status-{{ r.status or 'unknown' }}">{{ (r.status or 'unknown')|t }}</span></td>
+                    <td class="num">{% if r.current_level is not none %}{{ r.current_level }} m{% if r.danger_level %} / {{ r.danger_level }} m{% endif %}{% else %}—{% endif %}</td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {% else %}{{ ui.empty('waves', 'No rivers recorded for this district.') }}{% endif %}
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-roads">
+            <h2 class="card-title" id="h-roads"><i data-lucide="route"></i> {{ 'Road Segments'|t }}
+                {% if o.road_total > o.roads|length %}<a class="card-action" href="/roads/status?district_id={{ district.id }}">{{ 'All'|t }} {{ o.road_total }}</a>{% endif %}</h2>
+            {% if o.roads %}
+            <div class="list">
+                {% for road in o.roads %}
+                <div class="list-item"><div class="grow"><h3>{{ road.name }}</h3>
+                    <div class="meta"><span class="status-badge status-{{ road.status }}">{{ road.status|t }}</span>
+                        {% if road.from_location %}<span>{{ road.from_location }} → {{ road.to_location }}</span>{% endif %}
+                        {% if road.distance_km %}<span class="num">{{ road.distance_km }} {{ 'km'|t }}</span>{% endif %}</div></div></div>
+                {% endfor %}
+            </div>
+            {% else %}{{ ui.empty('route', 'No road segments recorded for this district.') }}{% endif %}
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-projects">
+            <h2 class="card-title" id="h-projects"><i data-lucide="building-2"></i> {{ 'Projects'|t }}</h2>
+            {% if o.projects %}
+            <div class="list">
+                {% for p in o.projects %}
+                <div class="list-item"><div class="grow"><h3><a href="/projects/{{ p.id }}">{{ p.name }}</a></h3>
+                    <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ p.progress_percent or 0 }}" aria-label="{{ p.name }}"><div class="progress-fill" style="width: {{ p.progress_percent or 0 }}%;"></div></div>
+                    <div class="meta"><span class="num">{{ p.progress_percent or 0 }}%</span>{% if p.status %}<span class="status-badge status-{{ p.status }}">{{ p.status|t }}</span>{% endif %}</div></div></div>
+                {% endfor %}
+            </div>
+            {% else %}{{ ui.empty('building-2', 'No projects recorded for this district.') }}{% endif %}
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-auth">
+            <h2 class="card-title" id="h-auth"><i data-lucide="landmark"></i> {{ 'Authorities'|t }}</h2>
+            {% if o.authorities %}
+            <div class="list">{% for a in o.authorities %}
+                <div class="list-item"><div class="grow"><h3>{{ a.name }}</h3><div class="meta"><span class="chip">{{ a.category|t }}</span>{% if a.phone %}<span><i data-lucide="phone" class="icon-sm"></i> {{ a.phone }}</span>{% endif %}</div></div></div>
+            {% endfor %}</div>
+            {% else %}{{ ui.empty('landmark', 'No authorities recorded for this district.') }}{% endif %}
+        </section>
+
+        {% if o.posts %}
+        <section class="card span-12" aria-labelledby="h-posts">
+            <h2 class="card-title" id="h-posts"><i data-lucide="newspaper"></i> {{ 'Community posts'|t }} <a class="card-action" href="/social/feed?district_id={{ district.id }}">{{ o.post_total }} {{ 'total'|t }}</a></h2>
+            <div class="grid grid-3">{% for post in o.posts %}
+                <article class="list-item" style="border:1px solid var(--border); border-radius: var(--radius-md); padding:12px;"><div class="grow">
+                    <p style="color: var(--text-primary);">{{ post.content[:140] }}{% if post.content|length > 140 %}…{% endif %}</p>
+                    <div class="meta"><span class="chip">{{ post.category|t }}</span><time datetime="{{ post.created_at.isoformat() }}Z">{{ post.created_at.strftime('%d %b') }}</time></div></div></article>
+            {% endfor %}</div>
+        </section>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
+
+{% block extra_js %}{{ ui.leaflet_assets() }}{% endblock %}

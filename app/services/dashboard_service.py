@@ -243,3 +243,45 @@ def build(user, requested_district_id=None):
     if user.role == 'admin':
         payload['statistics'] = admin_statistics(now)
     return payload
+
+
+def authority_operations(user):
+    """Operational view for the authority panel (product-quality milestone).
+
+    Same scope rules as the monitoring dashboard: an authority sees hazards affecting its
+    authority's district, devices its authority owns, and reports per the M05 visibility query.
+    """
+    scope = district_scope(user)
+    now = datetime.utcnow()
+    hazards = active_hazards(scope)
+    by_status = {}
+    for h in hazards:
+        by_status[h.status] = by_status.get(h.status, 0) + 1
+    devices = device_payload(visible_devices(user), now)
+    reports = recent_reports(user)
+    open_actions = []
+    if hazards:
+        open_actions = IncidentResponseAction.query.filter(
+            IncidentResponseAction.incident_id.in_([h.id for h in hazards]),
+            IncidentResponseAction.status.in_(['planned', 'in_progress']),
+        ).options(joinedload(IncidentResponseAction.author)) \
+            .order_by(IncidentResponseAction.created_at.desc()).limit(10).all()
+    pending_reports = citizen_report_service.visible_reports_query(user) \
+        .filter(CitizenReport.status == 'submitted').count() if is_manager(user) else 0
+    points = [{'id': h.id, 'type': h.event_type, 'severity': h.severity, 'status': h.status,
+               'title': h.title or h.event_type, 'lat': h.latitude, 'lon': h.longitude}
+              for h in hazards if h.latitude is not None and h.longitude is not None]
+    return {
+        'hazards': hazards,
+        'summary': hazard_summary(scope),
+        'by_status': by_status,
+        'needs_investigation': by_status.get('detected', 0),
+        'response': response_summaries([h.id for h in hazards]),
+        'devices': devices,
+        'device_freshness': {label: sum(1 for d in devices if d['freshness'] == label)
+                             for label in ('online', 'stale', 'offline', 'never')},
+        'reports': reports,
+        'pending_reports': pending_reports,
+        'open_actions': open_actions,
+        'map_points': points,
+    }

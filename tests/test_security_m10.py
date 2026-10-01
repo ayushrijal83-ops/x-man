@@ -33,13 +33,14 @@ def world(app, tmp_path):
         db.session.add_all([auth_a, auth_b])
         db.session.commit()
         users = {}
-        for name, role, district_id, authority_id in [
+        for index, (name, role, district_id, authority_id) in enumerate([
             ('citizen_a', 'citizen', a.id, None), ('citizen_b', 'citizen', b.id, None),
             ('auth_a', 'authority', a.id, auth_a.id), ('auth_b', 'authority', b.id, auth_b.id),
             ('auth_unlinked', 'authority', a.id, None), ('admin', 'admin', None, None),
-        ]:
+        ]):
+            # product-quality milestone: mobile numbers are unique (E.164), so one per user
             user = User(username=name, email=f'{name}@t.np', role=role, district_id=district_id,
-                        authority_id=authority_id, phone='9800000000')
+                        authority_id=authority_id, phone=f'+97798000000{index:02d}')
             user.set_password('pw')
             db.session.add(user)
             users[name] = user
@@ -567,8 +568,12 @@ def test_fresh_install_is_migration_tracked(tmp_path):
         return subprocess.run([sys.executable, *args], cwd=REPO, env=env, capture_output=True, text=True, timeout=300)
 
     assert run('init_db.py').returncode == 0
+    # stamped at whatever the single current head is (was hard-coded to M09's c3d7f1a9b6e2)
+    heads = run('-m', 'flask', 'db', 'heads')
+    head = (heads.stdout + heads.stderr).strip().splitlines()[-1].split()[0]
+    assert len(head) == 12 and ' (head)' in (heads.stdout + heads.stderr)
     current = run('-m', 'flask', 'db', 'current')
-    assert 'c3d7f1a9b6e2 (head)' in current.stdout + current.stderr
+    assert f'{head} (head)' in current.stdout + current.stderr
     for step in (('upgrade',), ('check',), ('downgrade',), ('upgrade',), ('check',)):
         result = run('-m', 'flask', 'db', *step)
         assert result.returncode == 0, (step, result.stderr[-800:])

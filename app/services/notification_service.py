@@ -10,7 +10,7 @@ once. Python filters first; the unique (user_id, dedup_key) index is the final
 defence.
 
 Functions add to the session but do not commit; the caller owns the transaction.
-In-app only: no SMS/email/push (later milestones).
+M12: rows created here are also queued for Web Push (emergency_dispatcher); no SMS/email yet.
 """
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, selectinload
@@ -19,6 +19,7 @@ from app.extensions import db
 from app.models import Authority, Incident, IncidentAffectedDistrict, Notification, User
 from app.models.incident import HAZARD_SEVERITY
 from app.models.notification import NOTIFICATION_TYPES, LEGACY_NOTIFICATION_TYPES
+from app.services import emergency_dispatcher
 
 HAZARD_LABELS = {
     'flood': 'Flood',
@@ -145,8 +146,10 @@ def notify_hazard(incident, ntype, exclude_user_ids=()):
         return []
     title, message = _compose(incident, ntype)
     link = _link_for(incident)
-    return _save([_build(uid, ntype, title, message, link, incident.severity, incident.id, key)
-                  for uid in recipients])
+    saved = _save([_build(uid, ntype, title, message, link, incident.severity, incident.id, key)
+                   for uid in recipients])
+    emergency_dispatcher.queue(saved)  # M12: Web Push for these rows, after the caller commits
+    return saved
 
 
 def notify_hazard_detected(incident, exclude_user_ids=()):

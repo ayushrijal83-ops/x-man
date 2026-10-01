@@ -38,6 +38,22 @@ class Config:
     MOTION_TILT_CHANGE_THRESHOLD_DEG = float(os.environ['MOTION_TILT_CHANGE_THRESHOLD_DEG']) \
         if os.getenv('MOTION_TILT_CHANGE_THRESHOLD_DEG') else None
 
+    # M12 Web Push. Server credentials from the environment only (generate with `flask push-keys`);
+    # unset = push disabled, in-app and in-website alerts still work. The private key never reaches a page.
+    VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
+    VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
+    VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', 'mailto:admin@x-man.local')
+    # The server POSTs to subscription endpoints, so only these push services are accepted (no SSRF).
+    WEB_PUSH_ALLOWED_HOSTS = [h.strip().lower() for h in os.getenv(
+        'WEB_PUSH_ALLOWED_HOSTS',
+        'fcm.googleapis.com,updates.push.services.mozilla.com,push.services.mozilla.com,'
+        'notify.windows.com,push.apple.com').split(',') if h.strip()]
+    # Lowest hazard severity that raises the in-website emergency alert and an emergency push.
+    # An unknown value falls back to 'high' (never to "everything is an emergency").
+    EMERGENCY_MIN_SEVERITY = os.getenv('EMERGENCY_MIN_SEVERITY', 'high').strip().lower()
+    if EMERGENCY_MIN_SEVERITY not in ('low', 'medium', 'high', 'critical'):
+        EMERGENCY_MIN_SEVERITY = 'high'
+
 class DevelopmentConfig(Config):
     DEBUG = True
     TESTING = False

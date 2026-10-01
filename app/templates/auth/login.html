@@ -3,41 +3,52 @@
 {% block title %}{{ 'Sign in'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
-<div class="auth-container">
-    <div class="auth-card">
-        <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:1rem;">{% include "components/lang_selector.html" %}<button type="button" class="theme-toggle" aria-label="{{ 'Switch to dark mode'|t }}" aria-pressed="false"><i data-lucide="moon"></i></button></div>
-        <h2 class="auth-title">{{ 'Welcome Back'|t }}</h2>
-        <p class="auth-subtitle">{{ 'Login to continue to your dashboard'|t }}</p>
-        
-        <form method="POST">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            
-            <div class="form-group">
-                <label for="username">{{ 'Username'|t }}</label>
-                <input type="text" id="username" name="username" required 
-                       class="form-input" placeholder="{{ 'Enter your username'|t }}">
-            </div>
-            
-            <div class="form-group">
-                <label for="password">{{ 'Password'|t }}</label>
-                <input type="password" id="password" name="password" required 
-                       class="form-input" placeholder="{{ 'Enter your password'|t }}">
-            </div>
-            
-            <div class="form-check">
-                <input type="checkbox" id="remember" name="remember">
-                <label for="remember">{{ 'Remember me'|t }}</label>
-            </div>
-            
-            <button type="submit" class="btn btn-primary btn-block">
-                {{ 'Login'|t }}
-            </button>
-        </form>
-        
-        <p class="auth-footer">
-            {{ "Don't have an account?"|t }} 
-            <a href="/auth/register">{{ 'Register here'|t }}</a>
-        </p>
-    </div>
+<div class="auth-shell">
+    {% include "components/auth_visual.html" %}
+    <main class="auth-main" id="main-content" tabindex="-1">
+        <div class="auth-card">
+            <div class="auth-top">{% include "components/lang_selector.html" %}<button type="button" class="theme-toggle" aria-label="{{ 'Switch to dark mode'|t }}" aria-pressed="false"><i data-lucide="moon"></i></button></div>
+            <span class="eyebrow"><i data-lucide="log-in"></i> {{ 'Citizen sign in'|t }}</span>
+            <h1 class="auth-title">{{ 'Welcome Back'|t }}</h1>
+            <p class="auth-subtitle">{{ 'Login to continue to your dashboard'|t }}</p>
+
+            {% if error %}
+            <div class="form-errors" role="alert" id="login-error"><strong>{{ error|t }}</strong></div>
+            {% endif %}
+
+            <form method="POST" data-submit-busy novalidate>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="username">{{ 'Username'|t }}</label>
+                    <input type="text" id="username" name="username" required autocomplete="username"
+                           autocapitalize="none" spellcheck="false" value="{{ username }}"
+                           class="form-input" placeholder="{{ 'Enter your username'|t }}"
+                           {% if error %}aria-invalid="true" aria-describedby="login-error"{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label for="password">{{ 'Password'|t }}</label>
+                    <div class="password-wrap">
+                        <input type="password" id="password" name="password" required autocomplete="current-password"
+                               class="form-input" placeholder="{{ 'Enter your password'|t }}"
+                               {% if error %}aria-invalid="true" aria-describedby="login-error"{% endif %}>
+                        <button type="button" class="btn btn-ghost btn-sm" data-toggle-password="password"
+                                aria-controls="password" aria-pressed="false">{{ 'Show'|t }}</button>
+                    </div>
+                </div>
+                <div class="form-check">
+                    <input type="checkbox" id="remember" name="remember">
+                    <label for="remember">{{ 'Remember me'|t }}</label>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block btn-lg"><span class="btn-label">{{ 'Login'|t }}</span></button>
+            </form>
+
+            <p class="auth-footer">
+                {{ "Don't have an account?"|t }} <a href="/auth/register">{{ 'Register here'|t }}</a><br>
+                <a href="/auth/authority/login">{{ 'Authority sign in'|t }}</a>
+            </p>
+        </div>
+    </main>
 </div>
 {% endblock %}
+
+{% block extra_js %}{% include "components/auth_form_js.html" %}{% endblock %}

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ user.full_name or user.username }} - {{ 'Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="user"></i> {{ 'Citizen account'|t }}</span>
+            <h1>{{ user.full_name or user.username }}</h1>
+            <p class="page-sub">@{{ user.username }} · {{ aui.account_status(user) }}</p>
+        </div>
+        <a href="{{ url_for('admin.citizens', district_id=user.district_id) if user.district_id else url_for('admin.citizens') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> {{ 'Back to citizens'|t }}</a>
+    </div>
+    {{ aui.tabs('citizens') }}
+
+    <div class="bento">
+        <section class="card span-7" aria-labelledby="h-account">
+            <h2 class="card-title" id="h-account"><i data-lucide="id-card"></i> {{ 'Account'|t }}</h2>
+            <dl class="kv">
+                <dt>{{ 'Full name'|t }}</dt><dd>{{ user.full_name or '—' }}</dd>
+                <dt>{{ 'Email'|t }}</dt><dd>{{ user.email }}</dd>
+                <dt>{{ 'Mobile'|t }}</dt><dd>{{ user.phone or '—' }} {% if user.phone %}<span class="badge badge-neutral">{{ 'Not verified'|t if not user.phone_verified else 'Verified'|t }}</span>{% endif %}</dd>
+                <dt>{{ 'District'|t }}</dt><dd>{{ d.district.name if d.district else '—' }}</dd>
+                <dt>{{ 'Permanent address'|t }}</dt><dd>{{ user.permanent_address or '—' }}</dd>
+                <dt>{{ 'Current location'|t }}</dt>
+                <dd>{% if d.location_shared %}{{ 'Shared by the citizen'|t }} · {{ aui.when(user.location_updated_at) }} <span class="meta">({{ 'coordinates are not shown in the admin panel'|t }})</span>{% else %}{{ 'Not shared'|t }}{% endif %}</dd>
+                <dt>{{ 'Registered'|t }}</dt><dd>{{ aui.when(user.created_at) }}</dd>
+                <dt>{{ 'Last login'|t }}</dt><dd>{{ aui.when(user.last_login_at) }}</dd>
+            </dl>
+        </section>
+
+        <section class="card span-5" aria-labelledby="h-manage">
+            <h2 class="card-title" id="h-manage"><i data-lucide="settings"></i> {{ 'Manage'|t }}</h2>
+            <form method="post" action="{{ url_for('admin.set_status', user_id=user.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="active" value="{{ '0' if user.is_active else '1' }}">
+                {% if user.is_active %}
+                <p class="meta">{{ 'Disabling signs the citizen out and blocks login. Their data and notification history are kept.'|t }}</p>
+                <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> {{ 'Disable account'|t }}</button>
+                {% else %}
+                <button class="btn btn-success" type="submit"><i data-lucide="circle-check"></i> {{ 'Enable account'|t }}</button>
+                {% endif %}
+            </form>
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-notif">
+            <h2 class="card-title" id="h-notif"><i data-lucide="bell-ring"></i> {{ 'Notifications'|t }}</h2>
+            <dl class="kv" style="margin-bottom:12px;">
+                <dt>{{ 'Emergency alerts'|t }}</dt><dd>{{ aui.alert_state(user.emergency_alert_state) }}</dd>
+                <dt>{{ 'Emergency sound'|t }}</dt><dd>{{ 'ON'|t if user.emergency_sound_enabled else 'OFF'|t }}</dd>
+                <dt>{{ 'Notifications received'|t }}</dt><dd>{{ d.notifications }} ({{ d.unread }} {{ 'unread'|t }})</dd>
+            </dl>
+            {% if d.subscriptions %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'Device'|t }}</th><th scope="col">{{ 'Status'|t }}</th><th scope="col">{{ 'Created'|t }}</th><th scope="col">{{ 'Last delivery'|t }}</th></tr></thead>
+                <tbody>{% for s in d.subscriptions %}
+                <tr><td>{{ s.device|truncate(80) }}</td>
+                    <td>{% if s.enabled %}<span class="badge badge-success"><i data-lucide="circle-check"></i>{{ 'Enabled'|t }}</span>{% else %}<span class="badge badge-neutral"><i data-lucide="circle-minus"></i>{{ 'Disabled'|t }}</span>{% endif %}</td>
+                    <td>{{ s.created_at[:16].replace('T', ' ') if s.created_at else '—' }}</td><td>{{ s.last_used_at[:16].replace('T', ' ') if s.last_used_at else '—' }}</td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {% else %}<p class="meta">{{ 'No push subscriptions.'|t }}</p>{% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}

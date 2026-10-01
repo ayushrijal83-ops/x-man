@@ -15,6 +15,8 @@ class Authority(db.Model):
     office_hours = db.Column(db.String(100))
     is_verified = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    district = db.relationship('District')
     
     def __repr__(self):
         return f'<Authority {self.name}>'

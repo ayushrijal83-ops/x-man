@@ -13,7 +13,9 @@ rivers_bp = Blueprint('rivers', __name__)
 @login_required
 def river_status():
     """Show river status."""
-    district_id = request.args.get('district_id')
+    district_id = request.args.get('district_id', '').strip()
+    if not (district_id.isascii() and district_id.isdigit()):  # 'abc' used to be a 500
+        district_id = ''
 
     if district_id:
         rivers = River.query.filter_by(district_id=int(district_id)).all()

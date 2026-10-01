@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "components/photo.html" import photo with context %}
+
+{% block title %}{{ 'Photo credits'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% if current_user.is_authenticated %}{% include "components/navbar.html" %}{% endif %}
+<div class="container">
+    <div class="page-head">
+        <div>
+            <span class="eyebrow"><i data-lucide="image"></i> {{ 'Attribution'|t }}</span>
+            <h1>{{ 'Photo credits'|t }}</h1>
+            <p class="page-sub">{{ 'Site photographs come from Wikimedia Commons under the licences below. Citizen report photos are private and never used here.'|t }}</p>
+        </div>
+    </div>
+    <div class="grid grid-3">
+        {% for name, c in image_credits.items() %}
+        <figure class="card" style="padding:12px;">
+            {{ photo(name, 'empty-photo') }}
+            <figcaption>
+                <p style="color: var(--text-primary);">{{ c.alt }}</p>
+                <p class="credit">{{ 'Photo'|t }}: <a href="{{ c.source }}" rel="noopener" target="_blank">{{ c.author }}</a> ·
+                    <a href="{{ c.license_url }}" rel="noopener license" target="_blank">{{ c.license }}</a> · {{ 'resized'|t }}</p>
+            </figcaption>
+        </figure>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
