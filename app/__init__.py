@@ -45,6 +45,7 @@ def create_app(config_name=None):
     from app.routes.hazard_events import hazard_events_bp
     from app.routes.notifications import notifications_bp
     from app.routes.reports import reports_bp
+    from app.routes.monitoring import monitoring_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -65,6 +66,7 @@ def create_app(config_name=None):
     app.register_blueprint(hazard_events_bp)
     app.register_blueprint(notifications_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(monitoring_bp)
     
     from app.services.translation_service import TranslationService
     translation_service = TranslationService()

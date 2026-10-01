@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Disaster Monitoring'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+    .mon-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+    .mon-refresh { font-size: 13px; color: var(--text-muted); display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+    .mon-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); margin-top: var(--space-4); }
+    .mon-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-4); margin-top: var(--space-4); }
+    .mon-section { margin-top: var(--space-4); }
+    .mon-section > h2 { font-size: 18px; margin: 0 0 var(--space-3); display: flex; align-items: center; gap: var(--space-2); }
+    .mon-list { display: flex; flex-direction: column; gap: var(--space-2); }
+    .mon-row { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); }
+    .mon-row h3 { margin: 0 0 var(--space-1); font-size: 15px; }
+    .mon-meta { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-muted); }
+    .mon-pill-row { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
+    .mon-pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); }
+    #mon-map { height: 420px; border-radius: var(--radius-md); z-index: 0; }
+    .mon-devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); }
+    .mon-readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: var(--space-2); margin-top: var(--space-2); }
+    .mon-reading strong { display: block; font-size: 18px; }
+    .mon-reading span { font-size: 12px; color: var(--text-muted); }
+    .fresh-online { color: var(--success-text); }
+    .fresh-stale { color: var(--warning-text); }
+    .fresh-offline, .fresh-never { color: var(--danger-text); }
+    .mon-note { font-size: 12px; color: var(--text-muted); margin-top: var(--space-2); }
+    .mon-stat-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-2); font-size: 14px; }
+    .unread { border-left: 3px solid var(--info); }
+    @media (max-width: 900px) { .mon-cols { grid-template-columns: 1fr; } #mon-map { height: 320px; } }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <div class="mon-head">
+        <div>
+            <h1><i data-lucide="activity"></i> {{ 'Disaster Monitoring'|t }}</h1>
+            <p style="color: var(--text-muted); margin: 0;" id="mon-scope"></p>
+        </div>
+        <div class="mon-refresh">
+            {% if districts %}
+            <label for="mon-district">{{ 'District'|t }}</label>
+            <select id="mon-district" class="form-control" style="width: auto;">
+                <option value="">{{ 'All districts'|t }}</option>
+                {% for d in districts %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+            </select>
+            {% endif %}
+            <span id="mon-updated" aria-live="polite"></span>
+            <button type="button" class="btn btn-secondary" id="mon-refresh-btn"><i data-lucide="refresh-cw"></i> {{ 'Refresh'|t }}</button>
+        </div>
+    </div>
+    <div class="alert alert-error" id="mon-error" role="alert" hidden></div>
+
+    <section class="mon-section" aria-labelledby="h-summary">
+        <h2 id="h-summary"><i data-lucide="siren"></i> {{ 'Active hazards'|t }}</h2>
+        <div class="mon-grid" id="mon-summary-type"></div>
+        <div class="mon-grid" id="mon-summary-severity"></div>
+    </section>
+
+    <div class="mon-cols">
+        <section class="mon-section card" aria-labelledby="h-map">
+            <h2 id="h-map"><i data-lucide="map"></i> {{ 'Map'|t }}</h2>
+            <div id="mon-map" role="img" aria-label="{{ 'Map of active hazards'|t }}"></div>
+            <p class="mon-note" id="mon-unmapped"></p>
+        </section>
+        <section class="mon-section card" aria-labelledby="h-hazards">
+            <h2 id="h-hazards"><i data-lucide="triangle-alert"></i> {{ 'Hazard list'|t }}</h2>
+            <div class="mon-list" id="mon-hazards"></div>
+        </section>
+    </div>
+
+    {% if is_manager %}
+    <section class="mon-section card" aria-labelledby="h-iot">
+        <h2 id="h-iot"><i data-lucide="radio-tower"></i> {{ 'IoT devices'|t }}</h2>
+        <div class="mon-devices" id="mon-devices"></div>
+        <p class="mon-note">{{ 'Sensor readings are telemetry only. A vibration or tilt value is not an earthquake detection.'|t }}
+            <span id="mon-fresh-rule"></span></p>
+    </section>
+
+    <section class="mon-section card" aria-labelledby="h-reports">
+        <h2 id="h-reports"><i data-lucide="camera"></i> {{ 'Citizen photo reports'|t }}</h2>
+        <div class="mon-list" id="mon-reports"></div>
+        <p class="mon-note">{{ 'AI analysis is evidence only. It never confirms a hazard or changes its severity.'|t }}
+            <a href="/reports/review">{{ 'Review Photo Reports'|t }}</a></p>
+    </section>
+    {% endif %}
+
+    <section class="mon-section card" aria-labelledby="h-notifications">
+        <h2 id="h-notifications"><i data-lucide="bell"></i> {{ 'My alerts'|t }} <span class="badge badge-info" id="mon-unread"></span></h2>
+        <div class="mon-list" id="mon-notifications"></div>
+        <p class="mon-note"><a href="/notifications">{{ 'Notifications'|t }}</a></p>
+    </section>
+
+    <section class="mon-section card" aria-labelledby="h-stats" id="mon-stats-section" hidden>
+        <h2 id="h-stats"><i data-lucide="bar-chart-3"></i> {{ 'System statistics'|t }}</h2>
+        <div id="mon-stats"></div>
+    </section>
+</div>
+
+
+{% endblock %}
+
+{% block extra_js %}
+{% set labels = {
+    'flood': 'Flood'|t, 'earthquake': 'Earthquake / abnormal ground motion'|t, 'landslide': 'Landslide'|t,
+    'road_damage': 'Road damage'|t, 'low': 'low'|t, 'medium': 'medium'|t, 'high': 'high'|t, 'critical': 'critical'|t,
+    'detected': 'detected'|t, 'investigating': 'investigating'|t, 'confirmed': 'confirmed'|t,
+    'submitted': 'submitted'|t, 'accepted': 'accepted'|t, 'rejected': 'rejected'|t, 'resolved': 'resolved'|t,
+    'online': 'Online'|t, 'stale': 'Stale'|t, 'offline': 'Offline'|t, 'never': 'Never reported'|t,
+    'water_level': 'Water level'|t, 'temperature': 'Temperature'|t, 'humidity': 'Humidity'|t,
+    'vibration': 'Vibration'|t, 'tilt': 'Tilt'|t, 'rainfall': 'Rainfall'|t,
+    'no_hazards': 'No active hazards.'|t, 'no_devices': 'No devices visible to you.'|t,
+    'no_reports': 'No photo reports.'|t, 'no_notifications': 'No notifications yet.'|t,
+    'no_readings': 'No readings yet'|t, 'affected': 'Affected'|t, 'source': 'Source'|t,
+    'detected_at': 'Detected'|t, 'updated_at': 'Updated'|t, 'last_seen': 'Last seen'|t,
+    'ago': 'ago'|t, 'disabled': 'Disabled'|t, 'status': 'Status'|t, 'hazard': 'Hazard'|t,
+    'ai': 'AI'|t, 'not_analyzed': 'Not analyzed'|t, 'failed': 'Analysis failed'|t, 'unknown': 'unknown'|t,
+    'model_confidence': 'Model confidence'|t, 'not_on_map': 'Not on the map (no coordinates):'|t,
+    'updated': 'Updated'|t, 'every': 'refreshes every'|t, 'seconds': 's'|t, 'paused': 'paused while tab is hidden'|t,
+    'error': 'Could not load dashboard data.'|t, 'nationwide': 'Nationwide'|t, 'your_district': 'District'|t,
+    'no_scope': 'Your account is not linked to an authority district.'|t,
+    'fresh_rule': 'Online = reported within'|t, 'stale_rule': 'stale = within'|t, 'min': 'min'|t,
+    'events': 'Events'|t, 'reports': 'Reports'|t, 'notif24': 'Notifications (24 h)'|t, 'devices': 'Devices'|t,
+    'total': 'Total'|t, 'citizen_report': 'Citizen report'|t, 'iot': 'IoT'|t,
+    'authority': 'Authority'|t, 'system': 'System'|t
+} %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+    'use strict';
+    var L10N = {{ labels|tojson }};
+    var POLL_MS = {{ poll_seconds|int }} * 1000;
+    // Presentation only: map the severity the server sent to a badge colour. No decisions here.
+    var SEVERITY_BADGE = {critical: 'badge-danger', high: 'badge-danger', medium: 'badge-warning', low: 'badge-info'};
+    var SEVERITY_VAR = {critical: '--danger', high: '--danger', medium: '--warning', low: '--info'};
+
+    function tr(key) { return L10N[key] || key; }
+    function el(tag, cls, text) {
+        var node = document.createElement(tag);
+        if (cls) { node.className = cls; }
+        if (text !== undefined && text !== null) { node.textContent = text; }
+        return node;
+    }
+    function clear(id) { var n = document.getElementById(id); if (n) { n.textContent = ''; } return n; }
+    function when(iso) { return iso ? new Date(iso.endsWith('Z') ? iso : iso + 'Z').toLocaleString() : '—'; }
+    function ago(seconds) {
+        if (seconds === null || seconds === undefined) { return '—'; }
+        if (seconds < 60) { return seconds + ' s ' + tr('ago'); }
+        if (seconds < 3600) { return Math.floor(seconds / 60) + ' ' + tr('min') + ' ' + tr('ago'); }
+        if (seconds < 86400) { return Math.floor(seconds / 3600) + ' h ' + tr('ago'); }
+        return Math.floor(seconds / 86400) + ' d ' + tr('ago');
+    }
+    function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888'; }
+    function severityBadge(severity) { return el('span', 'badge ' + (SEVERITY_BADGE[severity] || 'badge-neutral'), tr(severity)); }
+
+    function renderSummary(summary) {
+        var types = clear('mon-summary-type'), sev = clear('mon-summary-severity');
+        Object.keys(summary.by_type).forEach(function (k) {
+            var card = el('div', 'card stat-card');
+            card.appendChild(el('div', 'stat-value', summary.by_type[k]));
+            card.appendChild(el('div', 'stat-label', tr(k)));
+            types.appendChild(card);
+        });
+        Object.keys(summary.by_severity).forEach(function (k) {
+            var card = el('div', 'card stat-card');
+            card.appendChild(el('div', 'stat-value', summary.by_severity[k]));
+            card.appendChild(severityBadge(k));
+            sev.appendChild(card);
+        });
+    }
+
+    function hazardRow(h) {
+        var row = el('article', 'mon-row');
+        row.appendChild(el('h3', null, h.title || tr(h.event_type)));
+        var meta = el('div', 'mon-meta');
+        meta.appendChild(severityBadge(h.severity));
+        meta.appendChild(el('span', 'status-badge', tr(h.status)));
+        meta.appendChild(el('span', null, tr(h.event_type)));
+        if (h.source) { meta.appendChild(el('span', null, tr('source') + ': ' + tr(h.source))); }
+        row.appendChild(meta);
+        var areas = el('div', 'mon-pill-row');
+        areas.appendChild(el('span', 'mon-meta', tr('affected') + ':'));
+        (h.affected_districts || []).forEach(function (d) { areas.appendChild(el('span', 'mon-pill', d.name)); });
+        row.appendChild(areas);
+        var times = el('div', 'mon-meta');
+        times.appendChild(el('span', null, tr('detected_at') + ' ' + when(h.detected_at)));
+        times.appendChild(el('span', null, tr('updated_at') + ' ' + when(h.updated_at)));
+        if (h.location) { times.appendChild(el('span', null, h.location)); }
+        row.appendChild(times);
+        return row;
+    }
+
+    function renderHazards(hazards) {
+        var list = clear('mon-hazards');
+        if (!hazards.length) { list.appendChild(el('p', 'empty-state', tr('no_hazards'))); return; }
+        hazards.forEach(function (h) { list.appendChild(hazardRow(h)); });
+    }
+
+    var map = null, layer = null, firstFit = true;
+    function renderMap(hazards, devices) {
+        if (typeof L === 'undefined') { return; }  // CDN unavailable: lists still work
+        if (!map) {
+            map = L.map('mon-map', {scrollWheelZoom: false}).setView([28.3, 84.1], 7);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+            layer = L.layerGroup().addTo(map);
+        }
+        layer.clearLayers();
+        var points = [], unmapped = [];
+        hazards.forEach(function (h) {
+            if (h.latitude === null || h.longitude === null) { unmapped.push(h); return; }
+            var color = cssVar(SEVERITY_VAR[h.severity] || '--text-muted');
+            var marker = L.circleMarker([h.latitude, h.longitude], {radius: 10, color: color, fillColor: color, fillOpacity: 0.6});
+            marker.bindPopup(hazardRow(h));
+            marker.addTo(layer);
+            points.push([h.latitude, h.longitude]);
+        });
+        (devices || []).forEach(function (d) {
+            if (d.latitude === null || d.longitude === null) { return; }
+            var color = cssVar('--text-muted');
+            var popup = el('div');
+            popup.appendChild(el('strong', null, d.name));
+            popup.appendChild(el('div', 'fresh-' + d.freshness, tr(d.freshness)));
+            L.circleMarker([d.latitude, d.longitude], {radius: 6, color: color, dashArray: '3', fillOpacity: 0.2})
+                .bindPopup(popup).addTo(layer);
+            points.push([d.latitude, d.longitude]);
+        });
+        if (points.length && firstFit) { map.fitBounds(points, {maxZoom: 11, padding: [30, 30]}); firstFit = false; }
+        var note = clear('mon-unmapped');
+        if (unmapped.length) {
+            note.textContent = tr('not_on_map') + ' ' + unmapped.map(function (h) {
+                return '#' + h.id + ' ' + tr(h.event_type) + ' (' + (h.affected_districts || []).map(function (d) { return d.name; }).join(', ') + ')';
+            }).join('; ');
+        }
+    }
+
+    function renderDevices(devices, rule) {
+        var box = clear('mon-devices');
+        if (!box) { return; }
+        if (rule) {
+            document.getElementById('mon-fresh-rule').textContent = tr('fresh_rule') + ' ' + rule.online_seconds / 60 + ' ' + tr('min') +
+                ', ' + tr('stale_rule') + ' ' + rule.stale_seconds / 60 + ' ' + tr('min') + '.';
+        }
+        if (!devices.length) { box.appendChild(el('p', 'empty-state', tr('no_devices'))); return; }
+        devices.forEach(function (d) {
+            var card = el('article', 'mon-row');
+            card.appendChild(el('h3', null, d.name));
+            var meta = el('div', 'mon-meta');
+            meta.appendChild(el('strong', 'fresh-' + d.freshness, tr(d.freshness)));
+            if (!d.enabled) { meta.appendChild(el('span', 'badge badge-neutral', tr('disabled'))); }
+            meta.appendChild(el('span', null, tr('status') + ': ' + d.status));
+            if (d.district) { meta.appendChild(el('span', null, d.district.name)); }
+            card.appendChild(meta);
+            card.appendChild(el('div', 'mon-meta', tr('last_seen') + ': ' + ago(d.seconds_since_seen)));
+            var grid = el('div', 'mon-readings');
+            if (!d.readings.length) { grid.appendChild(el('span', 'mon-meta', tr('no_readings'))); }
+            d.readings.forEach(function (r) {
+                var cell = el('div', 'mon-reading');
+                cell.appendChild(el('span', null, tr(r.sensor_type)));
+                cell.appendChild(el('strong', null, r.value + ' ' + r.unit));
+                cell.appendChild(el('span', null, when(r.received_at)));
+                grid.appendChild(cell);
+            });
+            card.appendChild(grid);
+            box.appendChild(card);
+        });
+    }
+
+    function renderReports(reports) {
+        var list = clear('mon-reports');
+        if (!list) { return; }
+        if (!reports.length) { list.appendChild(el('p', 'empty-state', tr('no_reports'))); return; }
+        reports.forEach(function (r) {
+            var row = el('article', 'mon-row');
+            row.appendChild(el('h3', null, tr(r.hazard_type) + (r.district ? ' · ' + r.district.name : '')));
+            var meta = el('div', 'mon-meta');
+            meta.appendChild(el('span', 'status-badge status-' + r.status, tr(r.status)));
+            if (r.incident_id) { meta.appendChild(el('span', null, tr('hazard') + ' #' + r.incident_id + ' · ' + tr(r.incident_status))); }
+            meta.appendChild(el('span', null, when(r.created_at)));
+            if (r.location) { meta.appendChild(el('span', null, r.location)); }
+            row.appendChild(meta);
+            var ai = r.ai_analysis, aiText;
+            if (ai.status === 'completed') {
+                aiText = tr('ai') + ': ' + tr(ai.label) + ' · ' + tr('model_confidence') + ' ' + Number(ai.confidence).toFixed(2) + ' · ' + ai.model;
+            } else {
+                aiText = tr('ai') + ': ' + tr(ai.status);
+            }
+            row.appendChild(el('div', 'mon-meta', aiText));
+            list.appendChild(row);
+        });
+    }
+
+    function renderNotifications(items, unread) {
+        var list = clear('mon-notifications');
+        document.getElementById('mon-unread').textContent = unread ? unread : '';
+        if (!items.length) { list.appendChild(el('p', 'empty-state', tr('no_notifications'))); return; }
+        items.forEach(function (n) {
+            var row = el('article', 'mon-row' + (n.is_read ? '' : ' unread'));
+            row.appendChild(el('h3', null, n.title));
+            if (n.message) { row.appendChild(el('p', null, n.message)); }
+            var meta = el('div', 'mon-meta');
+            if (n.severity) { meta.appendChild(severityBadge(n.severity)); }
+            if (n.hazard) {
+                meta.appendChild(el('span', null, tr(n.hazard.event_type)));
+                meta.appendChild(el('span', null, n.hazard.affected_districts.join(', ')));
+            }
+            meta.appendChild(el('span', null, when(n.created_at)));
+            row.appendChild(meta);
+            list.appendChild(row);
+        });
+    }
+
+    function renderStats(stats) {
+        var section = document.getElementById('mon-stats-section');
+        if (!stats) { section.hidden = true; return; }
+        section.hidden = false;
+        var box = clear('mon-stats');
+        var grid = el('div', 'mon-stat-list');
+        function add(label, value) { var d = el('div'); d.appendChild(el('strong', null, value)); d.appendChild(el('div', 'mon-meta', label)); grid.appendChild(d); }
+        add(tr('events') + ' · ' + tr('total'), stats.events.total);
+        Object.keys(stats.events.by_status).forEach(function (k) { add(tr('events') + ' · ' + tr(k), stats.events.by_status[k]); });
+        Object.keys(stats.reports_by_status).forEach(function (k) { add(tr('reports') + ' · ' + tr(k), stats.reports_by_status[k]); });
+        Object.keys(stats.reports_by_ai_status).forEach(function (k) { add(tr('ai') + ' · ' + tr(k), stats.reports_by_ai_status[k]); });
+        add(tr('notif24'), stats.notifications_last_24h);
+        add(tr('devices'), stats.devices_total);
+        box.appendChild(grid);
+    }
+
+    function render(data) {
+        var scope = data.scope.nationwide ? tr('nationwide') : data.scope.district ? tr('your_district') + ': ' + data.scope.district.name : tr('no_scope');
+        document.getElementById('mon-scope').textContent = scope;
+        renderSummary(data.summary);
+        renderHazards(data.hazards);
+        renderMap(data.hazards, data.devices);
+        if (data.devices) { renderDevices(data.devices, data.freshness_rule); }
+        if (data.reports) { renderReports(data.reports); }
+        renderNotifications(data.notifications, data.unread_notifications);
+        renderStats(data.statistics);
+    }
+
+    var timer = null, districtSelect = document.getElementById('mon-district');
+    function status(text) { document.getElementById('mon-updated').textContent = text; }
+    function load() {
+        clearTimeout(timer);
+        var url = '/api/dashboard';
+        if (districtSelect && districtSelect.value) { url += '?district_id=' + encodeURIComponent(districtSelect.value); }
+        fetch(url, {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
+            .then(function (response) {
+                return response.json().then(function (data) {
+                    if (!response.ok) { throw new Error(data.error || response.statusText); }
+                    return data;
+                });
+            })
+            .then(function (data) {
+                document.getElementById('mon-error').hidden = true;
+                render(data);
+                status(tr('updated') + ' ' + new Date().toLocaleTimeString() + ' · ' + tr('every') + ' ' + POLL_MS / 1000 + ' ' + tr('seconds'));
+            })
+            .catch(function (err) {
+                var box = document.getElementById('mon-error');
+                box.textContent = tr('error') + ' ' + err.message;
+                box.hidden = false;
+            })
+            .then(schedule);
+    }
+    function schedule() {
+        clearTimeout(timer);
+        if (document.hidden) { status(tr('paused')); return; }  // resumes on visibilitychange
+        timer = setTimeout(load, POLL_MS);
+    }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { load(); } else { clearTimeout(timer); } });
+    document.getElementById('mon-refresh-btn').addEventListener('click', load);
+    if (districtSelect) { districtSelect.addEventListener('change', function () { firstFit = true; load(); }); }
+    load();
+})();
+</script>
+{% endblock %}

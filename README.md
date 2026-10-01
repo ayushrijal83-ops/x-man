@@ -16,6 +16,7 @@
 
 - [What it does](#what-it-does)
 - [Tech stack](#tech-stack)
+- [Hardware](#hardware)
 - [Quick start](#quick-start)
 - [Loading Nepal data](#loading-nepal-data)
 - [Where the data comes from](#where-the-data-comes-from)
@@ -41,6 +42,7 @@
 | **AI assistant** | Ask about conditions in Nepali or English, answered by a local LLM — no API key, no data leaves the machine |
 | **Community feed** | District-scoped posts with photo upload and AI auto-classification (category, severity, language) |
 | **Authority panel** | Separate login where authorities update the roads, rivers, and projects they own |
+| **Disaster monitoring** | `/monitoring`: role-scoped view of active hazards (summary, Leaflet map, list), IoT devices with latest readings and freshness, citizen photo reports with AI evidence, and your alerts. Periodically refreshed (30 s polling), not real-time |
 | **Four languages** | English, Nepali, Newari (Nepal Bhasa), Maithili |
 | **Light + dark themes** | Warm vintage palette, preference persisted in `localStorage` |
 
@@ -57,6 +59,88 @@
 - **Frontend** — Jinja2 templates, vanilla JavaScript, hand-written CSS design system (no framework, no build step)
 - **AI** — [Ollama](https://ollama.com) running `qwen2.5:0.5b` locally
 - **Icons / fonts** — Lucide, Playfair Display + Source Sans 3 + Noto Sans Devanagari
+
+---
+
+## Hardware
+
+Final prototype hardware. **Not built or tested yet:** there is no firmware, wiring or GPIO
+code in this repo, and the JSN-SR04T has not been validated in our setup.
+
+```
+ESP32 #1 — flood node
+├── JSN-SR04T waterproof ultrasonic sensor → water level
+└── DHT22 → temperature / humidity (environmental context only, not a flood detector)
+
+ESP32 #2 — seismic node
+└── MPU6050 accelerometer + gyroscope → abnormal ground-motion prototype
+
+Existing smartphone
+└── Camera + GPS → citizen landslide / road-damage reports (/report)
+```
+
+**Sensors provide evidence; X-MAN interprets it.** No device or phone declares "flood",
+"earthquake" or "confirmed landslide":
+
+```
+physical sensor → ESP32 → telemetry → X-MAN ingestion → risk engine → hazard event → notifications
+```
+
+### Flood node (ESP32 #1)
+
+- The JSN-SR04T measures the **distance from the sensor down to the water surface**. Water level
+  is derived from a fixed reference height: `water_level_m = (reference_height_cm − distance_cm) / 100`,
+  where the reference height is the distance from the sensor face to the zero mark of the gauge.
+- For the running-water demonstration the sensor points into a **stilling/measurement chamber**
+  connected to the channel. Water in the chamber follows the channel level, so turbulent,
+  rippling surface flow does not become the measurement target.
+- The DHT22 adds temperature and humidity for context. It never triggers a flood on its own.
+
+### Seismic node (ESP32 #2)
+
+- The MPU6050 is mounted on a stable platform and reports motion as `vibration` (mg) and
+  `tilt` (°).
+- It is a **prototype for detecting abnormal ground motion**. It is not a certified seismometer
+  or earthquake early-warning instrument, and it does not predict earthquakes.
+
+### Telemetry contract (sensor-model agnostic)
+
+Devices send measurements to `POST /api/iot/telemetry` using logical sensor types. The backend
+doesn't know or care which chip produced them, so a different sensor model needs no API change.
+
+| Sensor type | Unit | Range | Source in this prototype |
+| --- | --- | --- | --- |
+| `water_level` | `m` | 0–50 | JSN-SR04T (firmware converts its cm distance into a water level in metres) |
+| `temperature` | `°C` | -40–85 | DHT22 |
+| `humidity` | `%` | 0–100 | DHT22 |
+| `vibration` | `mg` | 0–1000 | MPU6050 |
+| `tilt` | `°` | -180–180 | MPU6050 |
+
+Readings with a different unit or out of range are rejected (for example `"unit": "cm"` for
+`water_level`). Devices authenticate with their own hashed API key (`Authorization: Bearer
+<device_id>:<api_key>`).
+
+### Component list
+
+| Component | Qty |
+| --- | --- |
+| ESP32 DevKit | 2 |
+| JSN-SR04T waterproof ultrasonic sensor | 1 |
+| MPU6050 accelerometer/gyroscope | 1 |
+| DHT22 temperature/humidity sensor | 1 |
+| Breadboard | 2 |
+| Jumper wire set | 2 |
+| USB cable | 2 |
+| USB power supply / power bank | 2 |
+| JSN-SR04T mounting / protection | 1 |
+| MPU6050 stable mounting platform | 1 |
+| Running-water channel / container | 1 |
+| Stilling / measurement chamber | 1 |
+| Existing smartphone | 1 |
+
+**Not required:** HC-SR04 (replaced by the waterproof JSN-SR04T), hydrostatic pressure sensor,
+HFS-DC06 microwave motion sensor, rain sensor, water pump, relay, MOSFET, Raspberry Pi, Arduino,
+separate GPS module, dedicated camera, GSM module, third ESP32.
 
 ---
 
@@ -314,6 +398,12 @@ POST     /ai/generate  /ai/classify
 GET      /ai/district-summary/<id>
 GET      /language/set/<lang>  /language/get/<key>  /language/languages
 POST     /language/translate
+```
+
+**Disaster monitoring** (hazard, IoT, report and notification APIs: see `docs/PROJECT_PROGRESS.md`)
+```
+GET      /monitoring                          dashboard page (any logged-in user, content by role)
+GET      /api/dashboard?district_id=<id>      JSON for the page; district_id is admin-only
 ```
 
 **Authority panel** (separate login)

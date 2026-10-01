@@ -1,6 +1,6 @@
 # NepalSathi - Project Progress
 
-## Current Status: M06 Road Damage + Landslide Vision AI Complete (M05.1 Security Hardening, M05 Mobile Camera Citizen Reporting, M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
+## Current Status: M07 Disaster Monitoring Dashboard Complete (M06 Vision AI, M05.1 Security Hardening, M05 Mobile Camera Citizen Reporting, M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
 
 ### ✅ Completed (Core Features)
 - Flask application
@@ -1188,3 +1188,285 @@ feat(m06): add road damage and landslide vision analysis
 ### 🏷️ Status
 **M06 — ROAD DAMAGE + LANDSLIDE VISION AI COMPLETE**
 **PRETRAINED ZERO-SHOT MODEL · NOT TRAINED BY X-MAN · AI IS EVIDENCE, HUMANS DECIDE**
+
+---
+
+## Pre-M07 — Hardware Architecture Synchronization
+
+Documentation/architecture sync only. No physical hardware has been built or tested, there is no
+firmware, no GPIO/driver code and no change to the telemetry API. M06 stays **COMPLETE / LOCKED**.
+
+### Final hardware selection
+```
+ESP32 #1 — flood node
+├── JSN-SR04T waterproof ultrasonic sensor → water level
+└── DHT22 → temperature / humidity (environmental context only)
+
+ESP32 #2 — seismic node
+└── MPU6050 → abnormal ground-motion prototype
+
+Existing smartphone
+└── Camera + GPS → citizen landslide / road-damage reports (M05/M06)
+```
+Components: ESP32 DevKit ×2, JSN-SR04T ×1, MPU6050 ×1, DHT22 ×1, breadboard ×2, jumper wire set ×2,
+USB cable ×2, USB power supply/power bank ×2, JSN-SR04T mounting/protection ×1, MPU6050 stable
+mounting platform ×1, running-water channel/container ×1, stilling/measurement chamber ×1, existing
+smartphone ×1.
+**Not required:** HC-SR04, hydrostatic pressure sensor, HFS-DC06 microwave motion sensor, rain sensor,
+water pump, relay, MOSFET, Raspberry Pi, Arduino, separate GPS module, dedicated camera, GSM module,
+third ESP32.
+
+### Responsibilities
+- **ESP32 #1 (flood):**
+  - The JSN-SR04T replaces the HC-SR04 because it is waterproof.
+  - It measures the distance from the sensor down to the water surface.
+  - The firmware derives `water_level_m = (reference_height_cm − distance_cm) / 100` and sends
+    `water_level` in **m**.
+  - The DHT22 sends `temperature` (°C) and `humidity` (%) as context. It is never a flood trigger.
+- **Running-water demo:** the sensor reads the level inside a stilling/measurement chamber
+  connected to the channel, so turbulent surface motion is not the measurement target.
+- **ESP32 #2 (seismic):**
+  - The MPU6050 sends `vibration` (mg) and `tilt` (°).
+  - It is an abnormal-ground-motion prototype: not a certified earthquake early-warning instrument,
+    and not an earthquake predictor.
+- **Smartphone:** its camera and GPS feed the existing `/report` flow. No dedicated camera or GPS
+  module is needed.
+- **Evidence boundary:**
+  `sensor → ESP32 → telemetry → ingestion → risk engine → hazard event → notifications`.
+  - Sensors, the MPU6050 and the vision AI provide evidence only.
+  - X-MAN interprets it and owns the event lifecycle and notifications.
+
+### Backend stays sensor-model agnostic
+Telemetry still uses logical types (`water_level`, `temperature`, `humidity`, `vibration`, `tilt`,
+plus the unused `rainfall`). No sensor model appears in the code paths, and no new sensor types
+were added.
+
+**Brief vs code:** the brief's example sends `water_level` in `cm`, but the M01 contract
+(`risk_engine.SENSOR_TYPES`, river `current_level`/`danger_level`) is in **metres**, and readings in
+`cm` are rejected. I kept the API unchanged and documented that the firmware converts to metres.
+
+### Changes
+- `app/routes/iot.py`: the device-registration docstring example no longer names the HC-SR04 as the
+  water-level sensor. It is the only code reference to a sensor model, and it changes no behaviour.
+- `README.md`: new "Hardware" section covering architecture, the flood/seismic node details, the
+  stilling chamber, the telemetry contract table, the component list and the not-required list.
+- `docs/PROJECT_PROGRESS.md`: this entry.
+
+Repository search for `HC-SR04` (excluding `venv/` and `instance/`): it remains only where it is
+named as *replaced* / *not required*.
+
+### Tests
+`python -m pytest tests/ -q` → **324 passed, 59 warnings** (unchanged from M06). No tests were
+added, changed or removed. Security behaviour is unchanged: device auth, API-key hashing, RBAC,
+CSRF, telemetry validation and hazard lifecycle code were not touched.
+
+### Known limitations (for M07/M08)
+- Nothing physical has been validated yet: JSN-SR04T accuracy and its minimum range (blind zone,
+  to be measured on the real module), chamber behaviour, the DHT22 and MPU6050 noise floors, and
+  power.
+- `vibration` is capped at 1000 mg (1 g) by validation. Strong shaking above that would be
+  rejected, so the range needs revisiting with the real MPU6050 settings before seismic rules are
+  written (M08).
+- No risk rules exist yet for `vibration`/`tilt`. Only `water_level` drives hazard events (M01/M02).
+
+### Next milestone
+**M07 — DISASTER MONITORING DASHBOARD** (not started).
+
+### Git commit
+```
+docs: synchronize finalized x-man hardware architecture
+```
+
+### 🏷️ Status
+**PRE-M07 HARDWARE SYNCHRONIZATION COMPLETE · NO HARDWARE BUILT · NO FIRMWARE**
+
+---
+
+## M07 — Disaster Monitoring Dashboard
+
+### 1. Status
+Complete. It is a presentation and aggregation layer only: no new detection or risk rules, no
+schema change, no change to telemetry, the hazard lifecycle, notifications, M05 report security or
+M06 classification.
+
+### 2. Objective and architecture
+One operational view of what M01–M06 already produce:
+```
+/monitoring (Jinja shell + vanilla JS + Leaflet)
+   │  polls every 30 s (paused while the tab is hidden)
+   ▼
+GET /api/dashboard  (routes/monitoring.py: auth, input validation)
+   ▼
+dashboard_service.build(user)   read-only, role-scoped
+   ├─ hazards ......... Incident (+ M04 affects_district), Incident.to_dict(include_internal=False)
+   ├─ summary ......... one GROUP BY over the same active-hazard filter
+   ├─ devices ......... IoTDevice + latest SensorReading per (device, sensor_type)   [managers]
+   ├─ reports + AI .... citizen_report_service.visible_reports_query (M05/M06)       [managers]
+   ├─ notifications ... notification_service.get_user_notifications (own only, M03)
+   └─ statistics ...... hazard_event_service.get_event_statistics + report/notification counts [admin]
+```
+The frontend only displays what the server sent: severity colours are a fixed severity→badge map,
+and no value is computed or reclassified in JS.
+
+### 3. Dashboard behaviour by role
+| Section | Citizen | Authority | Admin |
+|---|---|---|---|
+| Hazard summary/list/map | active hazards affecting their home district (incl. M04 extra districts); nationwide if no home district | active hazards affecting their authority's district | all active hazards, optional `?district_id` filter |
+| IoT devices + latest readings + freshness | — | devices owned by their authority (same rule as `/api/iot/devices`) | all devices (district filter applies) |
+| Citizen reports + AI evidence | — | `visible_reports_query` (own district + own reports) | all (district filter applies) |
+| Notifications | own | own | own |
+| System statistics | — | — | events by status/type/source/severity, reports by status and AI status, notifications in the last 24 h, device count (always system-wide) |
+
+- An authority user not linked to an authority gets an empty operational view, consistent with
+  M02.
+- Citizens and authorities may only pass their own `district_id`; any other value returns 403.
+
+### 4. Components
+- **Active hazard summary:** counts by type (flood, earthquake, landslide, road_damage) and by
+  severity (low, medium, high, critical). Earthquake is labelled "Earthquake / abnormal ground
+  motion".
+- **Hazard list:** title, severity, status, type, source, affected districts (primary first),
+  detected/updated time and location.
+- **Map:** Leaflet 1.9.4 from unpkg (the same CDN as Lucide), pinned with SRI hashes, using
+  OpenStreetMap tiles.
+  - Hazards with coordinates show as severity-coloured circles; the popup is the same hazard card.
+  - Managers also see devices with coordinates as dashed grey circles.
+  - Hazards without coordinates are listed under the map ("Not on the map (no coordinates)") with
+    their affected districts. `District` has no geometry/centroid data, so nothing is invented.
+- **IoT devices:** name, freshness, enabled/disabled, operator status, district, "last seen … ago",
+  and the latest value + unit + time for each sensor type (e.g. Water level 1.25 m, Temperature
+  27.4 °C, Humidity 81 %, Vibration 42 mg, Tilt 0.8 °). The page states that "A vibration or tilt
+  value is not an earthquake detection".
+- **Device freshness (presentation rule):** computed at read time from `last_seen`:
+  - `online` ≤ 5 min
+  - `stale` ≤ 60 min
+  - `offline` older
+  - `never` no telemetry
+
+  It never writes `IoTDevice.status` or anything else; a test checks that opening the dashboard
+  changes no row.
+- **Citizen reports:** type, district, landmark, time, review status, linked hazard and its
+  status, and AI status/label/model confidence/model.
+  - Not sent: description, image filename/path, reporter.
+  - A link points to `/reports/review`.
+- **My alerts:** the user's latest 10 notifications (`Notification.to_dict`: severity, type,
+  title, message, affected district names, time, read state) plus the unread count.
+- **Statistics:** admin only.
+- **Navigation:** "Disaster Monitoring" in the sidebar for everyone, and in the authority panel nav.
+  All new strings have Nepali translations.
+
+### 5. API
+| Method | Endpoint | Who | Notes |
+|---|---|---|---|
+| GET | `/monitoring` | logged-in (pages redirect to login) | page shell; sections depend on role |
+| GET | `/api/dashboard` | logged-in (401 JSON otherwise) | role-scoped JSON. `district_id` must be a positive ASCII integer (400), must exist (404), and is admin-only unless it equals your own district (403). Other params are ignored. `Cache-Control: private, no-store` |
+
+No existing endpoint was changed.
+
+### 6. Refresh / polling
+- The page fetches `/api/dashboard` on load and then every **30 s** (`POLL_SECONDS`), one request
+  per cycle.
+- Polling stops while `document.hidden` is true and reloads immediately when the tab becomes
+  visible again. There is also a manual Refresh button.
+- The UI says "Updated hh:mm:ss · refreshes every 30 s". It is described as periodically
+  refreshed, not real-time.
+- No WebSockets, workers or caches were added.
+
+### 7. Performance
+- All lists are eager-loaded (`joinedload`/`selectinload`).
+- Latest readings come from one `MAX(id) GROUP BY device, sensor_type` subquery plus one fetch.
+- The summary is one `GROUP BY`.
+- Hazards are capped at 200, reports at 20 and notifications at 10.
+- A test adds 10 hazards (each with an extra affected district), 10 devices and readings, and
+  asserts the admin request issues **no more SQL statements than before** (19 → 17 observed;
+  identity-map hits).
+
+### 8. Security review
+- **Authentication:** API 401, page redirects to login.
+- **RBAC:** visibility rules are reused from M02/M04, M01 (`/api/iot/devices`), M05/M06 and M03.
+  No new visibility rule was invented.
+- **Not in any payload (tested for every role):** `source_reference`, API keys or hashes,
+  `raw_payload`, image filenames, report descriptions, reporter ids, emails.
+- **Citizens:** get no `devices`, `reports`, `ai_analysis` or `statistics` keys.
+- **Read-only:** GET only, so no CSRF surface is added, and the ORM is used throughout.
+- **Frontend:** JS builds every node with `textContent` (no `innerHTML` with data), contains no
+  secrets, and loads Leaflet with SRI.
+- **Fix:** `[hidden] { display: none !important; }` was added to `base.html`, because `.alert`'s
+  `display: flex` overrode the `hidden` attribute. This had also shown an empty error bar on the
+  M06 review page.
+
+### 9. Tests
+`tests/test_dashboard_m07.py` (39 tests):
+- **Auth and input:** login required (API and page); 8 malformed `district_id` values → 400;
+  unknown → 404; other district for citizen/authority → 403; unknown params ignored; no-store
+  header.
+- **Citizen:**
+  - scope and exact summary counts, including the M04 extra district
+  - affected districts in order
+  - no operational or private data
+  - another district's coordinates are not sent (map authorization)
+  - a citizen with no home district sees the nationwide public view
+  - notifications are their own only
+- **Authority:**
+  - operational scope
+  - latest reading per sensor type with correct units (m, °C, %, mg, °)
+  - freshness labels and the rule
+  - reports with AI evidence but no private fields
+  - cross-district isolation; never-reported disabled device
+  - an unlinked authority sees nothing
+- **Admin:** system-wide data and statistics, district filter, no secrets.
+- **Read-only and performance:** device/incident/notification/reading/report rows unchanged after
+  dashboard and page loads; freshness boundaries (0/300/301/3600/3601 s, never); constant query
+  count.
+- **Page:**
+  - citizens get no IoT, report or district-picker sections; managers and admins do
+  - Leaflet pinned with SRI; polling documented; no "real-time" wording
+  - Nepali; sidebar link
+
+**Full suite: `python -m pytest tests/ -q` → 363 passed, 59 warnings** (M06 baseline 324 passed,
+59 warnings, + 39 new; no existing test changed).
+
+Manually checked in Chrome against a seeded scratch copy of the dev DB as admin:
+- summary, map markers and the unmapped list
+- hazard cards, IoT cards (online/offline), alerts and statistics
+- no console errors
+- polling paused while the tab was hidden
+
+### 10. Migration
+None. No schema change.
+
+### 11. Known limitations
+- **Map:** no district polygons or centroids. Hazards and devices without coordinates are listed,
+  not drawn, and affected districts are shown by name. Map tiles and Leaflet need internet
+  (OSM/unpkg).
+- **Freshness thresholds** (5/60 min) are a UI convention until real device reporting intervals
+  are known.
+- **Polling:** up to 30 s of delay; no push.
+- **Scope:** authority device visibility follows the existing ownership rule (`authority_id`). A
+  device in an authority's district but owned by no authority is visible only to admins.
+- **Pre-existing, not changed in M07:** `GET /api/iot/devices` lets an authority user who is *not
+  linked* to an authority list any district's devices via `?district_id=` (device metadata, no
+  keys). The dashboard does not have this gap. Restricting it is recommended for M10 hardening.
+- **Telemetry only:** there are no seismic risk rules. Vibration/tilt values are shown as
+  telemetry until M08.
+- **Not committed yet:** the pre-M07 hardware documentation changes (README, `iot.py` docstring,
+  progress entry) are still uncommitted alongside M07.
+
+### 12. Files
+- **Created:** `app/services/dashboard_service.py`, `app/routes/monitoring.py`,
+  `app/templates/pages/monitoring.html`, `tests/test_dashboard_m07.py`
+- **Modified:** `app/__init__.py` (register blueprint), `app/templates/base.html` (`[hidden]`
+  rule), `app/templates/components/navbar.html`, `app/templates/authority/dashboard.html`,
+  `app/services/page_strings.py`, `README.md`, `docs/PROJECT_PROGRESS.md`
+- **Deleted:** none
+
+### 13. Next milestone
+**M08 — MULTI-SIGNAL RISK ENGINE** (not started).
+
+### 14. Git commit
+```
+feat(m07): add disaster monitoring dashboard
+```
+
+### 🏷️ Status
+**M07 — DISASTER MONITORING DASHBOARD COMPLETE · PRESENTATION ONLY · NO NEW DETECTION RULES**
