@@ -117,6 +117,14 @@ def create_app(config_name=None):
     from flask import jsonify, request
     from werkzeug.exceptions import HTTPException
 
+    @app.teardown_request
+    def rollback_failed_request(error):
+        """M11: a request that raised must not leave flushed-but-uncommitted rows in the session.
+        Flask-SQLAlchemy rolls back when the app context ends; this also covers code that keeps one
+        app context across several requests (tests, scripts)."""
+        if error is not None:
+            db.session.rollback()
+
     @app.errorhandler(HTTPException)
     def api_errors_as_json(error):
         """M10: /api/* errors (404, 405, 413, CSRF 400, 500...) are short JSON, never HTML pages or

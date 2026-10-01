@@ -1,6 +1,6 @@
 # NepalSathi - Project Progress
 
-## Current Status: M10 Security/Reliability Hardening Complete (M09 Authority Response, M08 Risk Engine, M07 Monitoring Dashboard, M06 Vision AI, M05.1 Security Hardening, M05 Mobile Camera Citizen Reporting, M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
+## Current Status: M11 Full Software Integration Testing Complete (M10 Security/Reliability Hardening, M09 Authority Response, M08 Risk Engine, M07 Monitoring Dashboard, M06 Vision AI, M05.1 Security Hardening, M05 Mobile Camera Citizen Reporting, M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
 
 ### ✅ Completed (Core Features)
 - Flask application
@@ -2148,3 +2148,168 @@ feat(m10): harden security and reliability
 
 ### 🏷️ Status
 **M10 — SECURITY/RELIABILITY HARDENING COMPLETE · 17 FINDINGS FIXED · NOT A PRODUCTION DEPLOYMENT**
+
+---
+
+# M11 — Full Software Integration Testing
+
+> **Software integration has been verified using synthetic/test inputs. Physical IoT hardware has not
+> yet been validated.** No claim of real flood or earthquake detection, MPU6050/JSN-SR04T field
+> accuracy or emergency readiness is made.
+
+### Objective
+Prove that the complete pipeline works across components, and that a failure in one component does
+not corrupt another. There are no new features.
+
+### Integration architecture tested
+```
+synthetic telemetry / multipart photo report
+  → device auth + validation (M01/M10) → M08 risk_service/risk_engine → M02 hazard_event_service
+  → M04 affected districts → M03/M04 notification_service (dedup) → M07 dashboard_service
+  → M09 authority_response_service (CAS transitions + audit) → resolution alert
+citizen report → M05 image pipeline → M06 vision (deterministic stub) → M08 evidence grade → review
+```
+- **Driven through the real app:** every test goes through the HTTP API (Flask test client) and
+  checks database rows (`Incident`, `SensorReading`, `CitizenReport`, `Notification`,
+  `IncidentAffectedDistrict`, `IncidentStatusHistory`, `IncidentInvestigation`,
+  `IncidentResponseAction`, `IoTDevice`), not just status codes.
+- **Vision:** uses the existing M06 pixel-driven stub `PixelStub` (no model download, no network).
+- **Seismic input** is synthetic vibration/tilt telemetry.
+
+### End-to-end scenarios (`tests/test_integration_m11.py`, 15 tests)
+| Test | Components proven together |
+|---|---|
+| `test_iot_flood_pipeline_end_to_end_through_resolution` | telemetry → risk → event → alerts → citizen and authority dashboards → escalation → investigate/note/confirm/response/action/resolve → resolution alert → unread / mark-read / mark-all; DB + FK checks at each step |
+| `test_repeated_telemetry_does_not_spam_alerts` | 4× rising + 3× flooding → one event, 7 readings, exactly one detected + one escalated alert per recipient |
+| `test_invalid_telemetry_does_not_corrupt_existing_state` | NaN/cm/bool/bad timestamp/bad key rejected; mixed batch stores only the valid reading; event and alerts unchanged except the valid evidence |
+| `test_latest_readings_reach_dashboard_per_sensor_type` | old vs new `water_level` (by timestamp), `vibration`, `tilt` → correct latest on dashboard and `/api/iot/latest`; other authority's device hidden |
+| `test_seismic_software_simulation_of_mpu6050_input` | default config: no event. With a configured threshold: an isolated spike → none; sustained motion → one `earthquake` "Abnormal ground motion signal" event at medium; more motion merges, never escalates; no magnitude or prediction wording; district B untouched; M08 assessment `elevated_motion` |
+| `test_landslide_reports_flow_through_vision_dedup_and_authority_response` | 3 reports (2 reporters, one duplicate) → one incident (`report_count` 3); AI agree/unknown stored; grade `corroborated` (duplicate counted once) → rejected report ignored → `supported`; severity stays medium; M09 lifecycle; AI result untouched |
+| `test_road_damage_ai_disagreement_stays_evidence` | citizen road_damage + AI landslide: type, severity, status, areas and alerts unchanged; grade shows the conflict; review page flags it; authority confirm → response → completed action → resolve; terminal afterwards |
+| `test_vision_failure_and_report_write_failure_leave_consistent_state` | AI failure → report kept, `failed`, image served to the authority, re-analysis works; a DB failure while linking the report → 500, no report/incident/alert rows, no orphan image file |
+| `test_affected_districts_target_alerts_and_keep_m09_primary_scope` | add B, C (duplicate 409) → their users alerted, D not; removing C keeps its history; escalation reaches current areas only; authority B sees but can't manage; D added after confirmation gets detected + confirmed once |
+| `test_multi_signal_evidence_stays_within_event_scope` | flood A + landslide report B (AI) + motion B → three events; each assessment uses only its own river/devices/reports; A users alerted about A only; authority A gets 403/404 on B |
+| `test_concurrent_confirmations_one_wins` | two confirmations in **separate app contexts / DB sessions**, the second fired after the first validated → one 200, one 409; one history row; one confirmed alert per recipient |
+| `test_notification_failure_rolls_back_whole_operation` | notification failure → telemetry 500 with **no** incident/alert/reading rows; retry succeeds; a failing confirmation leaves status and history unchanged |
+| `test_cross_component_authorization_on_live_state` | citizen, other authority, unlinked authority and admin against live hazards, reports, images and devices; wrong device key 401; nothing changed |
+| `test_private_data_never_leaks_through_integrated_apis` | 13 endpoints × (2 citizens, other-district authority): no keys, hashes, raw payload, storage/model paths, report text, notes, actions, resolution note or `source_reference`. The managing authority sees notes but never credentials or paths |
+| `test_dashboard_reflects_integrated_state_and_stays_read_only` | multi-district hazards, devices, readings, AI reports, response counts; admin / district filter / authority / citizen scopes match the rows; DB snapshot unchanged |
+
+### Findings fixed during M11
+1. **`source_reference` was shown to every authority.** `GET /api/hazards*` serialized internal
+   fields for *any* authority, so district-B authorities could see which device/user/report
+   produced a district-A hazard. Fixed: internal fields only when
+   `authority_response_service.can_manage(current_user, incident)` (admin or the event's district
+   authority). The existing M02 test (own-district authority sees it) still passes.
+2. **Failed requests weren't rolled back per request.** A request that raised relied only on the
+   app-context teardown to roll back. When several requests share one app context (tests,
+   scripts), a failed telemetry request left its flushed event and reading in the session.
+   - Production (one app context per request) was not affected. A standalone reproduction
+     confirmed the rollback happens there.
+   - Added a `teardown_request` rollback on error, so the all-or-nothing guarantee holds
+     regardless of context lifetime.
+
+Both are covered by tests that fail on the pre-M11 code (verified in a temporary worktree of
+`5611746`: exactly these 2 failed, the other 13 passed).
+
+### Flood pipeline
+The M01/M08 rules are unchanged: < 80% normal, 80–100% rising (medium), ≥ 100% flooding (high),
+water level in **metres**. These are current engineering rules, not validated real-world
+thresholds.
+
+### Seismic software simulation
+Synthetic MPU6050-style input only:
+- The thresholds are configured inside the test (production default: unset → no automatic event).
+- No magnitude is invented and nothing is predicted.
+
+### Notifications
+- **One alert per lifecycle step:** detected, escalated (per severity level), confirmed and
+  resolved each fire once per recipient.
+- **Silent steps:** investigating, response, notes and actions send nothing.
+- **Recipients:** users whose home district is affected (citizens and authority users, including
+  unlinked authority accounts), the responsible authority's users, and admins.
+- **Ownership and read state:** owner-scoped, with unread counts, mark-read and mark-all verified.
+- **Failure guarantee (actual):** notifications are written in the same transaction as the event
+  or status change, so a notification failure aborts the whole operation: the request gets a 500
+  and the device or user can retry. Nothing is half-written, but the evidence in that request is
+  not stored either.
+
+### Authority response
+The full lifecycle is checked:
+- history rows, actors and timestamps
+- internal notes, and the public description unchanged
+- the action lifecycle with server-set `completed_at`
+- the required resolution note
+- terminal states and invalid transitions
+- the concurrency conflict
+
+### Security integration
+The M05/M09/M10 scopes hold on live, multi-component state: citizen, authority A, authority B,
+unlinked authority and admin. Device keys can't impersonate each other. The full M10 suite still
+passes.
+
+### Dashboard integration
+Summary counts, hazard lists, devices, latest readings, AI reports, M09 response counts and admin
+statistics match the database rows for every scope. The admin district filter works, and the
+dashboard performs no writes.
+
+### Database verification
+FK relationships were checked after the flows:
+- every alert → its incident
+- readings → device
+- report → incident
+- note/action → incident + author
+- affected-district rows → incident
+
+### Migration verification
+- **Dev DB:** at head `c3d7f1a9b6e2`; `flask db check` reports no new operations.
+- **Supported fresh install** (disposable file DB): `init_db.py` stamps the head, then
+  `flask db check` is clean. A smoke run through the HTTP API on that file DB (separate app
+  context per request) gave one high flood event, 3 readings, the citizen's detected + escalated
+  alerts, and a dashboard showing it.
+- **Also automated:** `tests/test_security_m10.py::test_fresh_install_is_migration_tracked`.
+- **Unchanged limitation:** `flask db upgrade` alone still can't build an empty database (the first
+  historical migration assumes the pre-M01 schema). `init_db.py` is the supported path. No
+  migration was modified or added.
+
+### Test results
+- **Baseline (verified before changes):** 678 passed, 44 warnings.
+- **Final:** **`python -m pytest tests/ -q` → 693 passed, 44 warnings** (678 + 15 new; warning count unchanged)
+- **New:** 15 integration tests. No existing test was changed.
+
+### Known limitations
+- **Synthetic input only.** All sensor input is synthetic. No ESP32, JSN-SR04T or MPU6050 has
+  been connected, so timing, noise, power, Wi-Fi drops and real reporting intervals are untested.
+- **No real model in tests.** Vision AI uses the deterministic stub; the real SigLIP path is
+  covered only by M06's one real-model test.
+- **Concurrency model.** Concurrency is simulated with two app contexts on SQLite's shared
+  in-memory connection. It proves the compare-and-set logic, not multi-process/multi-host
+  behaviour under load.
+- **Notification failure loses evidence.** It discards the whole request, including the readings
+  (no partial save, no retry queue).
+- **No load or soak testing.** No browser-level end-to-end automation beyond the manual Chrome
+  checks of M07, M09 and M10.
+- **Documentation conflict (DHT22).** The M11 brief states the DHT22 has been removed from the
+  final hardware, but `README.md` and the pre-M07 hardware entry still list it. M11 tests use only
+  `water_level`, `vibration` and `tilt`. The hardware docs were left unchanged pending
+  confirmation.
+
+### Files
+- **Created:** `tests/test_integration_m11.py`
+- **Modified:**
+  - `app/routes/hazard_events.py`: `source_reference` only for the event's managers
+  - `app/__init__.py`: per-request rollback on error
+  - `docs/PROJECT_PROGRESS.md`
+- **Deleted:** none
+- **Migrations:** none
+
+### Next milestone
+**H01 — ESP32 Hardware Foundation** (not started).
+
+### Git commit
+```
+test(m11): add full software integration testing
+```
+
+### 🏷️ Status
+**M11 — FULL SOFTWARE INTEGRATION TESTING COMPLETE · SOFTWARE INTEGRATION VERIFIED · PHYSICAL HARDWARE NOT YET VALIDATED**

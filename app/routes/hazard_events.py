@@ -57,7 +57,9 @@ def _is_manager():
 
 
 def _serialize(incident):
-    return incident.to_dict(include_internal=_is_manager())
+    # M11: internal fields (source_reference: which device/user/report) only for whoever manages
+    # this event, not for every authority in the country
+    return incident.to_dict(include_internal=response_service.can_manage(current_user, incident))
 
 
 def _authority_district_id():
