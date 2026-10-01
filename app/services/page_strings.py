@@ -540,6 +540,20 @@ NE = {
     'detected': 'पत्ता लाग्यो',
     'investigating': 'अनुसन्धान हुँदै',
     'confirmed': 'पुष्टि भयो',
+    # --- photo report review (M06) ---
+    'Review Photo Reports': 'फोटो रिपोर्ट समीक्षा',
+    'AI analysis is evidence only. It never accepts a report or changes a hazard. You decide.': 'एआई विश्लेषण प्रमाण मात्र हो। यसले रिपोर्ट स्वीकार गर्दैन वा जोखिम परिवर्तन गर्दैन। निर्णय तपाईंको हो।',
+    'Citizen report': 'नागरिकको रिपोर्ट',
+    'AI analysis': 'एआई विश्लेषण',
+    'differs from citizen': 'नागरिकको भन्दा फरक',
+    'Model confidence': 'मोडेलको विश्वास अंक',
+    'Analysis failed. Review the photo manually.': 'विश्लेषण असफल भयो। फोटो आफैं समीक्षा गर्नुहोस्।',
+    'Not analyzed': 'विश्लेषण गरिएको छैन',
+    'Hazard event': 'जोखिम घटना',
+    'Accept': 'स्वीकार गर्नुहोस्',
+    'Reject': 'अस्वीकार गर्नुहोस्',
+    'Run analysis again': 'फेरि विश्लेषण गर्नुहोस्',
+    'No photo reports to review.': 'समीक्षा गर्न कुनै फोटो रिपोर्ट छैन।',
 }
 
 PAGE_TEXT = {'ne': NE}

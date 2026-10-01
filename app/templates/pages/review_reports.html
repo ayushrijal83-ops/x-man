@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Review Photo Reports'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .review-list { display: flex; flex-direction: column; gap: var(--space-4); margin-top: 1.5rem; }
+    .review-item { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: var(--space-4); }
+    .review-item img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-md); background: var(--bg-surface-hover); }
+    .review-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3); }
+    .review-panel { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); }
+    .review-panel h3 { margin: 0 0 var(--space-2); font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+    .review-panel p { margin: 0 0 var(--space-1); }
+    .review-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-3); }
+    .ai-note { font-size: 12px; color: var(--text-muted); }
+    .ai-disagree { color: var(--warning-text, var(--danger-text)); font-weight: 600; }
+    .status-submitted { background: var(--info-bg); color: var(--info-text); border-color: var(--info); }
+    .status-accepted { background: var(--success-bg); color: var(--success-text); border-color: var(--success); }
+    .status-rejected { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger); }
+    @media (max-width: 640px) { .review-item { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <h1><i data-lucide="scan-search"></i> {{ 'Review Photo Reports'|t }}</h1>
+    <p style="color: var(--text-muted);">{{ 'AI analysis is evidence only. It never accepts a report or changes a hazard. You decide.'|t }}</p>
+    <div class="alert" id="review-error" role="alert" hidden></div>
+
+    {% if reports %}
+    <div class="review-list">
+        {% for r in reports %}
+        <div class="card review-item" id="report-{{ r.id }}">
+            <img src="/api/reports/{{ r.id }}/image" alt="{{ 'Report photo'|t }}" loading="lazy">
+            <div>
+                <div class="review-panels">
+                    <section class="review-panel">
+                        <h3>{{ 'Citizen report'|t }}</h3>
+                        <p><strong>{{ r.hazard_type|t }}</strong></p>
+                        <p>{{ r.reporter.username if r.reporter else '' }} · {{ r.district.name }}</p>
+                        {% if r.location %}<p>{{ r.location }}</p>{% endif %}
+                        {% if r.latitude is not none %}<p>{{ '%.5f'|format(r.latitude) }}, {{ '%.5f'|format(r.longitude) }}</p>{% endif %}
+                        {% if r.description %}<p>{{ r.description }}</p>{% endif %}
+                        <p><time datetime="{{ r.created_at.isoformat() }}Z">{{ r.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</time></p>
+                        <p><span class="status-badge status-{{ r.status }}">{{ r.status|t }}</span></p>
+                    </section>
+                    <section class="review-panel">
+                        <h3>{{ 'AI analysis'|t }}</h3>
+                        {% if r.ai_status == 'completed' %}
+                            <p><strong>{{ r.ai_label|t }}</strong>
+                            {% if r.ai_label != 'unknown' and r.ai_label != r.hazard_type %}<span class="ai-disagree">· {{ 'differs from citizen'|t }}</span>{% endif %}</p>
+                            <p>{{ 'Model confidence'|t }}: {{ '%.2f'|format(r.ai_confidence) }}</p>
+                            <p class="ai-note">{{ r.ai_model }} @ {{ r.ai_model_version }}</p>
+                            <p class="ai-note">{{ r.ai_analyzed_at.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+                        {% elif r.ai_status == 'failed' %}
+                            <p>{{ 'Analysis failed. Review the photo manually.'|t }}</p>
+                        {% else %}
+                            <p>{{ 'Not analyzed'|t }}</p>
+                        {% endif %}
+                    </section>
+                    <section class="review-panel">
+                        <h3>{{ 'Hazard event'|t }}</h3>
+                        {% if r.incident %}
+                            <p>{{ 'Hazard'|t }} #{{ r.incident.id }}</p>
+                            <p>{{ r.incident.status|t }} · {{ r.incident.severity|t }}</p>
+                        {% else %}<p>—</p>{% endif %}
+                    </section>
+                </div>
+                <div class="review-actions">
+                    {% if can_review(r) %}
+                        {% if r.status == 'submitted' %}
+                        <button class="btn btn-primary" data-action="review" data-id="{{ r.id }}" data-status="accepted">{{ 'Accept'|t }}</button>
+                        <button class="btn btn-secondary" data-action="review" data-id="{{ r.id }}" data-status="rejected">{{ 'Reject'|t }}</button>
+                        {% endif %}
+                        <button class="btn btn-secondary" data-action="analyze" data-id="{{ r.id }}">{{ 'Run analysis again'|t }}</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card empty-state" style="margin-top: 1.5rem;">
+        <i data-lucide="camera"></i>
+        <p>{{ 'No photo reports to review.'|t }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('[data-action]').forEach(function (button) {
+    button.addEventListener('click', function () {
+        var id = button.dataset.id;
+        var review = button.dataset.action === 'review';
+        var errorBox = document.getElementById('review-error');
+        button.disabled = true;
+        fetch('/api/reports/' + id + (review ? '/review' : '/analyze'), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json',
+                      'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content},
+            body: JSON.stringify(review ? {status: button.dataset.status} : {})
+        }).then(function (response) {
+            return response.json().then(function (data) {
+                if (!response.ok) { throw new Error(data.error || response.statusText); }
+                window.location.reload();
+            });
+        }).catch(function (err) {
+            errorBox.textContent = err.message;
+            errorBox.hidden = false;
+            button.disabled = false;
+        });
+    });
+});
+</script>
+{% endblock %}

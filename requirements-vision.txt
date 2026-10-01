@@ -1,0 +1,7 @@
+# M06 vision analysis (optional; the app runs without it and marks analysis 'failed').
+# CPU wheels are enough. Then: python scripts/download_vision_model.py
+-r requirements.txt
+torch==2.10.0
+transformers==4.57.1
+sentencepiece==0.2.1
+huggingface_hub==0.36.2

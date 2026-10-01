@@ -10,6 +10,11 @@ VISUAL_HAZARD_TYPES = ['landslide', 'road_damage']
 REPORT_STATUS = ['submitted', 'accepted', 'rejected']
 REPORT_REVIEW_STATUSES = ['accepted', 'rejected']
 
+# M06 vision analysis of the stored photo. Evidence for reviewers only; it never
+# changes hazard_type, the report status or the Incident.
+AI_STATUS = ['not_analyzed', 'completed', 'failed']
+AI_LABELS = ['road_damage', 'landslide', 'unknown']
+
 
 class CitizenReport(db.Model):
     """One citizen's photo evidence (M05). Evidence, not a hazard event:
@@ -35,6 +40,14 @@ class CitizenReport(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # M06: AI_STATUS / AI_LABELS. ai_confidence is the model's score, not a probability of a hazard.
+    ai_status = db.Column(db.String(20), nullable=False, default='not_analyzed', server_default='not_analyzed')
+    ai_label = db.Column(db.String(20))
+    ai_confidence = db.Column(db.Float)
+    ai_model = db.Column(db.String(100))
+    ai_model_version = db.Column(db.String(64))
+    ai_analyzed_at = db.Column(db.DateTime)
+
     reporter = db.relationship('User', foreign_keys=[reporter_id])
     reviewed_by = db.relationship('User', foreign_keys=[reviewed_by_id])
     incident = db.relationship('Incident', backref='citizen_reports')
@@ -43,8 +56,19 @@ class CitizenReport(db.Model):
     def __repr__(self):
         return f'<CitizenReport {self.id}: {self.hazard_type} ({self.status})>'
 
+    def ai_dict(self):
+        return {
+            'status': self.ai_status,
+            'label': self.ai_label,
+            'confidence': self.ai_confidence,
+            'model': self.ai_model,
+            'model_version': self.ai_model_version,
+            'analyzed_at': self.ai_analyzed_at.isoformat() if self.ai_analyzed_at else None,
+        }
+
     def to_dict(self, include_reporter=False):
-        """For the reporter or a reviewer only. No filesystem path, no source_reference."""
+        """For the reporter or a reviewer only. No filesystem path, no source_reference.
+        AI analysis is reviewer-only (include_reporter=True)."""
         data = {
             'id': self.id,
             'hazard_type': self.hazard_type,
@@ -63,4 +87,5 @@ class CitizenReport(db.Model):
         }
         if include_reporter:
             data['reporter'] = {'username': self.reporter.username} if self.reporter else None
+            data['ai_analysis'] = self.ai_dict()
         return data

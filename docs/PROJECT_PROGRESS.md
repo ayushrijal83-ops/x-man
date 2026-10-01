@@ -1,6 +1,6 @@
 # NepalSathi - Project Progress
 
-## Current Status: M05.1 Citizen Hazard API Security Hardening Complete (M05 Mobile Camera Citizen Reporting, M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
+## Current Status: M06 Road Damage + Landslide Vision AI Complete (M05.1 Security Hardening, M05 Mobile Camera Citizen Reporting, M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
 
 ### ✅ Completed (Core Features)
 - Flask application
@@ -951,3 +951,240 @@ fix(m05.1): harden citizen hazard severity handling
 
 ### 🏷️ Status
 **M05.1 — SECURITY HARDENING COMPLETE**
+
+---
+
+## M06 — Road Damage + Landslide Vision AI
+
+### 1. Status
+Complete. M01–M05.1 behaviour is unchanged, and all earlier tests pass without modification.
+
+### 2. Vision architecture
+```
+Citizen photo (multipart)
+  ↓ M05: validate, re-encode to JPEG, strip EXIF/GPS, store as <uuid>.jpg (unchanged)
+CitizenReport + Incident (M02 report_hazard, source=citizen_report, severity=medium) — committed
+  ↓ citizen_report_service.analyze_report(report)
+reads the stored file via image_path(report) (regex-checked server name, never a client path)
+  ↓ vision_service.classify(image_bytes)        (bytes in, VisionResult out)
+SigLIP zero-shot → {road_damage, landslide, other} → label + confidence
+  ↓
+CitizenReport.ai_* fields (evidence only)
+  ↓
+Human review: /reports/review page or POST /api/reports/<id>/review (M05, unchanged)
+  ↓
+Incident lifecycle stays with authorities via /api/hazards (M02, unchanged)
+```
+Analysis is **synchronous** and runs **after** the report is committed, so the report exists
+whatever the model does. There is no worker, no queue and no new infrastructure.
+
+### 3. Model
+| | |
+|---|---|
+| Model | `google/siglip-base-patch16-224` (SigLIP ViT-B/16, 224 px input, 203,155,970 parameters) |
+| Source | Hugging Face, pinned revision `7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed` |
+| License | Apache-2.0 |
+| Size on disk | 813 MB (`model.safetensors`) + ~1 MB tokenizer/config |
+| Runtime | PyTorch CPU via `transformers`; no GPU. Measured ~1.1 GB extra process memory once loaded |
+| Training | **This model was not trained by X-MAN.** There is no fine-tuning and no X-MAN dataset; it runs zero-shot only. |
+
+**Why this model:** it is a genuine image model, runs on CPU, needs no training data, and its
+license allows deployment. `openai/clip-vit-base-patch32` was evaluated first and rejected because
+its model card says that *any deployed use case is out of scope*. Ollama's text model is not used:
+it cannot see images, and M06 does not send it filenames or descriptions.
+
+**Setup** (one-time; internet is needed only here, and the app loads with `local_files_only=True`):
+```
+pip install -r requirements-vision.txt      # torch 2.10.0, transformers 4.57.1, sentencepiece 0.2.1
+python scripts/download_vision_model.py     # -> instance/models/siglip-base-patch16-224 (gitignored)
+```
+If torch/transformers or the model files are missing, every analysis is stored as `failed` and the
+report flows exactly as in M05. `transformers` is told not to import TensorFlow (`USE_TF=0`),
+because a broken TensorFlow install on the dev machine otherwise crashes the import.
+
+**Config** (`app/config.py`, no secrets): `VISION_ENABLED` (default true; false in tests),
+`VISION_MODEL_PATH` and `VISION_CONFIDENCE_THRESHOLD` (0.6). The model name and revision are
+constants.
+
+### 4. Classes
+The classes are `road_damage`, `landslide` and `unknown` (abstain). The image is compared with 21
+fixed English prompts ("This is a photo of …"):
+- 4 road-damage prompts
+- 4 landslide prompts
+- 13 "other" prompts: intact road, normal street, building, collapsed building, person, animal,
+  sky, food, indoor room, forest, mountain landscape, river, painting
+
+The "other" prompts give the model somewhere to put normal or unrelated photos, so nothing is
+forced into a hazard class.
+
+### 5. Confidence
+- `confidence` is the share of the softmax over all 21 prompts that falls on the best hazard
+  class's prompts. It is a **relative model score against this prompt set**, not a calibrated
+  probability that a hazard exists. The UI calls it "Model confidence".
+- The label is that hazard class if `confidence >= 0.6`, otherwise `unknown`. The threshold must
+  stay above 0.5, so that a hazard label always means the hazard class holds most of the prompt
+  mass.
+- **The threshold is not scientifically validated.** It was chosen by looking at the scores of 36
+  public Wikimedia Commons photos (see §12). It is a configurable starting point, to be revisited
+  with real Nepali reports.
+
+### 6. Report integration
+- **New columns on `citizen_reports`:** `ai_status` (`not_analyzed` | `completed` | `failed`),
+  `ai_label`, `ai_confidence`, `ai_model`, `ai_model_version` (first 12 characters of the
+  revision) and `ai_analyzed_at`.
+- **Not stored:** raw model output and image bytes.
+- **Citizen's choice:** `hazard_type` is never changed. Reviewers see disagreements flagged as
+  "differs from citizen" and make the call.
+
+### 7. Safety: why AI cannot confirm or escalate
+- `vision_service` imports none of `db`, `Incident`, `CitizenReport`, `hazard_event_service` or
+  `notification_service` (a test asserts this). It only turns bytes into a label.
+- `analyze_report` writes only the report's `ai_*` columns. It never touches `status`,
+  `hazard_type`, the Incident, severity, affected districts or notifications.
+- The Incident is created or merged **before** analysis, by the unchanged M02/M05.1 path. So
+  citizen reports stay fixed at severity `medium` and can never escalate an event.
+- Report review (accept/reject) is still a human action and still does not change the Incident.
+
+### 8. API
+| Method | Endpoint | Who | Notes |
+|---|---|---|---|
+| GET | `/api/reports`, `/api/reports/<id>` | as M05 | Reviewers (authority/admin) get an extra `ai_analysis` object `{status, label, confidence, model, model_version, analyzed_at}`; reporters do not. |
+| POST | `/api/reports/<id>/analyze` | Responsible authority or admin, not on their own report (same rule as review) | Re-runs analysis on the stored image, e.g. after a failure or once the model is installed. The body is ignored. Returns 503 if analysis is disabled, and 401/403/404 as in M05. |
+| GET | `/reports/review` (page) | Authority or admin (others get 403) | Lists the reports visible to the reviewer (same query as `/api/reports`). |
+
+### 9. Frontend
+- **New `/reports/review` page** (`pages/review_reports.html`): the photo plus three separate
+  panels.
+  - **Citizen report:** type, reporter, district, location, coordinates, description and report
+    status.
+  - **AI analysis:** label, a "differs from citizen" flag, model confidence, model@version and
+    time. Otherwise it shows "Analysis failed. Review the photo manually." or "Not analyzed".
+  - **Hazard event:** incident id, status and severity.
+- **Actions:** Accept, Reject and "Run analysis again" buttons call the API with CSRF. The page
+  switches to one column on phones.
+- **Links:** "Review Photo Reports" in the sidebar (authority/admin only) and in the authority
+  dashboard nav.
+- **Citizens:** see no model output anywhere. `/report`, `/reports/mine` and the API responses
+  they get are unchanged.
+- **Translations:** all new strings have Nepali translations.
+
+### 10. Database
+`migrations/versions/b5c9e3f7a142_m06_citizen_report_vision.py` (revises `e4d8a1f6b209`).
+- **Additive:** 6 columns on `citizen_reports`. `ai_status` is NOT NULL with server default
+  `not_analyzed`; the rest are nullable. No other table is touched.
+- **Round trip:** tested on a copy of the dev DB seeded with an incident and a citizen report:
+  upgrade → downgrade → upgrade. Row counts in users/districts/incidents/citizen_reports/
+  notifications stayed identical and the report row stayed intact each time.
+- **Drift check:** `flask db check` found no drift between models and schema.
+- **Dev DB:** the local dev DB was backed up to `instance/hackforge.pre-m06.db` and upgraded to
+  `b5c9e3f7a142`.
+
+### 11. Tests
+`tests/test_vision_m06.py` has 36 tests. Most replace the classifier with a deterministic stub
+whose scores come from the decoded pixels' mean colour, so the stored image really flows through
+the service. In production, the real model class is used.
+- **classify:**
+  - each outcome: road_damage, landslide, "other" → unknown, below-threshold → unknown
+  - configurable threshold
+  - 4 invalid or truncated images
+  - path strings rejected as images
+  - missing model, with no path in the error message
+  - unloadable model or missing dependency (not cached as broken)
+  - inference exception
+  - no Incident or notification access in the module
+- **Integration:**
+  - AI evidence is stored, and the analysed image equals the stored re-encoded file
+  - disagreement in either direction keeps the citizen's type and the Incident type
+  - `unknown` keeps the report valid
+  - at confidence 0.99 and at low confidence: report stays `submitted`, incident stays
+    `detected`/`medium`, affected districts are unchanged, and zero escalated/confirmed/resolved
+    notifications are sent
+  - inference failure or missing model: the report is kept as `failed` and its image is still
+    served
+  - disabled: `not_analyzed`
+  - a tampered `../../secret.txt` filename is not read
+  - a deleted image gives `failed` without leaking the path
+- **API:**
+  - reviewers see `ai_analysis`; reporters do not
+  - re-analysis after a failure
+  - authorization: reporter and other citizens 403, other-district authority 404, admin 200,
+    logged out 401
+  - disabled 503
+  - review still does not change the Incident
+- **Page:** three panels and the disagreement flag; Nepali; no access for citizens or other
+  districts; no model output on "My Reports".
+- **Real model** (skipped if not installed): a blank grey image gives `unknown`. It runs on this
+  machine.
+
+**Full suite: `python -m pytest tests/ -q` → 324 passed, 59 warnings** (baseline 288 passed, 57
+warnings at `662f223`). The two new warnings are SWIG `DeprecationWarning`s raised by the
+real-model test when it imports the third-party sentencepiece/torch stack.
+
+### 12. Performance and observed behaviour (this laptop, CPU only)
+- **Warm inference** through `vision_service.classify` on 36 photos (≤640 px): **mean 0.549 s,
+  median 0.544 s, max 0.74 s**.
+- **Cold model load** in a fresh process, including the torch/transformers import: **16.7 s** in a
+  standalone run and **9.4 s** for the first end-to-end submission.
+- **Warm full submission** (upload, re-encode, incident and analysis): **~0.31 s**.
+- **Informal sanity check, not an accuracy figure.** The 36 photos are Wikimedia Commons search
+  results for landslide, pothole, road crack, highway, building, dog, sky, person, food and
+  mudslide.
+  - Every clearly visible road crack, pothole or landslide got the matching label (0.76–0.998).
+  - Every building, person, animal, food, sky and intact-highway photo got `unknown`.
+  - Ambiguous cases: a 1980 mudflow scene with mailboxes → `unknown` (0.42); a worn, cracked road
+    marking → `road_damage` (0.94).
+  - No precision, recall or F1 has been measured, because there is no labelled X-MAN dataset.
+
+### 13. Security
+- Only the M05-validated, re-encoded, EXIF-free stored JPEG is analysed. It is located by
+  `image_path(report)`, which only accepts names matching `^[0-9a-f]{32}\.jpg$`.
+- `vision_service` accepts bytes only, so no path or URL can reach it. The analyze endpoint ignores
+  its body.
+- Visibility and review rules are reused unchanged (`can_view`, `can_review`); other districts
+  still get 404.
+- Error messages, API responses and logs contain no filesystem paths or image data. Logs record
+  only the report id and a short reason.
+- AI cannot change severity or Incident status, resolve an Incident, modify affected districts or
+  send notifications (see §7; tested).
+- Failures keep the report, image and Incident, and no fake result is stored.
+- There are no secrets in config. Model weights live in the gitignored `instance/` directory and
+  are not committed.
+- No image metadata is reintroduced: analysis only reads the stored file and never writes to it.
+
+### 14. Known limitations
+- **Not validated locally:** the model runs zero-shot on general-purpose features learned from web
+  images. It has not been validated on Nepali roads or terrain, monsoon lighting, night photos or
+  low-end phone cameras. Expect errors on ambiguous scenes (rubble vs landslide debris, gravel
+  roads vs damaged roads, worn paint vs cracks).
+- **Uncalibrated confidence:** `confidence` depends on the prompt set, so changing the prompts
+  changes the scores.
+- **Synchronous inference:** the first report after a server start waits for the model load
+  (~10–17 s here), and a global lock runs one inference at a time (~0.5 s each). That is fine for
+  district-level volumes; bursts would need a queue.
+- **Separate download:** the model must be downloaded separately (813 MB). Without it, every report
+  is `failed` until a reviewer re-runs analysis.
+- **Older reports:** reports submitted before M06 stay `not_analyzed` until a reviewer clicks "Run
+  analysis again".
+- **Two classes only:** floods and earthquakes stay sensor-driven.
+
+### 15. Next milestone
+**M07 — DISASTER MONITORING DASHBOARD** (not started).
+
+### 16. Files
+- **Created:** `app/services/vision_service.py`, `app/templates/pages/review_reports.html`,
+  `migrations/versions/b5c9e3f7a142_m06_citizen_report_vision.py`, `requirements-vision.txt`,
+  `scripts/download_vision_model.py`, `tests/test_vision_m06.py`
+- **Modified:** `app/config.py`, `app/models/citizen_report.py`,
+  `app/services/citizen_report_service.py`, `app/routes/reports.py`,
+  `app/services/page_strings.py`, `app/templates/components/navbar.html`,
+  `app/templates/authority/dashboard.html`, `.env.example`, `docs/PROJECT_PROGRESS.md`
+- **Deleted:** none
+
+### 17. Git commit
+```
+feat(m06): add road damage and landslide vision analysis
+```
+
+### 🏷️ Status
+**M06 — ROAD DAMAGE + LANDSLIDE VISION AI COMPLETE**
+**PRETRAINED ZERO-SHOT MODEL · NOT TRAINED BY X-MAN · AI IS EVIDENCE, HUMANS DECIDE**

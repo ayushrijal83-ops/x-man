@@ -3,7 +3,8 @@
 A report is evidence; the Incident is the hazard. Submitting a report:
   validate -> re-encode image -> store file -> CitizenReport row
   -> hazard_event_service.report_hazard(source='citizen_report')  (M02 dedup, M03/M04 alerts)
-No vision AI here (M06). A photo never confirms or escalates a hazard.
+then (M06) vision analysis of the stored photo -> ai_* fields on the report only.
+A photo, or its AI analysis, never confirms or escalates a hazard.
 """
 import io
 import math
@@ -19,7 +20,7 @@ from PIL import Image, ImageOps
 from app.extensions import db
 from app.models import CitizenReport, District
 from app.models.citizen_report import VISUAL_HAZARD_TYPES, REPORT_REVIEW_STATUSES
-from app.services import notification_service
+from app.services import notification_service, vision_service
 from app.services.hazard_event_service import CITIZEN_REPORT_SEVERITY, report_hazard
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB upload limit (app-wide MAX_CONTENT_LENGTH is 16 MB)
@@ -190,7 +191,36 @@ def submit_report(user, form, file_storage):
         if os.path.exists(path):
             os.remove(path)
         raise
+    analyze_report(report)  # after commit: the report exists whatever the model does
     return report, created
+
+
+def analyze_report(report):
+    """Run vision analysis on the report's stored, re-encoded image (never the raw upload or a
+    client path). Writes only the report's ai_* fields. Failures are recorded, never raised.
+    Returns False when analysis is disabled."""
+    if not current_app.config.get('VISION_ENABLED'):
+        return False
+    path = image_path(report)
+    try:
+        if path is None:
+            raise vision_service.VisionError('Report has no stored image')
+        try:
+            with open(path, 'rb') as f:
+                image_bytes = f.read()
+        except OSError:
+            raise vision_service.VisionError('Stored image could not be read')  # no path in the message
+        result = vision_service.classify(image_bytes)
+    except vision_service.VisionError as e:
+        current_app.logger.warning('Vision analysis failed for report %s: %s', report.id, e)
+        report.ai_status, report.ai_label, report.ai_confidence = 'failed', None, None
+        report.ai_model = report.ai_model_version = None
+    else:
+        report.ai_status, report.ai_label, report.ai_confidence = 'completed', result.label, result.confidence
+        report.ai_model, report.ai_model_version = result.model, result.model_version
+    report.ai_analyzed_at = datetime.utcnow()
+    db.session.commit()
+    return True
 
 
 def can_view(user, report):
