@@ -1,8 +1,10 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask import Blueprint, abort, render_template, request, flash, redirect, url_for
 from flask_login import current_user, login_required
 from app.extensions import db
 from app.models import Project, ProjectUpdate, District
 from datetime import datetime
+
+from app.services.form_validation import int_in_range
 
 projects_bp = Blueprint('projects', __name__)
 
@@ -11,14 +13,14 @@ projects_bp = Blueprint('projects', __name__)
 def project_tracker():
     """Show project tracker."""
     district_id = request.args.get('district_id')
-    
+
     if district_id:
         projects = Project.query.filter_by(district_id=int(district_id)).all()
     else:
         projects = Project.query.all()
-    
+
     districts = District.query.order_by(District.name).all()
-    
+
     return render_template('pages/project_tracker.html',
                          projects=projects,
                          districts=districts,
@@ -37,22 +39,29 @@ def project_detail(project_id):
 def update_project(project_id):
     """Update project progress."""
     project = Project.query.get_or_404(project_id)
-    
+    # M10: was open to any logged-in user (citizens could change any project's progress)
+    if not (current_user.role == 'admin' or (current_user.role == 'authority' and current_user.authority_id
+                                             and project.authority_id == current_user.authority_id)):
+        abort(403)
+
     progress = request.form.get('progress_percent')
     description = request.form.get('description')
     update_type = request.form.get('update_type', 'progress')
-    
+
+    if progress and int_in_range(progress, 0, 100) is None:
+        flash('Progress must be a whole number from 0 to 100.', 'error')
+        return redirect(url_for('projects.project_detail', project_id=project_id))
     if progress:
         progress = int(progress)
         project.progress_percent = progress
-        
+
         if progress >= 100:
             project.status = 'completed'
         elif progress < 30:
             project.status = 'delayed'
         else:
             project.status = 'on_schedule'
-    
+
     update = ProjectUpdate(
         project_id=project_id,
         authority_id=project.authority_id,
@@ -60,9 +69,9 @@ def update_project(project_id):
         description=description,
         progress_percent=progress if progress else None
     )
-    
+
     db.session.add(update)
     db.session.commit()
-    
+
     flash('Project updated successfully!', 'success')
     return redirect(url_for('projects.project_detail', project_id=project_id))

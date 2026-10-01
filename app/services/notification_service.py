@@ -13,9 +13,10 @@ Functions add to the session but do not commit; the caller owns the transaction.
 In-app only: no SMS/email/push (later milestones).
 """
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db
-from app.models import Authority, Notification, User
+from app.models import Authority, Incident, IncidentAffectedDistrict, Notification, User
 from app.models.incident import HAZARD_SEVERITY
 from app.models.notification import NOTIFICATION_TYPES, LEGACY_NOTIFICATION_TYPES
 
@@ -173,7 +174,7 @@ def notify_area_expanded(incident):
     Users already notified get nothing new (per-user dedup).
     """
     sent = notify_hazard(incident, 'hazard_detected')
-    if incident.status == 'confirmed':
+    if incident.status in ('confirmed', 'response'):  # M09: response follows confirmation
         sent += notify_hazard(incident, 'hazard_confirmed')
     return sent
 
@@ -200,7 +201,13 @@ def get_user_notifications(user_id, unread_only=False, limit=50):
     query = Notification.query.filter_by(user_id=user_id)
     if unread_only:
         query = query.filter_by(is_read=False)
-    return query.order_by(Notification.created_at.desc(), Notification.id.desc()).limit(limit).all()
+    # M10: to_dict() reads the hazard, its district and extra districts; load them up front
+    # instead of 2-3 lazy queries per notification
+    return query.options(
+        joinedload(Notification.incident).joinedload(Incident.district),
+        joinedload(Notification.incident).selectinload(Incident.additional_districts)
+        .joinedload(IncidentAffectedDistrict.district),
+    ).order_by(Notification.created_at.desc(), Notification.id.desc()).limit(limit).all()
 
 
 def unread_count(user_id):

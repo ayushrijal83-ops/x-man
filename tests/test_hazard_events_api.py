@@ -384,7 +384,10 @@ class TestHazardEventsAPI:
         assert response.status_code == 200
         data = response.get_json()
         assert data['event']['status'] == 'resolved'
-        assert 'Resolution: Water level returned to normal' in data['event']['description']
+        # M09: internal note goes to the status history, not the public description
+        assert 'Water level returned to normal' not in (data['event']['description'] or '')
+        history = client.get(f'/api/hazards/{event_id}/status-history').get_json()['status_history']
+        assert history[-1]['note'] == 'Water level returned to normal'
 
     def test_reject_hazard(self, app, client):
         """Test rejecting a hazard event."""
@@ -413,7 +416,10 @@ class TestHazardEventsAPI:
         assert response.status_code == 200
         data = response.get_json()
         assert data['event']['status'] == 'rejected'
-        assert 'Rejection reason: False alarm' in data['event']['description']
+        # M09: internal reason goes to the status history, not the public description
+        assert 'False alarm' not in (data['event']['description'] or '')
+        history = client.get(f'/api/hazards/{event_id}/status-history').get_json()['status_history']
+        assert history[-1]['note'] == 'False alarm'
 
     def test_get_district_active_events(self, app, client):
         """Test getting active events for district."""

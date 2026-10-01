@@ -207,6 +207,33 @@ with app.app_context():
 
 > Sindhuli is the richest demo district — it has BP Highway segments, three rivers including a `rising` Kamala, and active projects.
 
+**Authority accounts are created by an administrator.** Public authority sign-up is off by default
+(`AUTHORITY_SELF_REGISTRATION=false`): an authority account can manage hazards, private citizen reports
+and devices in its district, so it must not be self-service. Create one linked to an existing authority
+(authorities come from `seed_data.py` in step 3; pick another with `filter_by(name=...)`):
+
+```bash
+python -c "
+from app import create_app
+from app.extensions import db
+from app.models import User, Authority
+app = create_app()
+with app.app_context():
+    a = Authority.query.first()
+    u = User(username='demo_authority', email='authority@demo.com', role='authority',
+             district_id=a.district_id, authority_id=a.id)
+    u.set_password('change-me-now')
+    db.session.add(u); db.session.commit()
+    print('created demo_authority for', a.name)
+"
+```
+
+For a throwaway local demo only, `AUTHORITY_SELF_REGISTRATION=true` re-enables `/auth/authority/register`.
+
+**Production:** `FLASK_ENV=production` refuses to start unless `SECRET_KEY` is set to your own random
+value (the development default would let anyone forge sessions and CSRF tokens). Production also sends
+session and remember-me cookies over HTTPS only.
+
 ### 5. Set up Ollama (optional)
 
 ```bash

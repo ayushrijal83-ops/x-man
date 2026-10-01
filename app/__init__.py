@@ -8,23 +8,26 @@ load_dotenv()
 
 def create_app(config_name=None):
     app = Flask(__name__)
-    
+
     config_name = config_name or os.getenv('FLASK_ENV', 'development')
-    from app.config import config
+    from app.config import config, DEFAULT_SECRET_KEY
     app.config.from_object(config[config_name])
-    
+    if config_name == 'production' and app.config.get('SECRET_KEY') in (None, '', DEFAULT_SECRET_KEY):
+        # M10: never run production with the public development key (session/CSRF forgery)
+        raise RuntimeError('SECRET_KEY must be set in the environment for production')
+
     from app.extensions import db, login_manager, csrf, migrate
     db.init_app(app)
     login_manager.init_app(app)
     csrf.init_app(app)
     migrate.init_app(app, db)
-    
+
     from app.models.user import User
-    
+
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(int(user_id))
-    
+        return db.session.get(User, int(user_id))
+
     # Register all blueprints
     from app.routes.main import main_bp
     from app.routes.auth import auth_bp
@@ -67,7 +70,7 @@ def create_app(config_name=None):
     app.register_blueprint(notifications_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(monitoring_bp)
-    
+
     from app.services.translation_service import TranslationService
     translation_service = TranslationService()
 
@@ -111,11 +114,41 @@ def create_app(config_name=None):
             'languages': translation_service.get_supported_languages(),
         }
 
+    from flask import jsonify, request
+    from werkzeug.exceptions import HTTPException
+
+    @app.errorhandler(HTTPException)
+    def api_errors_as_json(error):
+        """M10: /api/* errors (404, 405, 413, CSRF 400, 500...) are short JSON, never HTML pages or
+        tracebacks. Other paths keep Flask's standard error pages."""
+        if request.path.startswith('/api/'):
+            message = error.description if error.code < 500 else 'Internal server error'
+            return jsonify({'error': message}), error.code
+        return error
+
+    # Pages use inline scripts/styles and onclick handlers, so script-src needs 'unsafe-inline';
+    # the policy still pins every external origin and blocks plugins, framing and base hijacking.
+    csp = '; '.join([
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' https://unpkg.com",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
+        "font-src 'self' https://fonts.gstatic.com data:",
+        "img-src 'self' data: blob: https://unpkg.com https://*.tile.openstreetmap.org",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'self'",
+    ])
+
     @app.after_request
     def add_security_headers(response):
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Permissions-Policy'] = 'camera=(self), geolocation=(self), microphone=()'
+        response.headers['Content-Security-Policy'] = csp
         return response
-    
+
     return app

@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% set severity_class = {'critical': 'badge-danger', 'high': 'badge-danger', 'medium': 'badge-warning', 'low': 'badge-info'} %}
+{% set status_labels = {'detected': 'Detected', 'investigating': 'Investigating', 'confirmed': 'Confirmed',
+                        'response': 'Response in progress', 'resolved': 'Resolved', 'rejected': 'Rejected'} %}
+{% set transition_labels = {'investigating': 'Start Investigation', 'confirmed': 'Confirm Hazard',
+                            'response': 'Start Response', 'resolved': 'Resolve Incident', 'rejected': 'Reject Hazard'} %}
+{% set type_labels = {'flood': 'Flood', 'earthquake': 'Earthquake / abnormal ground motion',
+                      'landslide': 'Landslide', 'road_damage': 'Road damage'} %}
+
+{% block title %}{{ 'Hazard response'|t }} #{{ incident.id }} - {{ t('app_name') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .resp-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-4); margin-top: var(--space-4); }
+    .resp-section { margin-bottom: var(--space-4); }
+    .resp-section h2 { font-size: 18px; margin: 0 0 var(--space-3); display: flex; gap: var(--space-2); align-items: center; }
+    .resp-meta { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-muted); }
+    .resp-pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); }
+    .timeline { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--border); }
+    .timeline li { position: relative; padding: 0 0 var(--space-3) var(--space-4); }
+    .timeline li::before { content: ''; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg-surface); border: 2px solid var(--text-muted); }
+    .timeline li.k-status::before { border-color: var(--info); }
+    .timeline li.k-note::before { border-color: var(--warning); }
+    .timeline li.k-action::before { border-color: var(--success); }
+    .timeline time { font-size: 12px; color: var(--text-muted); }
+    .timeline .text { white-space: pre-wrap; margin: var(--space-1) 0 0; }
+    .resp-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+    .resp-row { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); margin-bottom: var(--space-2); }
+    .resp-row p { margin: var(--space-1) 0; white-space: pre-wrap; }
+    .resp-form { display: flex; flex-direction: column; gap: var(--space-2); }
+    .resp-form textarea { min-height: 80px; }
+    .reasons { margin: var(--space-1) 0 0; padding-left: 1.2em; font-size: 13px; }
+    @media (max-width: 900px) { .resp-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    <p><a href="/monitoring">&larr; {{ 'Disaster Monitoring'|t }}</a></p>
+    <h1>{{ incident.title or type_labels.get(incident.event_type, incident.event_type)|t }}</h1>
+    <div class="resp-meta">
+        <span class="badge {{ severity_class.get(incident.severity, 'badge-neutral') }}">{{ incident.severity|t }}</span>
+        <span class="status-badge" id="resp-status" data-status="{{ incident.status }}">{{ status_labels.get(incident.status, incident.status)|t }}</span>
+        <span>{{ type_labels.get(incident.event_type, incident.event_type)|t }}</span>
+        <span>{{ 'Source'|t }}: {{ incident.source|t }}</span>
+        <span>{{ 'Detected'|t }} {{ incident.detected_at.strftime('%Y-%m-%d %H:%M') }} UTC</span>
+        {% if incident.location %}<span>{{ incident.location }}</span>{% endif %}
+    </div>
+    <div class="resp-meta" style="margin-top: var(--space-2);">
+        <span>{{ 'Affected'|t }}:</span>
+        {% for d in incident.affected_districts %}<span class="resp-pill">{{ d.name }}</span>{% endfor %}
+    </div>
+    <div class="alert alert-error" id="resp-error" role="alert" hidden></div>
+
+    <div class="resp-grid">
+        <div>
+            <section class="card resp-section" aria-labelledby="h-lifecycle">
+                <h2 id="h-lifecycle"><i data-lucide="git-branch"></i> {{ 'Lifecycle'|t }}</h2>
+                {% if allowed %}
+                <form class="resp-form" id="status-form">
+                    <label for="status-note">{{ 'Note'|t }} <span class="resp-meta">({{ 'required to resolve or reject'|t }})</span></label>
+                    <textarea id="status-note" class="form-control" maxlength="2000"></textarea>
+                    <div class="resp-actions">
+                        {% for status in allowed %}
+                        <button type="button" class="btn {{ 'btn-secondary' if status == 'rejected' else 'btn-primary' }}"
+                                data-transition="{{ status }}" data-note-required="{{ 'true' if status in note_required else 'false' }}">
+                            {{ transition_labels.get(status, status)|t }}</button>
+                        {% endfor %}
+                    </div>
+                </form>
+                {% else %}
+                <p>{{ 'This incident is closed. Resolved and rejected incidents cannot be reopened.'|t }}</p>
+                {% endif %}
+            </section>
+
+            <section class="card resp-section" aria-labelledby="h-timeline">
+                <h2 id="h-timeline"><i data-lucide="history"></i> {{ 'Timeline'|t }}</h2>
+                <ol class="timeline">
+                    {% for item in timeline %}
+                    <li class="k-{{ item.kind }}">
+                        <time datetime="{{ item.at.isoformat() }}Z">{{ item.at.strftime('%Y-%m-%d %H:%M') }} UTC</time>
+                        {% if item.kind == 'detected' %}
+                            <div><strong>{{ 'Hazard detected'|t }}</strong></div>
+                        {% elif item.kind == 'status' %}
+                            <div><strong>{{ status_labels.get(item.previous, item.previous)|t }} &rarr; {{ status_labels.get(item.status, item.status)|t }}</strong>
+                                {% if item.by %}<span class="resp-meta">· {{ item.by }}</span>{% endif %}</div>
+                        {% elif item.kind == 'note' %}
+                            <div><strong>{{ 'Investigation note'|t }}</strong> <span class="resp-meta">· {{ item.by }}</span></div>
+                        {% else %}
+                            <div><strong>{{ 'Response action'|t }}: {{ item.action_type|replace('_', ' ') }}</strong> <span class="resp-meta">· {{ item.by }} · {{ item.action_status|replace('_', ' ') }}</span></div>
+                        {% endif %}
+                        {% if item.text %}<p class="text">{{ item.text }}</p>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ol>
+                {% if is_open %}
+                <form class="resp-form" id="note-form">
+                    <label for="note-text">{{ 'Add investigation note'|t }}</label>
+                    <textarea id="note-text" class="form-control" maxlength="2000" required></textarea>
+                    <div><button type="submit" class="btn btn-secondary">{{ 'Add note'|t }}</button></div>
+                </form>
+                {% endif %}
+            </section>
+        </div>
+
+        <div>
+            <section class="card resp-section" aria-labelledby="h-actions">
+                <h2 id="h-actions"><i data-lucide="clipboard-check"></i> {{ 'Response actions'|t }}</h2>
+                {% for a in actions %}
+                <div class="resp-row">
+                    <strong>{{ a.action_type|replace('_', ' ')|capitalize }}</strong>
+                    <div class="resp-meta"><span class="status-badge">{{ a.status|replace('_', ' ') }}</span>
+                        <span>{{ a.author.username if a.author else '' }}</span>
+                        {% if a.completed_at %}<span>{{ 'Completed'|t }} {{ a.completed_at.strftime('%Y-%m-%d %H:%M') }} UTC</span>{% endif %}</div>
+                    <p>{{ a.description }}</p>
+                    {% if is_open and action_transitions[a.status] %}
+                    <div class="resp-actions">
+                        {% for next in action_transitions[a.status] %}
+                        <button type="button" class="btn btn-secondary" data-action-id="{{ a.id }}" data-action-status="{{ next }}">{{ next|replace('_', ' ')|capitalize }}</button>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="resp-meta">{{ 'No response actions yet.'|t }}</p>
+                {% endfor %}
+                {% if is_open %}
+                <form class="resp-form" id="action-form">
+                    <label for="action-type">{{ 'Add response action'|t }}</label>
+                    <select id="action-type" class="form-control">
+                        {% for t in action_types %}<option value="{{ t }}">{{ t|replace('_', ' ')|capitalize }}</option>{% endfor %}
+                    </select>
+                    <select id="action-status" class="form-control" aria-label="{{ 'Status'|t }}">
+                        {% for s in action_statuses if s != 'cancelled' %}<option value="{{ s }}">{{ s|replace('_', ' ')|capitalize }}</option>{% endfor %}
+                    </select>
+                    <textarea id="action-description" class="form-control" maxlength="1000" required placeholder="{{ 'What is being done?'|t }}"></textarea>
+                    <div><button type="submit" class="btn btn-primary">{{ 'Add action'|t }}</button></div>
+                </form>
+                {% endif %}
+            </section>
+
+            <section class="card resp-section" aria-labelledby="h-assessment">
+                <h2 id="h-assessment"><i data-lucide="gauge"></i> {{ 'Risk assessment (M08 evidence)'|t }}</h2>
+                {% for a in assessments %}
+                <div class="resp-row">
+                    <strong>{{ a.level|replace('_', ' ') }}</strong>
+                    {% if a.evidence.device %}<span class="resp-meta">· {{ a.evidence.device }}</span>{% endif %}
+                    <div class="resp-meta">{{ 'Sources'|t }}: {{ a.sources|join(', ') or '—' }}</div>
+                    <ul class="reasons">{% for r in a.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+                </div>
+                {% endfor %}
+                <p class="resp-meta">{{ 'Evidence only: the assessment never confirms or resolves a hazard.'|t }}</p>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    var base = '/api/hazards/{{ incident.id|int }}';
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+    var errorBox = document.getElementById('resp-error');
+    var NOTE_REQUIRED = {{ 'A note is required to resolve or reject.'|t|tojson }};
+
+    function send(method, url, body, button) {
+        if (button) { button.disabled = true; }
+        errorBox.hidden = true;
+        fetch(url, {method: method, credentials: 'same-origin',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+                    body: JSON.stringify(body)})
+            .then(function (response) {
+                return response.json().then(function (data) {
+                    if (!response.ok) { throw new Error(data.error || response.statusText); }
+                    window.location.reload();
+                });
+            })
+            .catch(function (err) {
+                errorBox.textContent = err.message;  // text only, never HTML
+                errorBox.hidden = false;
+                if (button) { button.disabled = false; }
+            });
+    }
+
+    document.querySelectorAll('[data-transition]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var note = document.getElementById('status-note').value.trim();
+            if (button.dataset.noteRequired === 'true' && !note) {
+                errorBox.textContent = NOTE_REQUIRED;
+                errorBox.hidden = false;
+                return;
+            }
+            var body = {status: button.dataset.transition};
+            if (note) { body.note = note; }
+            send('POST', base + '/status', body, button);
+        });
+    });
+    document.querySelectorAll('[data-action-id]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            send('PATCH', base + '/response-actions/' + encodeURIComponent(button.dataset.actionId),
+                 {status: button.dataset.actionStatus}, button);
+        });
+    });
+    var noteForm = document.getElementById('note-form');
+    if (noteForm) {
+        noteForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            send('POST', base + '/investigations', {note: document.getElementById('note-text').value}, noteForm.querySelector('button'));
+        });
+    }
+    var actionForm = document.getElementById('action-form');
+    if (actionForm) {
+        actionForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            send('POST', base + '/response-actions', {
+                action_type: document.getElementById('action-type').value,
+                status: document.getElementById('action-status').value,
+                description: document.getElementById('action-description').value
+            }, actionForm.querySelector('button'));
+        });
+    }
+})();
+</script>
+{% endblock %}

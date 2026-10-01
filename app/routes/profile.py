@@ -83,6 +83,10 @@ def edit_profile():
             current_user.email = email
         
         if district_id:
+            # M10: non-numeric or unknown ids used to raise a 500 / store a dangling id
+            if not (district_id.isascii() and district_id.isdigit()) or not db.session.get(District, int(district_id)):
+                flash('Invalid district.', 'error')
+                return redirect(url_for('profile.edit_profile'))
             current_user.district_id = int(district_id)
         
         # Store additional info in a simple way (could add columns to User model)

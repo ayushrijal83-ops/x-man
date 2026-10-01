@@ -109,7 +109,9 @@
 {% set labels = {
     'flood': 'Flood'|t, 'earthquake': 'Earthquake / abnormal ground motion'|t, 'landslide': 'Landslide'|t,
     'road_damage': 'Road damage'|t, 'low': 'low'|t, 'medium': 'medium'|t, 'high': 'high'|t, 'critical': 'critical'|t,
-    'detected': 'detected'|t, 'investigating': 'investigating'|t, 'confirmed': 'confirmed'|t,
+    'detected': 'Detected'|t, 'investigating': 'Investigating'|t, 'confirmed': 'Confirmed'|t,
+    'response': 'Response in progress'|t, 'open_response': 'Open response'|t, 'notes': 'notes'|t,
+    'open_actions': 'open actions'|t,
     'submitted': 'submitted'|t, 'accepted': 'accepted'|t, 'rejected': 'rejected'|t, 'resolved': 'resolved'|t,
     'online': 'Online'|t, 'stale': 'Stale'|t, 'offline': 'Offline'|t, 'never': 'Never reported'|t,
     'water_level': 'Water level'|t, 'temperature': 'Temperature'|t, 'humidity': 'Humidity'|t,
@@ -193,6 +195,15 @@
         times.appendChild(el('span', null, tr('updated_at') + ' ' + when(h.updated_at)));
         if (h.location) { times.appendChild(el('span', null, h.location)); }
         row.appendChild(times);
+        if (h.response_url) {  // managers only (M09): server-provided counts and link
+            var resp = el('div', 'mon-meta');
+            resp.appendChild(el('span', null, h.response.notes + ' ' + tr('notes') + ' · ' +
+                                h.response.open_actions + ' ' + tr('open_actions')));
+            var link = el('a', null, tr('open_response'));
+            link.href = h.response_url;
+            resp.appendChild(link);
+            row.appendChild(resp);
+        }
         return row;
     }
 

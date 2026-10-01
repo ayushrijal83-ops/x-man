@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, current_app, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, login_required, current_user
 from app.extensions import db
 from app.models.user import User
@@ -6,38 +6,46 @@ from app.models import Authority
 
 auth_bp = Blueprint('auth', __name__)
 
+
+def _safe_next(target):
+    """Only same-site relative paths for ?next= (M10: blocks open redirects such as
+    //evil.example, https://evil.example or /\\evil.example)."""
+    if not target or not target.startswith('/') or target.startswith('//') or '\\' in target:
+        return None
+    return target
+
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
     """User registration."""
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
-    
+
     if request.method == 'POST':
         username = request.form.get('username')
         email = request.form.get('email')
         password = request.form.get('password')
-        
+
         if not username or not email or not password:
             flash('All fields are required.', 'error')
             return redirect(url_for('auth.register'))
-        
+
         if User.query.filter_by(username=username).first():
             flash('Username already exists.', 'error')
             return redirect(url_for('auth.register'))
-        
+
         if User.query.filter_by(email=email).first():
             flash('Email already registered.', 'error')
             return redirect(url_for('auth.register'))
-        
+
         user = User(username=username, email=email, role='citizen')
         user.set_password(password)
-        
+
         db.session.add(user)
         db.session.commit()
-        
+
         flash('Registration successful! Please login.', 'success')
         return redirect(url_for('auth.login'))
-    
+
     return render_template('auth/register.html')
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -47,18 +55,18 @@ def login():
         if current_user.role == 'authority':
             return redirect(url_for('authority_panel.dashboard'))
         return redirect(url_for('main.dashboard'))
-    
+
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         remember = request.form.get('remember') == 'on'
-        
+
         user = User.query.filter_by(username=username).first()
-        
+
         if user and user.check_password(password):
             login_user(user, remember=remember)
-            next_page = request.args.get('next')
-            
+            next_page = _safe_next(request.args.get('next'))
+
             # Redirect based on role
             if user.role == 'authority':
                 return redirect(next_page or url_for('authority_panel.dashboard'))
@@ -68,7 +76,7 @@ def login():
                 return redirect(next_page or url_for('main.dashboard'))
         else:
             flash('Invalid username or password.', 'error')
-    
+
     return render_template('auth/login.html')
 
 @auth_bp.route('/authority/login', methods=['GET', 'POST'])
@@ -78,14 +86,14 @@ def authority_login():
         if current_user.role == 'authority':
             return redirect(url_for('authority_panel.dashboard'))
         return redirect(url_for('main.dashboard'))
-    
+
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         remember = request.form.get('remember') == 'on'
-        
+
         user = User.query.filter_by(username=username).first()
-        
+
         if user and user.check_password(password):
             if user.role == 'authority' or user.role == 'admin':
                 login_user(user, remember=remember)
@@ -95,15 +103,20 @@ def authority_login():
                 flash('This account is not an authority account.', 'error')
         else:
             flash('Invalid username or password.', 'error')
-    
+
     return render_template('auth/authority_login.html')
 
 @auth_bp.route('/authority/register', methods=['GET', 'POST'])
 def authority_register():
-    """Authority registration."""
+    """Authority self-registration. Off unless AUTHORITY_SELF_REGISTRATION is enabled (M10):
+    it creates a verified authority with manager rights over a district, so by default
+    authority accounts are provisioned by an administrator."""
+    if not current_app.config.get('AUTHORITY_SELF_REGISTRATION'):
+        flash('Authority accounts are created by an administrator.', 'error')
+        return redirect(url_for('auth.authority_login'))
     if current_user.is_authenticated:
         return redirect(url_for('authority_panel.dashboard'))
-    
+
     if request.method == 'POST':
         username = request.form.get('username')
         email = request.form.get('email')
@@ -112,15 +125,15 @@ def authority_register():
         authority_category = request.form.get('authority_category')
         district_id = request.form.get('district_id')
         phone = request.form.get('phone')
-        
+
         if not username or not email or not password:
             flash('All fields are required.', 'error')
             return redirect(url_for('auth.authority_register'))
-        
+
         if User.query.filter_by(username=username).first():
             flash('Username already exists.', 'error')
             return redirect(url_for('auth.authority_register'))
-        
+
         # Create authority record
         authority = Authority(
             name=authority_name,
@@ -131,7 +144,7 @@ def authority_register():
         )
         db.session.add(authority)
         db.session.flush()
-        
+
         # Create user with authority role
         user = User(
             username=username,
@@ -142,13 +155,13 @@ def authority_register():
             is_verified=True
         )
         user.set_password(password)
-        
+
         db.session.add(user)
         db.session.commit()
-        
+
         flash('Authority account created! Please login.', 'success')
         return redirect(url_for('auth.authority_login'))
-    
+
     from app.models import District
     districts = District.query.order_by(District.name).all()
     return render_template('auth/authority_register.html', districts=districts)

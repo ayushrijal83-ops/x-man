@@ -17,6 +17,13 @@ def init_database():
         # Create all tables
         db.create_all()
         print("Created all tables successfully!")
+
+        # M10: create_all() builds the current schema, so record it as the migration head.
+        # Without this, a later `flask db upgrade` replays every migration on existing tables
+        # and fails (the first migration only adds IoT tables to a pre-existing schema).
+        from flask_migrate import stamp
+        stamp()
+        print("Stamped database at the latest migration")
         
         # Print created tables
         from sqlalchemy import inspect

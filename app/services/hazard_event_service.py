@@ -9,8 +9,10 @@ never builds notifications itself.
 import math
 from datetime import datetime, timedelta
 
+from sqlalchemy.orm.attributes import set_committed_value
+
 from app.extensions import db
-from app.models import Incident, IncidentAffectedDistrict, River, RoadSegment, District
+from app.models import Incident, IncidentAffectedDistrict, IncidentStatusHistory, River, RoadSegment, District
 from app.services import notification_service
 from app.models.incident import (
     HAZARD_TYPES, HAZARD_SOURCES, HAZARD_SEVERITY, HAZARD_STATUS,
@@ -212,24 +214,61 @@ _STATUS_NOTIFIERS = {
 }
 
 
-def _apply_transition(incident, new_status):
-    """The single path for status changes, so notifications can't be bypassed."""
+class TransitionConflict(ValueError):
+    """The incident's status changed underneath this request (another user got there first)."""
+
+
+def _apply_transition(incident, new_status, actor_id=None, note=None):
+    """The single path for status changes, so notifications and the audit trail can't be bypassed.
+
+    Compare-and-set: the UPDATE only matches if the row still has the status we validated
+    against, so two concurrent identical requests can't both succeed or both write history.
+    The history row is added in the same transaction as the status change. Does not commit.
+    """
     _validate_status(new_status)
-    old_status = incident.transition_status(new_status)
+    old_status = incident.status
+    if not incident.can_transition_to(new_status):
+        raise ValueError(f"Invalid transition from {old_status} to {new_status}")
+    now = datetime.utcnow()
+    values = {'status': new_status, 'updated_at': now}
+    if new_status == 'resolved':
+        values['resolved_at'] = now
+    db.session.flush()
+    changed = Incident.query.filter(Incident.id == incident.id, Incident.status == old_status) \
+        .update(values, synchronize_session=False)
+    if changed != 1:
+        raise TransitionConflict('Hazard status was changed by someone else; reload and try again')
+    for key, value in values.items():  # keep the in-memory object in step with the row
+        set_committed_value(incident, key, value)
+    db.session.add(IncidentStatusHistory(incident_id=incident.id, previous_status=old_status,
+                                         new_status=new_status, changed_by_id=actor_id, note=note))
     notifier = _STATUS_NOTIFIERS.get(new_status)
     if notifier:
         notifier(incident)
     return old_status
 
 
-def transition_event_status(incident, new_status):
-    """Validated lifecycle transition. Returns old status. Raises ValueError."""
-    old_status = _apply_transition(incident, new_status)
-    db.session.commit()
+def _commit_or_rollback():
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def transition_event_status(incident, new_status, actor_id=None, note=None):
+    """Validated lifecycle transition + audit row, atomically. Returns old status. Raises ValueError
+    (TransitionConflict if another request changed the status first). Rolls back on any failure."""
+    try:
+        old_status = _apply_transition(incident, new_status, actor_id, note)
+    except Exception:
+        db.session.rollback()
+        raise
+    _commit_or_rollback()
     return old_status
 
 
-def update_event(incident, severity=None, status=None, **fields):
+def update_event(incident, severity=None, status=None, actor_id=None, note=None, **fields):
     """Authority/admin edit. Validates everything before changing anything.
 
     Raising severity notifies an escalation; lowering it is allowed (a human
@@ -250,9 +289,9 @@ def update_event(incident, severity=None, status=None, **fields):
         incident.severity = severity
         notification_service.notify_hazard_escalated(incident, previous)
     if status is not None:
-        _apply_transition(incident, status)
+        _apply_transition(incident, status, actor_id, note)
     incident.updated_at = datetime.utcnow()
-    db.session.commit()
+    _commit_or_rollback()
     return incident
 
 
@@ -288,21 +327,15 @@ def remove_affected_district(incident, district_id):
     db.session.expire(incident, ['additional_districts'])
 
 
-def _transition_with_note(incident, new_status, label, note):
-    old_status = _apply_transition(incident, new_status)
-    if note:
-        incident.description = (incident.description or '') + f'\n\n{label}: {note}'
-    db.session.commit()
-    return old_status
-
-
-def resolve_event(incident, resolution_notes=None):
-    _transition_with_note(incident, 'resolved', 'Resolution', resolution_notes)
+# M09: resolution/rejection notes are internal and live in the status history; they are no
+# longer appended to Incident.description, which is public (/api/hazards, M07 dashboard).
+def resolve_event(incident, resolution_notes=None, actor_id=None):
+    transition_event_status(incident, 'resolved', actor_id, resolution_notes)
     return incident
 
 
-def reject_event(incident, reason=None):
-    _transition_with_note(incident, 'rejected', 'Rejection reason', reason)
+def reject_event(incident, reason=None, actor_id=None):
+    transition_event_status(incident, 'rejected', actor_id, reason)
     return incident
 
 

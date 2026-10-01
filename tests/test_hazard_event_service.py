@@ -1,6 +1,7 @@
 """Tests for Hazard Event Service."""
 import pytest
 from app.extensions import db
+from app.models import IncidentStatusHistory
 from app.models import Incident, District, River, RoadSegment
 from app.services.hazard_event_service import (
     create_hazard_event,
@@ -360,7 +361,10 @@ class TestHazardEventService:
             
             assert incident.status == 'resolved'
             assert incident.resolved_at is not None
-            assert 'Resolution: Water level returned to normal' in incident.description
+            # M09: the note is internal (status history), no longer appended to the public description
+            assert incident.description is None
+            assert IncidentStatusHistory.query.filter_by(incident_id=incident.id).one().note == \
+                'Water level returned to normal'
 
     def test_reject_event(self, app):
         """Test rejecting an event."""
@@ -380,7 +384,9 @@ class TestHazardEventService:
             reject_event(incident, 'False alarm')
             
             assert incident.status == 'rejected'
-            assert 'Rejection reason: False alarm' in incident.description
+            # M09: the reason is internal (status history), no longer appended to the public description
+            assert incident.description is None
+            assert IncidentStatusHistory.query.filter_by(incident_id=incident.id).one().note == 'False alarm'
 
     def test_confirm_event(self, app):
         """Test confirming an event."""

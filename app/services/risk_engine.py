@@ -3,6 +3,10 @@
 Deterministic, explainable risk calculations for river/road status
 based on sensor telemetry and configured thresholds.
 """
+import math
+from dataclasses import dataclass, field
+from datetime import datetime
+
 
 
 def compute_river_status(current_level, danger_level):
@@ -232,6 +236,10 @@ def validate_sensor_reading(sensor_type, value, unit=None):
 
     expected = SENSOR_TYPES[sensor_type]
 
+    # NaN fails every comparison, so it would slip through the range check below (M10)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return False, f"Value for {sensor_type} must be a finite number"
+
     if unit and unit != expected['unit']:
         return False, f"Invalid unit for {sensor_type}: expected {expected['unit']}, got {unit}"
 
@@ -240,3 +248,214 @@ def validate_sensor_reading(sensor_type, value, unit=None):
         return False, f"Value {value} {expected['unit']} out of range [{min_val}, {max_val}] for {sensor_type}"
 
     return True, None
+
+# ---------------------------------------------------------------------------
+# M08: multi-signal rules. Pure functions over evidence the caller gathered;
+# no database, no events, no notifications. Every outcome carries its reasons.
+# Numbers below are configurable engineering rules, not validated science.
+# ---------------------------------------------------------------------------
+
+# Flood trend: change between the earliest and latest valid reading in the window.
+TREND_MIN_READINGS = 3
+TREND_MIN_SPAN_SECONDS = 300
+TREND_MIN_CHANGE_M = 0.05
+
+# Abnormal-motion rule: needs N valid readings in the window. Thresholds come from
+# config and are None (rule disabled) until the real MPU6050 node is characterized.
+MOTION_MIN_READINGS = 3
+VIBRATION_VALIDATION_MAX_MG = SENSOR_TYPES['vibration']['range'][1]
+
+
+@dataclass
+class RiskAssessment:
+    """Explainable result of one rule evaluation. Not a probability."""
+    hazard_type: str
+    level: str
+    action: str = 'none'  # 'none' | 'report_event'
+    severity: str = None  # suggested severity when action == 'report_event'
+    reasons: list = field(default_factory=list)
+    evidence: dict = field(default_factory=dict)
+    sources: list = field(default_factory=list)
+    district_id: int = None
+    assessed_at: datetime = field(default_factory=datetime.utcnow)
+
+    @property
+    def action_warranted(self):
+        return self.action == 'report_event'
+
+    def to_dict(self):
+        return {
+            'hazard_type': self.hazard_type,
+            'level': self.level,
+            'action': self.action,
+            'severity': self.severity,
+            'reasons': list(self.reasons),
+            'evidence': dict(self.evidence),
+            'sources': list(self.sources),
+            'district_id': self.district_id,
+            'assessed_at': self.assessed_at.isoformat() + 'Z',
+        }
+
+
+def valid_readings(readings):
+    """Only quality='good' readings count as evidence; others are counted, never used."""
+    return sorted((r for r in readings if r.quality == 'good' and r.value is not None),
+                  key=lambda r: r.recorded_at)
+
+
+def water_level_trend(readings):
+    """'increasing' | 'decreasing' | 'steady' | 'insufficient' from valid readings.
+
+    change = latest - earliest valid value by recorded_at; needs >= TREND_MIN_READINGS
+    readings spanning >= TREND_MIN_SPAN_SECONDS. Describes recent change, not a forecast.
+    """
+    good = valid_readings(readings)
+    result = {'trend': 'insufficient', 'readings': len(good), 'change_m': None, 'span_seconds': None,
+              'rate_m_per_hour': None}
+    if len(good) < TREND_MIN_READINGS:
+        return result
+    span = (good[-1].recorded_at - good[0].recorded_at).total_seconds()
+    result['span_seconds'] = span
+    if span < TREND_MIN_SPAN_SECONDS:
+        return result
+    change = round(good[-1].value - good[0].value, 3)
+    if change >= TREND_MIN_CHANGE_M:
+        trend = 'increasing'
+    elif change <= -TREND_MIN_CHANGE_M:
+        trend = 'decreasing'
+    else:
+        trend = 'steady'
+    result.update(change_m=change, rate_m_per_hour=round(change / (span / 3600), 3), trend=trend)
+    return result
+
+
+def assess_flood(current_level, danger_level, window_readings, district_id=None):
+    """M01 semantics decide (status of the current reading vs the danger level); the window
+    adds corroboration and trend as evidence. Trend never creates or escalates an event."""
+    base = assess_water_level_risk(current_level, danger_level)
+    good = valid_readings(window_readings)
+    ignored = len(window_readings) - len(good)
+    trend = water_level_trend(window_readings)
+    corroborating = 0
+    if base['status'] in ('rising', 'flooding'):
+        corroborating = sum(1 for r in good if compute_river_status(r.value, danger_level) == base['status'])
+
+    reasons = [base['reason']]
+    if base['status'] == 'unknown':
+        reasons.append('No usable danger level: insufficient evidence, no event')
+    if trend['trend'] != 'insufficient':
+        reasons.append(f"Trend over {int(trend['span_seconds'])} s: {trend['trend']} ({trend['change_m']:+.3f} m)")
+    if corroborating > 1:
+        reasons.append(f"{corroborating} valid readings in the window agree on '{base['status']}'")
+    if ignored:
+        reasons.append(f'{ignored} reading(s) with non-good quality ignored')
+
+    warranted = base['alert_required'] and base['risk_level'] >= 2
+    return RiskAssessment(
+        hazard_type='flood', level=base['status'],
+        action='report_event' if warranted else 'none',
+        severity={2: 'medium', 3: 'high'}.get(base['risk_level']) if warranted else None,
+        reasons=reasons,
+        evidence={'current_level_m': current_level, 'danger_level_m': danger_level,
+                  'percentage': base['percentage'], 'risk_level': base['risk_level'],
+                  'valid_readings': len(good), 'ignored_readings': ignored,
+                  'corroborating_readings': corroborating, 'trend': trend},
+        sources=['iot'], district_id=district_id,
+    )
+
+
+def assess_motion(vibration_readings, tilt_readings, vibration_threshold_mg=None, tilt_change_deg=None,
+                  district_id=None):
+    """Abnormal ground-motion evidence from one device (MPU6050-class prototype).
+
+    elevated_motion when, within the caller's window, either
+      - >= MOTION_MIN_READINGS valid vibration readings are >= vibration_threshold_mg, or
+      - >= MOTION_MIN_READINGS valid tilt readings span (max - min) >= tilt_change_deg.
+    Unset thresholds = rule disabled ('uncharacterized'). Not an earthquake detector or
+    predictor, no magnitude: it only says this device's motion signal is abnormal.
+    """
+    vib, tilt = valid_readings(vibration_readings), valid_readings(tilt_readings)
+    ignored = len(vibration_readings) + len(tilt_readings) - len(vib) - len(tilt)
+    tilt_change = round(max(r.value for r in tilt) - min(r.value for r in tilt), 3) if tilt else None
+    evidence = {'vibration_readings': len(vib), 'tilt_readings': len(tilt), 'ignored_readings': ignored,
+                'vibration_threshold_mg': vibration_threshold_mg, 'tilt_change_threshold_deg': tilt_change_deg,
+                'max_vibration_mg': max((r.value for r in vib), default=None), 'tilt_change_deg': tilt_change}
+    reasons = []
+    if ignored:
+        reasons.append(f'{ignored} reading(s) with non-good quality ignored')
+
+    usable_vibration = vibration_threshold_mg is not None and 0 < vibration_threshold_mg <= VIBRATION_VALIDATION_MAX_MG
+    if vibration_threshold_mg is not None and not usable_vibration:
+        reasons.append(f'Vibration threshold must be in (0, {VIBRATION_VALIDATION_MAX_MG}] mg '
+                       '(telemetry validation cap): vibration rule disabled')
+    usable_tilt = tilt_change_deg is not None and tilt_change_deg > 0
+    if not usable_vibration and not usable_tilt:
+        reasons.append('Motion thresholds not configured: hardware characterization required, no event')
+        return RiskAssessment('earthquake', 'uncharacterized', reasons=reasons, evidence=evidence,
+                              sources=['iot'], district_id=district_id)
+
+    over = [r for r in vib if r.value >= vibration_threshold_mg] if usable_vibration else []
+    evidence['vibration_over_threshold'] = len(over)
+    triggers = []
+    if len(over) >= MOTION_MIN_READINGS:
+        triggers.append(f'{len(over)} vibration readings >= {vibration_threshold_mg} mg')
+    if usable_tilt and len(tilt) >= MOTION_MIN_READINGS and tilt_change >= tilt_change_deg:
+        triggers.append(f'tilt changed {tilt_change} deg (>= {tilt_change_deg}) over {len(tilt)} readings')
+    if triggers:
+        return RiskAssessment('earthquake', 'elevated_motion', action='report_event', severity='medium',
+                              reasons=['Abnormal ground-motion signal: ' + '; '.join(triggers)] + reasons,
+                              evidence=evidence, sources=['iot'], district_id=district_id)
+    if over:
+        reasons.append(f'{len(over)} reading(s) over threshold, {MOTION_MIN_READINGS} needed: single spikes ignored')
+    return RiskAssessment('earthquake', 'normal_motion', reasons=reasons or ['Motion within configured limits'],
+                          evidence=evidence, sources=['iot'], district_id=district_id)
+
+
+def assess_visual(hazard_type, reports, authority_source=False, district_id=None):
+    """Evidence grade for a landslide/road_damage event from its linked citizen reports.
+
+    Counted per distinct reporter (one person's repeated reports count once); rejected
+    reports are excluded. AI agrees only when its label equals the event type (M06 already
+    returns 'unknown' below its threshold). Grades:
+      insufficient   no usable report
+      single_report  one reporter, no AI agreement
+      supported      one reporter + AI agreement, or >= 2 distinct reporters
+      corroborated   >= 2 distinct reporters and >= 1 AI agreement
+    Assessment only: never changes severity or status (action is always 'none').
+    """
+    usable = [r for r in reports if r.status != 'rejected']
+    reporters = {r.reporter_id for r in usable}
+    completed = [r for r in usable if r.ai_status == 'completed']
+    agree = [r for r in completed if r.ai_label == hazard_type]
+    conflict = [r for r in completed if r.ai_label not in (hazard_type, 'unknown', None)]
+    evidence = {'reports': len(reports), 'usable_reports': len(usable), 'distinct_reporters': len(reporters),
+                'rejected_reports': len(reports) - len(usable),
+                'accepted_reports': sum(1 for r in usable if r.status == 'accepted'),
+                'ai_agree': len(agree), 'ai_conflict': len(conflict),
+                'ai_unknown': sum(1 for r in completed if r.ai_label == 'unknown'),
+                'ai_not_available': len(usable) - len(completed),
+                'max_ai_agree_confidence': max((r.ai_confidence for r in agree), default=None),
+                'authority_source': authority_source}
+    sources = (['citizen_report'] if usable else []) + (['vision_ai'] if agree else []) + \
+        (['authority'] if authority_source else [])
+
+    if len(reporters) >= 2 and agree:
+        level = 'corroborated'
+    elif len(reporters) >= 2 or (reporters and agree):
+        level = 'supported'
+    elif reporters:
+        level = 'single_report'
+    else:
+        level = 'insufficient'
+    reasons = [f'{len(reporters)} distinct reporter(s), {len(agree)} AI agreement(s)']
+    if conflict:
+        reasons.append(f'{len(conflict)} AI result(s) suggest a different hazard type: needs human review')
+    if evidence['rejected_reports']:
+        reasons.append(f"{evidence['rejected_reports']} rejected report(s) excluded")
+    if authority_source:
+        reasons.append('Event was reported by an authority')
+    if evidence['accepted_reports']:
+        reasons.append(f"{evidence['accepted_reports']} report(s) accepted by a reviewer")
+    reasons.append('AI scores are relative model scores, not probabilities; severity and status stay human decisions')
+    return RiskAssessment(hazard_type, level, reasons=reasons, evidence=evidence, sources=sources,
+                          district_id=district_id)

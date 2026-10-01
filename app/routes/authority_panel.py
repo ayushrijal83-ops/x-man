@@ -1,8 +1,16 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, g
+from flask import Blueprint, abort, render_template, request, redirect, url_for, flash, g
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import Complaint, Authority, Project, RoadSegment, River, AuthorityResponse
 from datetime import datetime
+
+from app.services.form_validation import finite_float, int_in_range
+
+# Values the panel forms offer; anything else is rejected (M10).
+COMPLAINT_STATUSES = ['pending', 'in_progress', 'resolved', 'rejected']
+ROAD_STATUSES = ['open', 'partial', 'restricted', 'blocked']
+TRAFFIC_LEVELS = ['low', 'moderate', 'heavy', 'severe']
+RIVER_STATUSES = ['normal', 'rising', 'high', 'flooding']
 
 authority_panel_bp = Blueprint('authority_panel', __name__)
 
@@ -33,22 +41,22 @@ def dashboard():
 
     # Get complaints for this authority
     complaints = Complaint.query.filter_by(authority_id=authority.id).order_by(Complaint.created_at.desc()).all()
-    
+
     # Get projects
     projects = Project.query.filter_by(authority_id=authority.id).all()
-    
+
     # Get roads in district
     roads = RoadSegment.query.filter_by(district_id=authority.district_id).all()
-    
+
     # Get rivers in district
     rivers = River.query.filter_by(district_id=authority.district_id).all()
-    
+
     # Stats
     total_complaints = len(complaints)
     pending = len([c for c in complaints if c.status == 'pending'])
     in_progress = len([c for c in complaints if c.status == 'in_progress'])
     resolved = len([c for c in complaints if c.status == 'resolved'])
-    
+
     return render_template('authority/dashboard.html',
                          authority=authority,
                          complaints=complaints[:10],
@@ -66,7 +74,7 @@ def complaints():
     """View all complaints for authority."""
     authority = get_authority()
     complaints = Complaint.query.filter_by(authority_id=authority.id).order_by(Complaint.created_at.desc()).all()
-    return render_template('authority/complaints.html', 
+    return render_template('authority/complaints.html',
                          authority=authority,
                          complaints=complaints)
 
@@ -74,13 +82,18 @@ def complaints():
 @login_required
 def complaint_detail(complaint_id):
     """View and respond to complaint."""
-    complaint = Complaint.query.get_or_404(complaint_id)
     authority = get_authority()
-    
+    complaint = db.session.get(Complaint, complaint_id)
+    if complaint is None or complaint.authority_id != authority.id:
+        abort(404)  # only complaints filed to this authority (M10: was any complaint)
+
     if request.method == 'POST':
-        response_text = request.form.get('response')
+        response_text = (request.form.get('response') or '').strip()[:5000]
         status_update = request.form.get('status')
-        
+        if status_update not in COMPLAINT_STATUSES:
+            flash('Invalid status.', 'error')
+            return redirect(url_for('authority_panel.complaint_detail', complaint_id=complaint_id))
+
         if response_text:
             response = AuthorityResponse(
                 complaint_id=complaint_id,
@@ -89,15 +102,15 @@ def complaint_detail(complaint_id):
                 status_update=status_update
             )
             db.session.add(response)
-        
+
         complaint.status = status_update
         complaint.government_response = response_text
         complaint.updated_at = datetime.utcnow()
-        
+
         db.session.commit()
         flash('Response sent successfully!', 'success')
         return redirect(url_for('authority_panel.complaints'))
-    
+
     responses = AuthorityResponse.query.filter_by(complaint_id=complaint_id).all()
     return render_template('authority/complaint_detail.html',
                          complaint=complaint,
@@ -117,11 +130,16 @@ def projects():
 @login_required
 def update_project(project_id):
     """Update project progress."""
-    project = Project.query.get_or_404(project_id)
-    
+    project = db.session.get(Project, project_id)
+    if project is None or project.authority_id != get_authority().id:
+        abort(404)  # only this authority's projects (M10)
+
     progress = request.form.get('progress_percent')
     description = request.form.get('description')
-    
+
+    if progress and int_in_range(progress, 0, 100) is None:
+        flash('Progress must be a whole number from 0 to 100.', 'error')
+        return redirect(url_for('authority_panel.projects'))
     if progress:
         project.progress_percent = int(progress)
         if int(progress) >= 100:
@@ -130,7 +148,7 @@ def update_project(project_id):
             project.status = 'on_schedule'
         else:
             project.status = 'delayed'
-    
+
     if description:
         from app.models import ProjectUpdate
         update = ProjectUpdate(
@@ -141,7 +159,7 @@ def update_project(project_id):
             progress_percent=int(progress) if progress else None
         )
         db.session.add(update)
-    
+
     db.session.commit()
     flash('Project updated!', 'success')
     return redirect(url_for('authority_panel.projects'))
@@ -160,16 +178,21 @@ def roads():
 @login_required
 def update_road(road_id):
     """Update road status."""
-    road = RoadSegment.query.get_or_404(road_id)
-    
+    road = db.session.get(RoadSegment, road_id)
+    if road is None or road.district_id != get_authority().district_id:
+        abort(404)  # only roads in this authority's district (M10)
+
     status = request.form.get('status')
     traffic = request.form.get('traffic_level')
     description = request.form.get('description')
-    
+    if status not in ROAD_STATUSES or traffic not in TRAFFIC_LEVELS:
+        flash('Invalid road status or traffic level.', 'error')
+        return redirect(url_for('authority_panel.roads'))
+
     road.status = status
     road.traffic_level = traffic
     road.last_updated = datetime.utcnow()
-    
+
     if description:
         from app.models import RoadUpdate
         update = RoadUpdate(
@@ -180,7 +203,7 @@ def update_road(road_id):
             status=status
         )
         db.session.add(update)
-    
+
     db.session.commit()
     flash('Road status updated!', 'success')
     return redirect(url_for('authority_panel.roads'))
@@ -199,19 +222,25 @@ def rivers():
 @login_required
 def update_river(river_id):
     """Update river status."""
-    river = River.query.get_or_404(river_id)
-    
+    river = db.session.get(River, river_id)
+    if river is None or river.district_id != get_authority().district_id:
+        abort(404)  # only rivers in this authority's district (M10)
+
     water_level = request.form.get('water_level')
     status = request.form.get('status')
-    
+    level = finite_float(water_level, 0, 50) if water_level else None  # metres, same range as telemetry
+    if (water_level and level is None) or (status and status not in RIVER_STATUSES):
+        flash('Invalid water level (0-50 m) or status.', 'error')
+        return redirect(url_for('authority_panel.rivers'))
+
     if water_level:
-        river.current_level = float(water_level)
-    
+        river.current_level = level
+
     if status:
         river.status = status
-    
+
     river.last_updated = datetime.utcnow()
-    
+
     db.session.commit()
     flash('River status updated!', 'success')
     return redirect(url_for('authority_panel.rivers'))

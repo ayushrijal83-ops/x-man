@@ -15,9 +15,9 @@
             {% else %}
                 <i data-lucide="user"></i> {% endif %}
         </div>
-        
+
         <h1 style="margin-bottom: 0.5rem;">{{ user.username }}</h1>
-        
+
         <div style="margin-bottom: 0.5rem;">
             {% if user.role == 'authority' %}
                 <span class="status-badge status-open"><i data-lucide="check"></i> {{ 'VERIFIED AUTHORITY'|t }}</span>
@@ -27,25 +27,28 @@
                 <span class="status-badge">{{ 'CITIZEN'|t }}</span>
             {% endif %}
         </div>
-        
+
         {% if district %}
             <p style="margin-bottom: 0.25rem;"><i data-lucide="map-pin"></i> {{ district.name }}, {{ district.province }} {{ 'Province'|t }}</p>
         {% endif %}
-        
+
+        {# M10: contact details only for the profile owner and admins #}
+        {% if current_user.id == user.id or current_user.role == 'admin' %}
         <p style="color: var(--text-muted); margin-bottom: 0.25rem;"><i data-lucide="mail"></i> {{ user.email }}</p>
-        
+
         {% if user.phone %}
             <p style="color: var(--text-muted); margin-bottom: 0.25rem;"><i data-lucide="phone"></i> {{ user.phone }}</p>
         {% endif %}
-        
+        {% endif %}
+
         <p style="color: var(--text-muted); margin-bottom: 0.5rem;"><i data-lucide="calendar"></i> {{ 'Joined:'|t }} {{ user.created_at.strftime('%B %Y') if user.created_at else 'N/A'|t }}</p>
-        
+
         {% if user.bio %}
             <div style="max-width: 500px; margin: 1rem auto; padding: 1rem; background: var(--bg-surface); border-radius: 0.5rem;">
                 <p style="font-style: italic;">"{{ user.bio }}"</p>
             </div>
         {% endif %}
-        
+
         {% if badges %}
             <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-top: 1rem;">
                 {% for badge in badges %}
@@ -53,14 +56,14 @@
                 {% endfor %}
             </div>
         {% endif %}
-        
+
         {% if user.role == 'authority' %}
             <div style="margin-top: 1rem;">
                 <a href="/authority/dashboard" class="btn btn-primary">{{ 'Go to Authority Dashboard'|t }}</a>
             </div>
         {% endif %}
     </div>
-    
+
     <!-- Stats -->
     <div class="grid grid-4" style="margin-bottom: 2rem;">
         <div class="stat-card">
@@ -80,7 +83,7 @@
             <div class="stat-label">{{ 'Reputation'|t }}</div>
         </div>
     </div>
-    
+
     <div class="grid grid-2">
         <!-- Recent Posts -->
         <div class="card">
@@ -108,7 +111,7 @@
                 <p>{{ 'No posts yet.'|t }} <a href="/posts/create">{{ 'Create your first post'|t }}</a></p>
             {% endif %}
         </div>
-        
+
         <!-- Recent Complaints -->
         <div class="card">
             <h2 class="card-title"><i data-lucide="clipboard-list"></i> {{ 'Recent Complaints'|t }}</h2>

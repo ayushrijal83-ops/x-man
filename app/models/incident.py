@@ -6,14 +6,17 @@ from datetime import datetime
 HAZARD_TYPES = ['flood', 'earthquake', 'landslide', 'road_damage']
 HAZARD_SOURCES = ['iot', 'citizen_report', 'authority', 'system']
 HAZARD_SEVERITY = ['low', 'medium', 'high', 'critical']
-HAZARD_STATUS = ['detected', 'investigating', 'confirmed', 'resolved', 'rejected']
-ACTIVE_STATUSES = ['detected', 'investigating', 'confirmed']
+# M09 adds 'response' (authority response under way) between confirmed and resolved.
+HAZARD_STATUS = ['detected', 'investigating', 'confirmed', 'response', 'resolved', 'rejected']
+ACTIVE_STATUSES = ['detected', 'investigating', 'confirmed', 'response']
 
-# detected -> investigating -> confirmed -> resolved; detected/investigating -> rejected
+# detected -> investigating -> confirmed -> response -> resolved; detected/investigating -> rejected.
+# confirmed -> resolved stays valid (M02). resolved/rejected are terminal: no reopening.
 VALID_STATUS_TRANSITIONS = {
     'detected': ['investigating', 'rejected'],
     'investigating': ['confirmed', 'rejected'],
-    'confirmed': ['resolved'],
+    'confirmed': ['response', 'resolved'],
+    'response': ['resolved'],
     'resolved': [],
     'rejected': [],
 }

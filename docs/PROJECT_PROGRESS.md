@@ -1,6 +1,6 @@
 # NepalSathi - Project Progress
 
-## Current Status: M07 Disaster Monitoring Dashboard Complete (M06 Vision AI, M05.1 Security Hardening, M05 Mobile Camera Citizen Reporting, M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
+## Current Status: M10 Security/Reliability Hardening Complete (M09 Authority Response, M08 Risk Engine, M07 Monitoring Dashboard, M06 Vision AI, M05.1 Security Hardening, M05 Mobile Camera Citizen Reporting, M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
 
 ### ✅ Completed (Core Features)
 - Flask application
@@ -1470,3 +1470,681 @@ feat(m07): add disaster monitoring dashboard
 
 ### 🏷️ Status
 **M07 — DISASTER MONITORING DASHBOARD COMPLETE · PRESENTATION ONLY · NO NEW DETECTION RULES**
+
+---
+
+## M08 — Multi-Signal Risk Engine
+
+### 1. Status
+Complete. Deterministic, rule-based and explainable. There is no ML, no LLM and no prediction. No
+schema change. No hardware or firmware work.
+
+### 2. Architecture
+```
+telemetry (POST /api/iot/telemetry) ── validation (unchanged) ──┐
+citizen photo report (POST /api/reports, M05) + AI (M06) ───────┤  evidence
+authority-created events (/api/hazards, M02) ───────────────────┘
+        ↓
+risk_service      gathers evidence from the DB, scoped to river / device / district / linked reports
+        ↓
+risk_engine       pure rules → RiskAssessment (level, action, suggested severity, reasons, evidence, sources)
+        ↓  only if action == 'report_event'
+hazard_event_service   create / merge (M02 dedup) / escalation rules — unchanged
+        ↓
+notification_service   detected / escalated / … with M04 dedup and affected areas — unchanged
+```
+- `risk_engine.py` holds the M01 functions (untouched) plus the M08 rules. They are pure: no `db`,
+  no `Incident`, no notifications.
+- `risk_service.py` reads evidence and calls `hazard_event_service` only. It never imports
+  `Notification` or `notification_service`; a test asserts this.
+- The flood path in `iot.py` now goes `process_water_level_reading → risk_service.evaluate_water_level`.
+  Vibration/tilt readings call `risk_service.evaluate_motion`.
+- Citizen reports still go through the M05 → `report_hazard` path. Their fixed-severity /
+  no-escalation rule stays in the single M05.1 guard in `hazard_event_service`; M08 adds an evidence
+  assessment on top.
+
+### 3. RiskAssessment (service-layer result, not persisted)
+`hazard_type, level, action ('none' | 'report_event'), severity (suggested, only with
+report_event), reasons[], evidence{}, sources[], district_id, assessed_at`.
+- It is never a probability. Numbers inside `evidence` are measurements or counts.
+- No new table: assessments are recomputed from stored evidence on demand.
+
+### 4. Flood rules
+- **Decision = M01, unchanged.** `assess_water_level_risk(current, danger)`: <80% normal, 80–100%
+  rising, ≥100% flooding.
+  - rising → event at `medium`, flooding → `high`, same as M02's `RISK_LEVEL_SEVERITY`.
+  - No usable danger level → `unknown`, no event.
+  - Water level stays in **metres**.
+- **Window evidence** (last 30 min of `water_level` readings in `m` from devices on that river,
+  plus the reporting device for the M01 district fallback):
+  - Only `quality == 'good'` readings count; the others are counted as ignored.
+  - **Corroboration:** the number of valid readings in the window with the same rising/flooding
+    status as the current one.
+  - **Trend:** `change = latest − earliest valid value` ordered by `recorded_at`. It needs ≥ 3
+    readings spanning ≥ 5 min; `increasing` if change ≥ +0.05 m, `decreasing` if ≤ −0.05 m,
+    otherwise `steady`. `rate_m_per_hour = change / span`.
+  - The trend describes recent change only. It is **not a forecast** and never creates or
+    escalates an event; a test checks a rising trend below 80% gives no action.
+- Telemetry timestamps with an offset (e.g. `…Z`) are now stored as naive UTC like every other
+  timestamp. Before, aware and naive datetimes were mixed in the session and could not be
+  compared. The payload format is unchanged.
+
+### 5. Seismic / abnormal ground motion (MPU6050-class prototype)
+- Uses the existing `vibration` (mg) and `tilt` (°) types; no new sensor types.
+- **Rule** (per device, 60 s window, good-quality readings only): `elevated_motion` if
+  - ≥ 3 vibration readings ≥ `MOTION_VIBRATION_THRESHOLD_MG`, or
+  - ≥ 3 tilt readings whose `max − min` ≥ `MOTION_TILT_CHANGE_THRESHOLD_DEG`.
+
+  A single spike is ignored.
+- **Thresholds are unset by default**, which reports `uncharacterized` and creates no event. There
+  are no validated values, so hardware characterization (H-milestones) must set them via
+  environment variables.
+  - A vibration threshold above the 1000 mg validation cap (or ≤ 0) disables the vibration rule
+    and says why.
+  - The 1000 mg cap itself was **not** changed.
+- **When it fires:** `report_hazard('earthquake', 'medium', 'iot', escalate=False, …)` in the
+  device's district.
+  - The title is "Abnormal ground motion signal: <device>". The description states that it is
+    prototype evidence, not a certified detection, not a prediction and has no magnitude.
+  - Repeated evidence merges into the active event (M02 dedup) and **never escalates** it.
+
+### 6. Landslide and road-damage evidence
+`assess_visual(event_type, reports linked to the event)`:
+- **What counts:**
+  - Counted per **distinct reporter**: one person's repeated reports count once.
+  - `rejected` reports are excluded.
+  - AI agrees only when `ai_label == event_type`. M06 already returns `unknown` below its
+    threshold, so a low score never counts.
+- **Grades:**
+  - `insufficient`: no usable report
+  - `single_report`: one reporter, no AI agreement
+  - `supported`: one reporter + AI agreement, or ≥ 2 distinct reporters
+  - `corroborated`: ≥ 2 distinct reporters + ≥ 1 AI agreement
+- **Reasons** also cover: AI conflicts (AI suggests the other hazard type, which needs human
+  review and raises nothing), rejected or accepted reports, and authority source.
+- **Always `action: none`:** AI and report counts never change severity or status. "Nearby" means
+  the reports M02 dedup already linked to this event (same type, district/location, 24 h), so no
+  new geography is invented.
+- Tests cover AI at 0.99 + two reporters → `corroborated`, while the event stays `detected` /
+  `medium` with no escalation or confirmation notification.
+
+### 7. Multi-signal and cross-district behaviour
+- **Combined only within one event's own evidence:** the river's devices (flood), devices in its
+  primary district (motion), reports linked to it (visual), and its authority source.
+- **Duplicate evidence:** the same reporter, or repeated telemetry, does not raise the grade or
+  severity.
+- **Bad evidence:** bad- or suspect-quality readings and rejected reports are ignored, never
+  strengthening.
+- **No cross-district leakage:** another district's river, devices or reports never enter an
+  assessment (tested for flood, motion, reports and notifications).
+
+### 8. API
+- **New:** `GET /api/hazards/<id>/assessment`. It is read-only and manager-only; authorities see
+  only their own district (same rule as event management): 401 / 403 / 404, and POST → 405.
+  - It returns `{hazard_id, assessments: [RiskAssessment…]}`, one per motion device for
+    earthquake events.
+  - Query parameters are ignored, so no client can inject a level, severity or confidence.
+  - It contains no report text, filenames, reporter ids, raw payloads, keys or source references.
+- **Unchanged:** the telemetry, report and hazard contracts. Extra fields such as `severity`,
+  `risk_level`, `confidence` or `source` in telemetry are ignored (tested).
+
+### 9. Security
+- Risk is computed server-side only from stored, validated evidence.
+- Source is still derived server-side: `iot` for devices, `citizen_report` for reports (M05.1).
+- There is no direct notification path from sensors, AI or the engine.
+- CSRF, RBAC and device auth are unchanged.
+- **Still open, recorded for M10:** the M07 finding that `GET /api/iot/devices` lets an authority
+  user *not linked* to an authority list any district's devices via `?district_id=`.
+
+### 10. Tests
+`tests/test_risk_engine_m08.py` (68 tests):
+- **Flood:**
+  - M01 boundaries (79.75 / 80 / 99.75 / 100%) and unknown danger levels
+  - trend calculation (increasing, decreasing, steady, timestamp order not row order, insufficient
+    cases)
+  - bad and suspect readings ignored; repeated readings corroborate
+  - a rising trend below threshold gives no event
+  - pipeline: normal → none; rising ×3 → one event with one detected alert per user; flooding →
+    one escalation
+  - invalid readings (cm, out of range, non-number) rejected with no event
+  - client-injected severity/source ignored; stored timestamps used for the trend; another river's
+    readings excluded
+- **Motion:**
+  - disabled by default
+  - repeated vibration → one `earthquake` event at `medium`, never escalated, with a disclaimer
+  - single spike ignored; tilt-change rule
+  - 6 invalid or unsupported readings rejected
+  - threshold above the cap disabled; bad quality ignored
+  - another district's device stays in its district
+- **Visual:**
+  - 9 evidence cases × 2 hazard types, covering none, single, AI unknown/low/failed, AI agree,
+    2 reporters, a duplicate reporter, corroborated, and a rejected report
+  - conflicting AI; sources
+  - pipeline: corroborated but not confirmed or escalated; AI unknown and disagreement; other
+    district's reports not combined
+- **API / security:** authorization, read-only, query-param injection, no private data, flood and
+  motion assessments.
+- **Architecture:** no notification access in the engine or service; notifications are created
+  only through `notification_service` via event state changes (spy); serialization.
+
+Changed existing tests: none. **Full suite: see §13.**
+
+### 11. Known limitations
+- Motion thresholds, the trend window and step (30 min, 3 readings, 5 min, ±0.05 m) and the
+  motion window (60 s, 3 readings) are engineering defaults, not validated against real rivers or
+  the real MPU6050.
+- Telemetry ingestion still marks every accepted reading `quality='good'` (as in M01). The quality
+  filter matters once firmware or ingestion flags suspect data.
+- The trend is not used for decisions on purpose. Using it for early warnings needs field data and
+  a documented rule.
+- Each elevated motion or rising-water reading adds to `report_count` of the active event (same as
+  M02 flood evidence).
+- Assessments are not persisted, so there is no risk history.
+- Earthquake assessments use only devices in the event's primary district, with a 60 s window,
+  so an old event shows the current motion state.
+- The M07 `/api/iot/devices` unlinked-authority gap remains for M10.
+
+### 12. Hardware dependency
+The JSN-SR04T (water level in metres, converted on the ESP32), DHT22 (context only, not used in
+rules) and MPU6050 have **not** been built or validated. The motion rule cannot be enabled
+meaningfully before hardware characterization (H-milestones).
+
+### 13. Files
+- **Created:** `app/services/risk_service.py`, `tests/test_risk_engine_m08.py`
+- **Modified:**
+  - `app/services/risk_engine.py` (M08 rules appended, M01 functions untouched)
+  - `app/routes/iot.py` (flood/motion via `risk_service`, UTC timestamp normalization)
+  - `app/routes/hazard_events.py` (assessment endpoint)
+  - `app/config.py` (motion thresholds, unset by default)
+  - `docs/PROJECT_PROGRESS.md`
+- **Deleted:** none
+- **Migration:** none
+
+**Full suite: `python -m pytest tests/ -q` → 431 passed, 79 warnings** (M07 baseline 363 passed, 59 warnings; +68 new tests). The 20 extra warnings are all the pre-existing `River.query.get()` LegacyAPIWarning in `iot.py`, hit more often by the new telemetry tests. There is no new warning type.
+
+### 14. Next milestone
+**M09 — AUTHORITY RESPONSE SYSTEM** (not started).
+
+### 15. Git commit
+```
+feat(m08): add multi-signal risk engine
+```
+
+### 🏷️ Status
+**M08 — MULTI-SIGNAL RISK ENGINE COMPLETE · DETERMINISTIC · NO PREDICTION · AI AND SENSORS ARE EVIDENCE**
+
+---
+
+## M09 — Authority Response System
+
+### 1. Objective
+Answers the question "an alert was generated, what does the responsible authority do with it?"
+M09 adds human investigation, confirmation or rejection, recorded response actions and an
+evidence-backed resolution, all with an audit trail. It is not a detection engine: no risk
+scoring, classification, sensor evidence, automatic confirmation or resolution, and no
+notification rows.
+
+### 2. Architecture
+```
+Hazard Event (M02, created from M08 RiskAssessment)
+     ↓
+Authority Investigation (notes)          ┐
+     ↓                                   │ authority_response_service
+Confirmation / Rejection                 │  (authorization, validation, notes, actions, timeline)
+     ↓                                   │
+Response (actions)                       │
+     ↓                                   ┘
+Resolution (required note)
+     ↓
+hazard_event_service._apply_transition   (single status path: CAS update + audit row, one transaction)
+     ↓
+notification_service                     (unchanged M03/M04 rules and dedup)
+```
+- **Routes stay thin.** `/api/hazards/*` and `/hazards/<id>/response` only parse input and map
+  errors.
+- **Shared scope rule.** `authority_response_service.can_manage` is the M02 rule (admin: all;
+  authority: events whose primary district is its authority's district). `_load_managed_incident`
+  now uses it, so the behaviour is unchanged.
+
+### 3. Status lifecycle
+```
+detected → investigating → confirmed → response → resolved
+detected → rejected        investigating → rejected        confirmed → resolved (M02, kept)
+```
+- **`response` is new.** It means the authority response is under way. It is an *active* status
+  (in `ACTIVE_STATUSES`), so dashboards, lists, M02 dedup and M04 area expansion treat it like
+  `confirmed`.
+- **Terminal states stay terminal:** `resolved` and `rejected`. No reopening was implemented.
+- **Every M02 transition is still valid.**
+- **Notes:**
+  - `resolved` and `rejected` require a note (string, trimmed, ≤ 2000 chars).
+  - Other transitions take an optional note.
+  - This rule is enforced at the M09 service/API layer. Internal service callers (e.g. M04
+    tests) can still resolve without a note.
+
+### 4. Models / migration
+Migration `c3d7f1a9b6e2_m09_authority_response.py` (revises `b5c9e3f7a142`) is additive: three
+tables with foreign keys and `incident_id` indexes. `incidents.status` is already a `String(20)`,
+so `response` needs no schema change.
+
+| Table | Columns | Notes |
+|---|---|---|
+| `incident_status_history` | incident_id, previous_status, new_status, changed_by_id (NULL = system), note, created_at | one row per transition, same transaction as the status change |
+| `incident_investigations` | incident_id, author_id, note, created_at | append-only (no edit/delete) |
+| `incident_response_actions` | incident_id, author_id, action_type, description, status, created_at, updated_at, completed_at | type ∈ inspect_site, close_road, evacuate_area, deploy_team, contact_local_authority, place_warning, monitor_area, other. Status planned → in_progress → completed; planned/in_progress → cancelled; completed/cancelled are final. `completed_at` is server-set |
+
+**Migration verification:** run on a copy of the dev DB seeded with legacy incidents (one
+`confirmed`, one `resolved`) and a citizen report.
+- upgrade → downgrade → upgrade, with identical row counts and incident rows each time
+- `flask db check`: no drift
+- The legacy `confirmed` incident then went → `response` → `resolved`.
+- The legacy `resolved` incident stayed terminal.
+- Its timeline uses `detected_at` for the detection entry, so no backfill is needed.
+
+The local dev DB was backed up to `instance/hackforge.pre-m09.db` and upgraded to `c3d7f1a9b6e2`.
+
+### 5. API
+All endpoints are manager-only: authority in its own district, or admin. They return JSON errors:
+401 not logged in, 403 citizen / other district / unlinked authority, 404 unknown, 400
+validation, 409 closed incident or concurrent change.
+| Method | Endpoint | Notes |
+|---|---|---|
+| POST/PATCH | `/api/hazards/<id>/status` `{status, note?}` | existing M02 endpoint, now audited; note required for resolved/rejected |
+| POST | `/api/hazards/<id>/resolve` `{resolution_notes}` | existing; note now **required** |
+| POST | `/api/hazards/<id>/reject` `{reason}` | existing; reason now **required** |
+| PATCH | `/api/hazards/<id>` `{status?, note?, …}` | existing manager edit; a status change follows the same rules |
+| GET | `/api/hazards/<id>/status-history` | history + `allowed_transitions`; read-only (POST/PATCH/DELETE → 405) |
+| GET/POST | `/api/hazards/<id>/investigations` `{note}` | |
+| GET/POST | `/api/hazards/<id>/response-actions` `{action_type, description, status?}` | |
+| PATCH | `/api/hazards/<id>/response-actions/<action_id>` `{status?, description?}` | the action must belong to that hazard (404 otherwise) |
+| GET | `/hazards/<id>/response` (page) | authority/admin incident-response page |
+
+**Client-controlled fields rejected (400)** on the status, note and action endpoints: `severity,
+source, risk_level, confidence, reporter_id, device_id, authority_id, author_id, changed_by(_id),
+incident_id, completed_at, created_at, previous_status, ai_label, ai_confidence, ai_model`.
+Severity is still editable only through the existing M02 `PATCH /api/hazards/<id>` manager
+edit.
+
+### 6. Authorization
+- **Citizen:**
+  - Sees public hazard data (status including `response`, severity, type, affected districts,
+    times) and their own notifications.
+  - Cannot investigate, confirm, reject, start a response, resolve, add notes or actions, or read
+    history.
+- **Authority:** all M09 actions on events whose primary district is its authority's district.
+- **Admin:** all M09 actions system-wide.
+
+### 7. Privacy (internal vs public)
+- **Internal** (manager endpoints and the response page only): investigation notes, response
+  actions, status history with notes, and author usernames (never user ids or emails).
+- **Public serializers are unchanged** (`Incident.to_dict(include_internal=False)`), and the M07
+  citizen dashboard gets no response data.
+- **Description fix:** `/resolve` and `/reject` used to append the note to the **public**
+  `Incident.description` ("Resolution: …"). M09 stores it only in the status history. Four
+  existing assertions (in `test_hazard_event_service.py` and `test_hazard_events_api.py`) were
+  updated for this privacy change.
+
+### 8. Audit trail
+- **One history row per successful transition**, recording old and new status, actor (NULL for
+  system callers), timestamp and note, written in the same transaction as the status change.
+- **Concurrency:** `_apply_transition` uses a compare-and-set `UPDATE … WHERE id=? AND status=<validated
+  status>`.
+  - A stale or concurrent request matches 0 rows and raises `TransitionConflict` (409); the whole
+    transaction rolls back, writing no history.
+  - A repeated identical request is rejected as an invalid transition.
+  - The service also re-reads the row (`refresh`) before validating.
+- **Atomicity:** if the history insert fails, the status change rolls back with it (tested by
+  forcing a NOT NULL violation).
+- **Timeline** (response page) = detection (`detected_at`) + status changes + notes + actions,
+  in time order: what, when, who, why, what action, when resolved.
+
+### 9. Notifications
+- M03/M04 remain the only notification source.
+- `investigating`, `response`, notes and actions send nothing.
+- `confirmed` and `resolved` send the existing `hazard_confirmed` / `hazard_resolved` once per
+  recipient (existing dedup keys).
+- The detected and escalated alerts are never duplicated (tested).
+- **M04 compatibility fix:** `notify_area_expanded` also sends `hazard_confirmed` to newly covered
+  districts when the status is `response`, because response follows confirmation.
+
+### 10. Frontend
+- **`/hazards/<id>/response`** (Jinja, server-rendered, autoescaped):
+  - summary (type, severity, status, source, detected time, location) and M04 affected districts
+  - only the transition buttons valid for the current status (e.g. Start Investigation / Reject
+    Hazard at `detected`)
+  - note field (required for resolve/reject, also checked client-side)
+  - timeline; add-note form; response actions with only valid next-status buttons; add-action form
+  - read-only M08 assessment ("evidence only")
+  - Closed incidents show "cannot be reopened" and no forms.
+  - The JS only sends JSON with CSRF and reloads. Errors are shown with `textContent`; there is no
+    `innerHTML`.
+- **M07 dashboard:**
+  - Status labels for everyone (Detected / Investigating / Confirmed / Response in progress).
+  - For managers, each hazard card also shows notes / open-action counts (two `GROUP BY` queries,
+    no N+1) and an "Open response" link.
+  - Citizens get no response data.
+- All new strings have Nepali translations.
+- Manually checked in Chrome on the migrated scratch DB:
+  - the legacy confirmed incident → response; note + action shown
+  - resolving with an empty note was refused client-side; resolving with a note worked
+  - `<script>`/`<b>` in notes rendered as text; no console errors
+
+### 11. Tests
+`tests/test_authority_response_m09.py` (127 tests, including parametrized cases):
+- **Lifecycle:**
+  - full path with exact audit rows; both rejected paths; confirmed → resolved kept
+  - 12 invalid transitions (terminal → anything, skips, unknown, empty) with no history
+  - resolution note validation (7 bad inputs); legacy resolve/reject require notes
+  - PATCH follows the same rules; a duplicate request gives one history row
+- **Integrity:**
+  - a stale object gets a conflict and full rollback
+  - a history insert failure rolls back the status
+  - conflict maps to 409
+- **Authorization:**
+  - 9 endpoints × (anonymous 401, citizen 403, other authority 403, unlinked authority 403), with
+    no state change
+  - authority and admin allowed; admin system-wide
+  - history is read-only (405)
+  - response page access matrix
+- **Input manipulation:** 8 forbidden fields × 3 endpoints, with no change.
+- **Investigations:**
+  - add/list with author and time, no user ids
+  - 7 invalid notes; a closed incident → 409
+- **Response actions:**
+  - create → in_progress → completed (`completed_at` server-set), final states are final
+  - created as completed; cancel
+  - 10 invalid creates; 6 update cases; no going back; the action must belong to the incident
+- **Privacy:**
+  - citizens see no notes, actions, authors, `source_reference` or device refs in the hazard API,
+    list, dashboard, notifications or pages
+  - the resolution note is never public
+  - managers see the response summary
+- **Notifications:**
+  - no duplicate detected/escalated alerts; investigation/response send nothing
+  - confirmed/resolved once per recipient
+  - area expansion during response; `response` is active everywhere
+- **Page:**
+  - only valid controls per status; closed view
+  - XSS payloads escaped in notes and actions; Nepali
+
+**Changed existing tests (6 assertions, all deliberate M09 contract changes):**
+- `test_hazard_event_model.py`: `HAZARD_STATUS` and `VALID_STATUS_TRANSITIONS` gain `response`.
+- `test_hazard_event_service.py` and `test_hazard_events_api.py`: the resolve/reject notes are no
+  longer in the public description and are now asserted in the status history.
+
+**Full suite: `python -m pytest tests/ -q` → 558 passed, 79 warnings** (M08 baseline 431 passed, 79
+warnings; +127 new; the warning count is unchanged).
+
+### 12. Security status
+- **In place:** authentication, RBAC, authority scope (M02 rule), admin scope, CSRF on all
+  writes (Flask-WTF, as before), input validation, XSS-safe rendering.
+- **No leaks:** no private data in public serializers; no client-controlled
+  severity/source/risk/confidence/actor fields.
+- **No new notification path.**
+- **Still open (M10):** the M07/M08 finding that `GET /api/iot/devices?district_id=` lets an
+  authority user not linked to an authority list another district's devices.
+
+### 13. Known limitations
+- **Scope uses the primary district only:** authority scope follows the M02 rule, so an authority
+  of an M04 *additional* affected district can see the hazard but cannot manage it.
+- **No reopening:** a wrongly resolved or rejected incident needs a new event.
+- **Append-only notes and actions:** there's no edit or delete. Corrections are new notes, or a
+  cancelled action plus a new one.
+- **Detection in the timeline** comes from `detected_at`. Pre-M09 transitions on legacy incidents
+  have no history rows, and pre-M09 resolve/reject notes remain in those incidents' descriptions
+  (no data was rewritten).
+- **Concurrency on SQLite:** handled by compare-and-set within SQLite's single-writer model. There
+  is no distributed locking.
+- **No outbound channels:** no SMS, email or push; the in-app notifications are the existing
+  M03 ones.
+- Nothing here has been validated in a real emergency operation.
+
+### 14. Hardware dependencies
+None. M09 works on events from any source. The physical sensors are still not built or validated.
+
+### 15. Files
+- **Created:**
+  - `app/models/incident_response.py`
+  - `app/services/authority_response_service.py`
+  - `app/templates/pages/hazard_response.html`
+  - `migrations/versions/c3d7f1a9b6e2_m09_authority_response.py`
+  - `tests/test_authority_response_m09.py`
+- **Modified:**
+  - `app/models/incident.py` (lifecycle), `app/models/__init__.py`
+  - `app/services/hazard_event_service.py` (audited compare-and-set transitions; notes out of the
+    public description)
+  - `app/services/notification_service.py` (M04 area expansion during `response`)
+  - `app/routes/hazard_events.py` (thin status routes via the service; new endpoints)
+  - `app/routes/monitoring.py` (response page)
+  - `app/services/dashboard_service.py`, `app/templates/pages/monitoring.html` (status labels,
+    manager response summary)
+  - `app/services/page_strings.py`
+  - `tests/test_hazard_event_model.py`, `tests/test_hazard_event_service.py`,
+    `tests/test_hazard_events_api.py`
+  - `docs/PROJECT_PROGRESS.md`
+- **Deleted:** none
+- **Not committed:** M08 is still uncommitted in the working tree alongside M09.
+
+### 16. Next milestone
+**M10 — Security/Reliability/Production Hardening** (not started).
+
+### 17. Git commit
+```
+feat(m09): add authority response system
+```
+
+### 🏷️ Status
+**M09 — AUTHORITY RESPONSE SYSTEM COMPLETE · HUMAN DECISIONS AUDITED · NO NEW DETECTION OR ALERT PATHS**
+
+---
+
+# M10 — Security/Reliability/Production Hardening
+
+### Objective
+Find and fix security, authorization, validation, reliability, privacy and production-readiness
+weaknesses left after M01–M09, without adding features or changing the M01–M09 rules (water level
+in metres, M02 dedup, M03/M04 notifications, M05/M05.1 report rules, M06 evidence-only AI, M07,
+M08, M09 lifecycle).
+
+### Security audit performed
+Every route module was reviewed: `iot`, `hazard_events`, `reports`, `notifications`,
+`monitoring`, `auth`, `authority_panel`, `complaints`, `projects`, `rivers`, `profile`, `posts`,
+`social`, `ai_routes`. For each sensitive endpoint the review answered: who can call it, which
+object and district, which fields can be written, whether ids or query parameters can be swapped,
+and whether a citizen or another authority can act. Repo-wide searches covered:
+- `innerHTML` / `insertAdjacentHTML` / `document.write` / `|safe` / `Markup`
+- logging and `print`
+- `csrf.exempt`, error handlers, `Query.get`
+- `current_user.authority*` assumptions
+- generic serializers (`__dict__`, `vars`): none found
+
+The migration chain was checked from an empty database and on a dev-DB copy. Every finding has a
+regression test, and **65 of the new tests fail on the pre-M10 code** (verified in a temporary
+worktree of HEAD with the staged M08/M09 changes applied).
+
+### Vulnerabilities found and fixed
+| # | Finding | Impact | Fix | Tests |
+|---|---|---|---|---|
+| 1 | **Public `/auth/authority/register`** created a pre-verified (`is_verified=True`) authority for any district | Critical: anyone became a district manager (private reports and photos, confirm/resolve/reject, severity escalation alerts, device keys) | Off unless `AUTHORITY_SELF_REGISTRATION=true` (default false). Link hidden. README documents admin provisioning | `TestAccounts` |
+| 2 | `GET /api/iot/devices`: authority **not linked** to an authority fell through to `?district_id=` / home district (known M07/M08 gap) | High: device metadata of any district | Unlinked authority → 403. Linked authority → own devices only (`district_id` can't widen scope). Admin → all, optional validated filter | `test_unlinked_authority_cannot_list_devices`, `test_device_list_scope` |
+| 3 | `PATCH /api/iot/devices/<id>` and `rotate-key`: ownership check `device.authority_id != current_user.authority_id` was `None != None` → **False** for an unlinked authority on unowned devices | High: disable/reconfigure devices and **take over their API keys** | `_can_manage_device`: admin, or a linked authority owning the device | `test_update_and_rotate_ownership` (9 cases) |
+| 4 | Authority panel IDOR: `/authority/complaints/<id>` (read and respond), `/authority/{projects,roads,rivers}/<id>/update` loaded any object by id | High: read/answer other authorities' complaints, change other districts' roads/rivers/projects | Scoped to the authority (complaint/project `authority_id`, road/river district) → 404 | `TestObjectLevelAuthorization` |
+| 5 | `POST /projects/<id>/update` and `POST /rivers/<id>/update` open to **any logged-in user**; the river route used its own 60%/80% "high" thresholds | High: citizens could change public project progress and river levels/status; inconsistent with M01 | Admin or scoped authority only (403). River status now uses M01 `compute_river_status`; values validated | `test_public_update_routes_need_scoped_manager` |
+| 6 | `GET /complaints/<id>` readable by any logged-in user | Medium: other citizens' complaint text | Complainant, the authority it was filed to, or admin; others 404 | `test_complaint_detail_scoped` |
+| 7 | Telemetry accepted `NaN` (NaN fails every comparison, so it passed the range check and then hit a NOT NULL **500**), booleans (`true` → 1.0), numeric strings. Non-object readings, non-string `sensor_type`/`timestamp` and non-object bodies caused 500s | Medium: crashes and invalid data accepted | JSON numbers only (no bool), finite; readings must be objects; types checked; `validate_sensor_reading` itself rejects non-finite | `TestTelemetryValidation` (22 payloads, 7 timestamps) |
+| 8 | Global `CSRFProtect` without an exemption for `POST /api/iot/telemetry` | Functional: a real ESP32 (no session, no token) would always get 400 outside tests | `@csrf.exempt` on that view only: it is authenticated by the device API key header and uses no cookies. All session-based writes still require a token | `TestCsrf` |
+| 9 | XSS: LLM answers, the user's question, and classifier output inserted with `innerHTML` (`ai_assistant`, `create_post` preview, `test_classify`) | Medium: a model answer containing `<img onerror>` executes | DOM building with `textContent`/`createTextNode` | `TestXss`; manual Chrome check (payload rendered as text) |
+| 10 | Open redirect: login `?next=` used unvalidated | Medium: phishing redirect after a real login | `_safe_next`: same-site relative paths only | `test_login_next_is_same_site_only` |
+| 11 | `/profile/<id>` showed every user's email and phone to all users | Medium: personal data disclosure | Shown to the profile owner and admins only | `test_profile_contact_details_private` |
+| 12 | `POST /api/iot/devices` with `river_id` → **500 `NameError`** (`River` not imported), same in PATCH | Reliability: M01 river association unusable via API | Import fixed; registration and updates fully validated (device id pattern without `:`, ints, text limits, coordinates). PATCH rejects unknown/server fields (`api_key_hash`, `authority_id`, `district_id`, `device_id`), non-bool `enabled`, bad status | `TestDeviceInput` |
+| 13 | `/api/iot/latest?limit=-1` → SQLite `LIMIT -1` = unlimited | Low: full readings-table scan per request | Clamped to 1..500 | `test_latest_limit_cannot_be_disabled` |
+| 14 | `init_db.py` (`create_all`) left no Alembic version, so the next `flask db upgrade` replays every migration on existing tables and **fails**. The initial migration only adds IoT tables, so the chain can't build an empty DB either | Reliability: fresh installs could never take later migrations | `init_db.py` stamps the head after `create_all()`. Historical migrations untouched | `test_fresh_install_is_migration_tracked` |
+| 15 | Production config fell back to the public `SECRET_KEY` default; remember-me cookie not `Secure`; `/api/*` errors were HTML; no CSP/Referrer/Permissions headers | Low/Medium: session and CSRF forgery if deployed with the default | `create_app('production')` refuses the default/empty key. `REMEMBER_COOKIE_SECURE/HTTPONLY/SAMESITE`. JSON errors for `/api/*` (500 → `{"error": "Internal server error"}`, no traceback). CSP + `Referrer-Policy` + `Permissions-Policy` | `TestErrorsAndHeaders` |
+| 16 | Profile edit `district_id` → 500 on non-numeric, dangling id on unknown | Low | Validated | `test_profile_bad_district_rejected` |
+| 17 | N+1: notification lists (incident + districts per row); M09 history/notes/actions (author per row) | Performance | Eager loading | `test_notification_and_response_lists_do_not_grow_per_row` |
+
+### Authorization matrix (final, tested in `TestAuthorizationMatrix` + M05/M07/M09 suites)
+```
+Resource                         Citizen A       Authority A     Authority B     Unlinked auth   Admin
+-------------------------------------------------------------------------------------------------------
+Device A (list/update/rotate)    NO (403)        YES             NO (403)        NO (403)        YES
+Unowned device (no authority)    NO              NO              NO              NO (was YES)    YES
+Telemetry readings /latest       read (M01 public telemetry; citizens default to own district)
+Hazard A: read (public fields)   YES             YES             YES             YES             YES
+Hazard A: manage / M09 / M08     NO (403)        YES             NO (403)        NO (403)        YES
+Private report A + image         own only        YES (district)  NO (404)        NO (404)        YES
+Complaint by citizen A           own only        YES (filed to)  NO (404)        NO (404)        YES
+Panel road/river/project A       NO              YES             NO (404)        NO (panel)      n/a (panel needs a linked authority)
+Notifications                    own             own             own             own             own
+Profile email/phone              own             own             own             own             all
+```
+
+### Input validation
+- **Telemetry:** finite JSON numbers only; strings for type and unit; object readings; ≤ 50 per
+  batch; ISO-8601 string timestamps, normalized to naive UTC (offsets such as `+05:45`
+  converted). Units and ranges are unchanged (water level in metres).
+- **Devices:** strict types, length limits and coordinate ranges; server-owned fields rejected.
+- **Panel/forms:** status, traffic and complaint values limited to the form options; water level
+  finite 0–50 m; progress 0–100.
+- **Mass assignment:** no `Model(**json)` or `setattr` loops anywhere. Only allow-listed fields
+  are written (M05.1 / M09 / M10).
+
+### File security (M05/M06, re-verified)
+- **Upload validation:** extension + MIME + decoded format must agree; 10 MB / 40 MP limits
+  before decoding; re-encoded JPEG drops EXIF/GPS.
+- **Storage:** server-generated `<uuid>.jpg` name; images live outside `static` and are served
+  only by the authorized route.
+- **Malicious filenames:** client filenames (`../../`, `..\..`, `<script>.jpg`) never touch the
+  filesystem.
+- **Analysis input:** the vision service accepts bytes only, from that validated stored file.
+
+The tests are M05's upload suite plus the M10 matrix (cross-district report and image → 404).
+
+### Privacy
+- **M09 notes, actions and history** remain manager-only, and resolve/reject notes stay out of
+  public fields (M09 tests unchanged).
+- **Notifications** are owner-scoped: another user's id gives 404, and read-all touches only
+  your own rows.
+- **No secrets in responses:** API key hashes, raw payloads and `source_reference` appear in no
+  response.
+- **Profile contact details** are now private (#11).
+- **Logging:** only one warning (report id + reason) and one Ollama exception `print`. No
+  credentials, headers or private data are logged.
+
+### CSRF / XSS
+- **CSRF:** stays global. The only exemption is the device-key-authenticated telemetry
+  endpoint. Tested with CSRF enabled: hazard status, M09 notes, PATCH hazard, notifications
+  read-all and device key rotation all get 400 without a token and succeed with one.
+- **XSS:** Jinja autoescape everywhere (no `|safe`). The three innerHTML sinks were fixed; the
+  remaining `innerHTML` uses are static icon strings only.
+
+### IoT security
+- **Keys:** SHA-256 hashed at rest and shown once at creation or rotation. Rotation invalidates
+  the old key immediately.
+- **Device rules:** disabled devices get 401, and one device's key can't post as another.
+  Ownership is enforced for authorities, including unlinked ones.
+
+### Transaction reliability
+- **M09:** the status change and history row are atomic, with compare-and-set transitions
+  (unchanged; tested in M09).
+- **Key rotation and registration:** single commit.
+- **Validation before writes:** panel/complaint updates validate before mutating, so an invalid
+  status leaves the complaint unchanged (tested).
+- **Telemetry:** stores only valid readings, rejects the batch if none are valid, and invalid
+  readings never reach the database (a NaN used to cause a 500 IntegrityError).
+
+### Migration verification
+- **Head round trip:** `c3d7f1a9b6e2` downgrade → upgrade on a copy of the dev DB, with row
+  counts identical and `flask db check` clean.
+- **Fresh install:** `init_db.py` builds the schema and is stamped at head; then upgrade (no-op)
+  → check → downgrade → upgrade → check all pass (automated in
+  `test_fresh_install_is_migration_tracked`).
+- **History untouched:** no historical migration was modified and no new migration was needed.
+- **Limitation:** an empty database still cannot be built by `flask db upgrade` alone, because
+  the first migration assumes the pre-M01 schema. `init_db.py` is the supported path.
+
+### Configuration hardening / HTTP headers
+- **Production secret:** production refuses a missing or default `SECRET_KEY`. `.env.example`
+  explains how to generate one. No secrets are printed.
+- **Cookies:**
+  - Session: `HttpOnly`, `SameSite=Lax` (`Strict` in production), `Secure` in production.
+  - Remember-me: `HttpOnly`, `SameSite=Lax`, `Secure` in production.
+  - Development stays on HTTP.
+- **Headers:** `X-Content-Type-Options`, `X-Frame-Options` (existing), plus `Referrer-Policy:
+  strict-origin-when-cross-origin`, `Permissions-Policy: camera=(self), geolocation=(self),
+  microphone=()` and a CSP:
+  - `default-src 'self'`; scripts from self + unpkg (Leaflet, Lucide)
+  - styles from self + Google Fonts + unpkg; fonts from gstatic
+  - images from self, data:, blob:, unpkg and OSM tiles
+  - `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`,
+    `frame-ancestors 'self'`
+
+  `'unsafe-inline'` is still needed for scripts and styles because templates use inline blocks
+  and `onclick` handlers.
+- **CSP checked in Chrome:** the monitoring map (tiles, Leaflet, icons, fonts), `/report`
+  (camera input, geolocation button), the AI assistant, the dashboard and the M09 response page
+  all loaded with no console violations.
+
+### Test results
+- **Baseline (M09):** 558 passed, 79 warnings.
+- **Final:** **`python -m pytest tests/ -q` → 678 passed, 44 warnings.**
+- **New:** **120** tests in `tests/test_security_m10.py`. No existing test was changed.
+- **Warnings 79 → 44:**
+  - Removed the legacy `Query.get()` on the telemetry path and in the user loader. These ran on
+    every telemetry request and every logged-in request.
+  - Remaining: `Query.get()` in older non-security routes (`social.py`, `profile.py`, `main.py`,
+    authority panel dashboard) and older tests, plus third-party SWIG `DeprecationWarning`s from
+    the sentencepiece/torch stack. They are harmless and deferred.
+
+### Remaining known limitations
+- **No rate limiting or lockout.** Login, report submission and telemetry have no rate limit or
+  account lockout (no infrastructure for it). Requests are only bounded by size limits
+  (`MAX_CONTENT_LENGTH` 16 MB, 10 MB photos, 50 readings per batch).
+- **Weak CSP for scripts.** The CSP needs `'unsafe-inline'`, so it does not stop inline-script
+  injection on its own. A nonce-based CSP needs the templates' inline scripts and handlers moved
+  out, which is a frontend refactor.
+- **Public telemetry readings.** `/api/iot/latest` readings are public to logged-in users by M01
+  design and include the numeric device pk (no credentials).
+- **Community post photos** are still stored under public `static/uploads` with an extension
+  allow-list and random name, without decode/re-encode as in M05 (documented since M05).
+  `nosniff` prevents content-type confusion.
+- **No unique `(user_id, post_id)` constraint on likes.** A race can double-like; there is no
+  security impact.
+- **The migration chain can't build an empty DB alone** (see migration verification).
+- **No validation of deployment.** Nothing has been validated for production deployment,
+  real-world emergency use or physical hardware.
+
+### Deferred technical debt
+- Remaining `Query.get()` legacy calls (44 warnings).
+- Inline scripts and `onclick` handlers (blocking a strict CSP).
+- A login/telemetry rate limiter if a reverse proxy or extension is introduced.
+- `/api/iot/latest` could drop the internal device pk for citizens.
+- Re-encoding community post photos like M05.
+
+### Files
+- **Created:** `app/services/form_validation.py`, `tests/test_security_m10.py`
+- **Modified:**
+  - `app/__init__.py`, `app/config.py`
+  - `app/routes/iot.py`, `app/routes/auth.py`, `app/routes/authority_panel.py`,
+    `app/routes/complaints.py`, `app/routes/projects.py`, `app/routes/rivers.py`,
+    `app/routes/profile.py`
+  - `app/services/risk_engine.py`, `app/services/notification_service.py`,
+    `app/services/authority_response_service.py`
+  - `app/templates/auth/authority_login.html`, `app/templates/pages/profile.html`,
+    `app/templates/pages/ai_assistant.html`, `app/templates/pages/create_post.html`,
+    `app/templates/pages/test_classify.html`
+  - `init_db.py`, `.env.example`, `README.md`, `docs/PROJECT_PROGRESS.md`
+- **Deleted:** none. **Migrations:** none.
+- **Not committed:** M08 and M09 are still staged and uncommitted in the working tree. The M10
+  changes are unstaged on top and were not mixed into the index.
+
+### Next milestone
+**M11 — Full Software Integration Testing** (not started).
+
+### Git commit
+```
+feat(m10): harden security and reliability
+```
+
+### 🏷️ Status
+**M10 — SECURITY/RELIABILITY HARDENING COMPLETE · 17 FINDINGS FIXED · NOT A PRODUCTION DEPLOYMENT**

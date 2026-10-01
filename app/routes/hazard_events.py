@@ -17,9 +17,11 @@ from flask_login import current_user
 from app.extensions import db
 from app.models import Incident
 from app.models.incident import HAZARD_TYPES, HAZARD_SOURCES, HAZARD_STATUS, ACTIVE_STATUSES
+from app.models.incident_response import IncidentResponseAction
+from app.services import authority_response_service as response_service, risk_service
 from app.services.hazard_event_service import (
-    report_hazard, transition_event_status, update_event,
-    add_affected_district, remove_affected_district, resolve_event, reject_event,
+    report_hazard, update_event, TransitionConflict,
+    add_affected_district, remove_affected_district,
     affects_district, get_active_events_for_district, get_events_by_type, get_events_by_source,
     get_event_statistics, CITIZEN_REPORT_SEVERITY, _validate_hazard_type, _validate_severity,
     _validate_coordinates,
@@ -65,14 +67,12 @@ def _authority_district_id():
 
 
 def _load_managed_incident(event_id):
-    """Return (incident, error_response) for write endpoints."""
+    """Return (incident, error_response) for manager endpoints (M02 rule, authority_response_service.can_manage)."""
     incident = db.session.get(Incident, event_id)
     if not incident:
         return None, (jsonify({'error': 'Not found'}), 404)
-    if current_user.role == 'authority':
-        district_id = _authority_district_id()
-        if district_id is None or incident.district_id != district_id:
-            return None, (jsonify({'error': 'Not authorized for this district'}), 403)
+    if not response_service.can_manage(current_user, incident):
+        return None, (jsonify({'error': 'Not authorized for this district'}), 403)
     return incident, None
 
 
@@ -198,10 +198,23 @@ def create_hazard():
     return jsonify({'event': _serialize(incident), 'created': created}), 201 if created else 200
 
 
+@hazard_events_bp.route('/<int:event_id>/assessment', methods=['GET'])
+@manager_required
+def get_hazard_assessment(event_id):
+    """M08: read-only multi-signal evidence assessment, computed server-side from evidence
+    linked to this event. Authority: own district only (same rule as event management)."""
+    incident, error = _load_managed_incident(event_id)
+    if error:
+        return error
+    return jsonify({'hazard_id': incident.id,
+                    'assessments': [a.to_dict() for a in risk_service.assess_incident(incident)]})
+
+
 @hazard_events_bp.route('/<int:event_id>', methods=['PATCH'])
 @manager_required
 def update_hazard(event_id):
-    """Edit an event. Allowed: severity, status, title, description, location, latitude+longitude."""
+    """Edit an event. Allowed: severity, status (+ note), title, description, location, latitude+longitude.
+    A status change follows the same M09 rules as /status (audited; resolved/rejected need a note)."""
     incident, error = _load_managed_incident(event_id)
     if error:
         return error
@@ -214,66 +227,127 @@ def update_hazard(event_id):
         if 'latitude' in data or 'longitude' in data:
             _validate_coordinates(data.get('latitude'), data.get('longitude'))
             fields['latitude'], fields['longitude'] = data.get('latitude'), data.get('longitude')
-        update_event(incident, severity=data.get('severity'), status=data.get('status'), **fields)
+        note = None
+        if data.get('status') is not None:
+            note = response_service.validate_status_request(incident, data['status'], data.get('note'))
+        update_event(incident, severity=data.get('severity'), status=data.get('status'),
+                     actor_id=current_user.id, note=note, **fields)
+    except TransitionConflict as e:
+        return jsonify({'error': str(e)}), 409
     except ValueError as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
     return jsonify({'event': _serialize(incident)})
 
 
-@hazard_events_bp.route('/<int:event_id>/status', methods=['POST', 'PATCH'])
-@manager_required
-def change_hazard_status(event_id):
+def _status_change(event_id, new_status=None, note_key='note'):
     incident, error = _load_managed_incident(event_id)
     if error:
         return error
     data = _json_body()
     if data is None:
         return jsonify({'error': 'A JSON object body is required'}), 400
-    new_status = data.get('status')
-    if not new_status:
-        return jsonify({'error': 'status is required'}), 400
     try:
-        old_status = transition_event_status(incident, new_status)
-    except ValueError as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
+        response_service.reject_forbidden_fields(data)
+        new_status = new_status or data.get('status')
+        old_status = response_service.change_status(current_user, incident, new_status,
+                                                     data.get(note_key, data.get('note')))
+    except response_service.ResponseError as e:
+        return jsonify({'error': str(e)}), e.status
     return jsonify({'event': _serialize(incident), 'previous_status': old_status, 'new_status': new_status})
 
 
-def _note(data, key):
-    value = (data or {}).get(key)
-    if value is not None and (not isinstance(value, str) or len(value) > 1000):
-        raise ValueError(f'{key} must be a string of at most 1000 characters')
-    return value
+@hazard_events_bp.route('/<int:event_id>/status', methods=['POST', 'PATCH'])
+@manager_required
+def change_hazard_status(event_id):
+    """Body: {"status": ..., "note": ...}. Server validates current status, transition, scope and note."""
+    return _status_change(event_id)
 
 
 @hazard_events_bp.route('/<int:event_id>/resolve', methods=['POST'])
 @manager_required
 def resolve_hazard(event_id):
-    incident, error = _load_managed_incident(event_id)
-    if error:
-        return error
-    try:
-        resolve_event(incident, _note(_json_body(), 'resolution_notes'))
-    except ValueError as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-    return jsonify({'event': _serialize(incident)})
+    """Body: {"resolution_notes": "..."} (required, internal)."""
+    return _status_change(event_id, 'resolved', 'resolution_notes')
 
 
 @hazard_events_bp.route('/<int:event_id>/reject', methods=['POST'])
 @manager_required
 def reject_hazard(event_id):
+    """Body: {"reason": "..."} (required, internal)."""
+    return _status_change(event_id, 'rejected', 'reason')
+
+
+# --- M09 authority response records (manager-only, internal) -------------------------------
+
+@hazard_events_bp.route('/<int:event_id>/status-history', methods=['GET'])
+@manager_required
+def get_status_history(event_id):
     incident, error = _load_managed_incident(event_id)
     if error:
         return error
+    return jsonify({'hazard_id': incident.id, 'status': incident.status,
+                    'allowed_transitions': response_service.allowed_transitions(incident),
+                    'status_history': [h.to_dict() for h in response_service.history(incident)]})
+
+
+@hazard_events_bp.route('/<int:event_id>/investigations', methods=['GET', 'POST'])
+@manager_required
+def investigations(event_id):
+    incident, error = _load_managed_incident(event_id)
+    if error:
+        return error
+    if request.method == 'GET':
+        return jsonify({'hazard_id': incident.id,
+                        'investigations': [n.to_dict() for n in response_service.investigations(incident)]})
+    data = _json_body()
+    if data is None:
+        return jsonify({'error': 'A JSON object body is required'}), 400
     try:
-        reject_event(incident, _note(_json_body(), 'reason'))
-    except ValueError as e:
+        response_service.reject_forbidden_fields(data)
+        note = response_service.add_investigation(current_user, incident, data.get('note'))
+    except response_service.ResponseError as e:
+        return jsonify({'error': str(e)}), e.status
+    return jsonify({'investigation': note.to_dict()}), 201
+
+
+@hazard_events_bp.route('/<int:event_id>/response-actions', methods=['GET', 'POST'])
+@manager_required
+def response_actions(event_id):
+    incident, error = _load_managed_incident(event_id)
+    if error:
+        return error
+    if request.method == 'GET':
+        return jsonify({'hazard_id': incident.id,
+                        'response_actions': [a.to_dict() for a in response_service.actions(incident)]})
+    data = _json_body()
+    if data is None:
+        return jsonify({'error': 'A JSON object body is required'}), 400
+    try:
+        action = response_service.add_action(current_user, incident, data)
+    except response_service.ResponseError as e:
+        return jsonify({'error': str(e)}), e.status
+    return jsonify({'response_action': action.to_dict()}), 201
+
+
+@hazard_events_bp.route('/<int:event_id>/response-actions/<int:action_id>', methods=['PATCH'])
+@manager_required
+def update_response_action(event_id, action_id):
+    incident, error = _load_managed_incident(event_id)
+    if error:
+        return error
+    action = db.session.get(IncidentResponseAction, action_id)
+    if action is None or action.incident_id != incident.id:
+        return jsonify({'error': 'Not found'}), 404
+    data = _json_body()
+    if data is None:
+        return jsonify({'error': 'A JSON object body is required'}), 400
+    try:
+        response_service.update_action(current_user, incident, action, data)
+    except response_service.ResponseError as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 400
-    return jsonify({'event': _serialize(incident)})
+        return jsonify({'error': str(e)}), e.status
+    return jsonify({'response_action': action.to_dict()})
 
 
 def _affected_payload(incident):

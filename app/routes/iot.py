@@ -1,17 +1,83 @@
 """IoT API blueprint for hardware device telemetry ingestion."""
 from flask import Blueprint, jsonify, request, g
-from app.extensions import db
-from app.models import IoTDevice, SensorReading, District, Authority
-from app.services.risk_engine import (
-    validate_sensor_reading,
-    assess_water_level_risk,
-    compute_river_status,
-)
-from app.services.hazard_event_service import auto_create_flood_event_from_river
-from datetime import datetime
+from flask_login import current_user
+from app.extensions import csrf, db
+from app.models import IoTDevice, SensorReading, District, Authority, River
+from app.services.risk_engine import validate_sensor_reading, compute_river_status
+from app.services import risk_service
+from datetime import datetime, timezone
 import json
+import math
+import re
 
 iot_bp = Blueprint('iot', __name__, url_prefix='/api/iot')
+
+# ':' is the Bearer separator (device_id:api_key), so it can't be part of a device id.
+DEVICE_ID_RE = re.compile(r'^[A-Za-z0-9._-]{1,64}$')
+DEVICE_STATUSES = ['active', 'inactive', 'maintenance', 'decommissioned']
+DEVICE_TEXT_LIMITS = {'name': 100, 'description': 1000, 'location_description': 200, 'firmware_version': 50}
+DEVICE_UPDATE_FIELDS = {'enabled', 'status', 'firmware_version', 'location_description', 'latitude', 'longitude',
+                        'river_id'}
+
+
+class _Invalid(ValueError):
+    pass
+
+
+def _manager_error():
+    """None if the caller is an admin or a *linked* authority, else a JSON error response (M10)."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+    if current_user.role not in ('authority', 'admin'):
+        return jsonify({'error': 'Authority or admin role required'}), 403
+    if current_user.role == 'authority' and not current_user.authority_id:
+        # an unlinked authority must never fall through to an unscoped query
+        return jsonify({'error': 'Authority user not linked to an authority'}), 403
+    return None
+
+
+def _can_manage_device(device):
+    return current_user.role == 'admin' or (
+        current_user.authority_id is not None and device.authority_id == current_user.authority_id)
+
+
+def _strict_int(value, name):
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise _Invalid(f'{name} must be an integer')
+    return value
+
+
+def _text(data, key):
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or len(value.strip()) > DEVICE_TEXT_LIMITS[key]:
+        raise _Invalid(f'{key} must be a string of at most {DEVICE_TEXT_LIMITS[key]} characters')
+    return value.strip() or None
+
+
+def _coords(data):
+    lat, lon = data.get('latitude'), data.get('longitude')
+    if lat is None and lon is None:
+        return None, None
+    for name, value, bound in (('latitude', lat, 90), ('longitude', lon, 180)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) \
+                or not -bound <= value <= bound:
+            raise _Invalid('latitude and longitude must be given together as valid coordinates')
+    return lat, lon
+
+
+def _parse_timestamp(value):
+    """ISO 8601 string -> naive UTC datetime. Raises _Invalid."""
+    if not isinstance(value, str) or len(value) > 64:
+        raise _Invalid('timestamp must be an ISO 8601 string')
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        raise _Invalid('Invalid timestamp format, use ISO 8601')
+    if parsed.tzinfo is not None:  # store naive UTC like every other timestamp
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 def authenticate_device():
@@ -54,6 +120,7 @@ def authenticate_device():
 
 
 @iot_bp.route('/telemetry', methods=['POST'])
+@csrf.exempt  # device API: authenticated by its own API key header, no browser session/cookie involved
 def ingest_telemetry():
     """Ingest sensor telemetry from an IoT device.
 
@@ -84,8 +151,8 @@ def ingest_telemetry():
     if not request.is_json:
         return jsonify({'error': 'Content-Type must be application/json'}), 400
 
-    data = request.get_json()
-    if data is None:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
         return jsonify({'error': 'Invalid JSON payload'}), 400
 
     readings_data = data.get('readings')
@@ -98,19 +165,21 @@ def ingest_telemetry():
     if len(readings_data) > 50:
         return jsonify({'error': 'Too many readings in single request (max 50)'}), 400
 
-    timestamp_str = data.get('timestamp')
     recorded_at = None
-    if timestamp_str:
+    if data.get('timestamp') is not None:
         try:
-            recorded_at = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-        except ValueError:
-            return jsonify({'error': 'Invalid timestamp format, use ISO 8601'}), 400
+            recorded_at = _parse_timestamp(data['timestamp'])
+        except _Invalid as e:
+            return jsonify({'error': str(e)}), 400
 
     received_at = datetime.utcnow()
     stored_readings = []
     errors = []
 
     for i, reading in enumerate(readings_data):
+        if not isinstance(reading, dict):
+            errors.append(f'Reading {i}: must be an object')
+            continue
         sensor_type = reading.get('sensor_type')
         value = reading.get('value')
         unit = reading.get('unit')
@@ -124,12 +193,15 @@ def ingest_telemetry():
         if unit is None:
             errors.append(f'Reading {i}: missing unit')
             continue
-
-        try:
-            value = float(value)
-        except (ValueError, TypeError):
-            errors.append(f'Reading {i}: value must be a number')
+        if not isinstance(sensor_type, str) or not isinstance(unit, str):
+            errors.append(f'Reading {i}: sensor_type and unit must be strings')
             continue
+
+        # JSON numbers only: no booleans (True == 1), no numeric strings, no NaN/Infinity
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            errors.append(f'Reading {i}: value must be a finite number')
+            continue
+        value = float(value)
 
         valid, error = validate_sensor_reading(sensor_type, value, unit)
         if not valid:
@@ -160,6 +232,9 @@ def ingest_telemetry():
     if errors and not stored_readings:
         return jsonify({'error': 'All readings invalid', 'details': errors}), 400
 
+    if device.district_id and any(r.sensor_type in ('vibration', 'tilt') for r in stored_readings):
+        risk_service.evaluate_motion(device)  # M08: abnormal-motion evidence -> hazard_event_service
+
     device.last_seen = received_at
     db.session.commit()
 
@@ -185,11 +260,9 @@ def process_water_level_reading(device, water_level, unit):
     if unit != 'm':
         return
 
-    from app.models import River
-
     river = None
     if device.river_id:
-        river = River.query.get(device.river_id)
+        river = db.session.get(River, device.river_id)
     elif device.district_id:
         river = River.query.filter_by(district_id=device.district_id).first()
 
@@ -203,13 +276,10 @@ def process_water_level_reading(device, water_level, unit):
     # Only compute status and alerts if danger_level is available
     if river.danger_level is not None:
         river.status = compute_river_status(water_level, river.danger_level)
-
-        risk = assess_water_level_risk(water_level, river.danger_level)
-        
-        if risk['alert_required'] and risk['risk_level'] >= 2:  # rising=2, flooding=3
-            # threshold crossing -> flood hazard event; notifications fire from
-            # the event's state changes (M03), not from every reading
-            auto_create_flood_event_from_river(river, risk, device)
+        # M08 risk engine: M01 thresholds decide, recent readings add trend/corroboration;
+        # a warranted assessment goes to hazard_event_service, which owns events and
+        # hands state changes to notification_service (never one alert per reading)
+        risk_service.evaluate_water_level(device, river, water_level)
 
 
 @iot_bp.route('/latest', methods=['GET'])
@@ -224,15 +294,13 @@ def get_latest_telemetry():
 
     Requires: User authentication (session-based)
     """
-    from flask_login import current_user, login_required
-
     if not current_user.is_authenticated:
         return jsonify({'error': 'Authentication required'}), 401
 
     district_id = request.args.get('district_id', type=int)
     sensor_type = request.args.get('sensor_type')
     device_id = request.args.get('device_id')
-    limit = min(request.args.get('limit', 100, type=int), 500)
+    limit = max(1, min(request.args.get('limit', 100, type=int), 500))  # M10: LIMIT -1 = no limit in SQLite
 
     query = SensorReading.query.join(IoTDevice)
 
@@ -263,23 +331,19 @@ def get_latest_telemetry():
 
 @iot_bp.route('/devices', methods=['GET'])
 def list_devices():
-    """List IoT devices (admin/authority only)."""
-    from flask_login import current_user, login_required
-
-    if not current_user.is_authenticated:
-        return jsonify({'error': 'Authentication required'}), 401
-
-    if current_user.role not in ('authority', 'admin'):
-        return jsonify({'error': 'Authority or admin role required'}), 403
+    """List IoT devices. Linked authority: its own devices only. Admin: all, optional ?district_id."""
+    error = _manager_error()
+    if error:
+        return error
 
     query = IoTDevice.query
-
-    if current_user.role == 'authority' and current_user.authority_id:
+    if current_user.role == 'authority':
         query = query.filter_by(authority_id=current_user.authority_id)
-    elif district_id := request.args.get('district_id', type=int):
+    elif request.args.get('district_id'):
+        district_id = request.args.get('district_id', type=int)
+        if not district_id:
+            return jsonify({'error': 'district_id must be an integer'}), 400
         query = query.filter_by(district_id=district_id)
-    elif current_user.district_id:
-        query = query.filter_by(district_id=current_user.district_id)
 
     devices = query.order_by(IoTDevice.created_at.desc()).all()
     return jsonify({'devices': [d.to_dict() for d in devices]})
@@ -304,38 +368,40 @@ def register_device():
 
     Returns the device with generated API key (only time it's shown).
     """
-    from flask_login import current_user, login_required
-
-    if not current_user.is_authenticated:
-        return jsonify({'error': 'Authentication required'}), 401
-
-    if current_user.role not in ('authority', 'admin'):
-        return jsonify({'error': 'Authority or admin role required'}), 403
+    error = _manager_error()
+    if error:
+        return error
 
     if not request.is_json:
         return jsonify({'error': 'Content-Type must be application/json'}), 400
 
-    data = request.get_json()
-    if not data:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
         return jsonify({'error': 'Invalid JSON payload'}), 400
 
     device_id = data.get('device_id')
-    name = data.get('name')
-    district_id = data.get('district_id')
-    river_id = data.get('river_id')
-
-    if not device_id or not name or not district_id:
+    if not device_id or not data.get('name') or not data.get('district_id'):
         return jsonify({'error': 'device_id, name, and district_id are required'}), 400
+    try:
+        if not isinstance(device_id, str) or not DEVICE_ID_RE.match(device_id):
+            raise _Invalid('device_id must be 1-64 characters: letters, digits, ".", "_" or "-"')
+        district_id = _strict_int(data.get('district_id'), 'district_id')
+        river_id = _strict_int(data['river_id'], 'river_id') if data.get('river_id') is not None else None
+        texts = {key: _text(data, key) for key in DEVICE_TEXT_LIMITS}
+        if not texts['name']:
+            raise _Invalid('name is required')
+        latitude, longitude = _coords(data)
+    except _Invalid as e:
+        return jsonify({'error': str(e)}), 400
 
     if IoTDevice.query.filter_by(device_id=device_id).first():
         return jsonify({'error': 'Device ID already exists'}), 409
 
-    district = District.query.get(district_id)
-    if not district:
+    if not db.session.get(District, district_id):
         return jsonify({'error': 'Invalid district_id'}), 400
 
     if river_id:
-        river = River.query.get(river_id)
+        river = db.session.get(River, river_id)
         if not river:
             return jsonify({'error': 'Invalid river_id'}), 400
         if river.district_id != district_id:
@@ -343,15 +409,16 @@ def register_device():
 
     authority_id = None
     if current_user.role == 'authority':
-        authority_id = current_user.authority_id
-        if not authority_id:
-            return jsonify({'error': 'Authority user not linked to an authority'}), 400
-        auth = Authority.query.get(authority_id)
-        if auth and auth.district_id != district_id:
+        authority_id = current_user.authority_id  # linked: checked by _manager_error
+        auth = db.session.get(Authority, authority_id)
+        if not auth or auth.district_id != district_id:
             return jsonify({'error': 'Authority not in this district'}), 403
-    elif data.get('authority_id'):
-        authority_id = data['authority_id']
-        auth = Authority.query.get(authority_id)
+    elif data.get('authority_id') is not None:
+        try:
+            authority_id = _strict_int(data['authority_id'], 'authority_id')
+        except _Invalid as e:
+            return jsonify({'error': str(e)}), 400
+        auth = db.session.get(Authority, authority_id)
         if not auth or auth.district_id != district_id:
             return jsonify({'error': 'Invalid authority_id for district'}), 400
 
@@ -360,15 +427,15 @@ def register_device():
 
     device = IoTDevice(
         device_id=device_id,
-        name=name,
-        description=data.get('description'),
+        name=texts['name'],
+        description=texts['description'],
         district_id=district_id,
         authority_id=authority_id,
         river_id=river_id,
-        latitude=data.get('latitude'),
-        longitude=data.get('longitude'),
-        location_description=data.get('location_description'),
-        firmware_version=data.get('firmware_version'),
+        latitude=latitude,
+        longitude=longitude,
+        location_description=texts['location_description'],
+        firmware_version=texts['firmware_version'],
         api_key_hash=api_key_hash,
         status='active',
         enabled=True,
@@ -389,53 +456,59 @@ def register_device():
 
 @iot_bp.route('/devices/<int:device_id>', methods=['PATCH'])
 def update_device(device_id):
-    """Update device status/enabled state (admin/authority only)."""
-    from flask_login import current_user, login_required
+    """Update an owned device. Allowed: enabled, status, firmware_version, location_description,
+    latitude+longitude, river_id. Anything else (device_id, keys, authority, district...) -> 400."""
+    error = _manager_error()
+    if error:
+        return error
 
-    if not current_user.is_authenticated:
-        return jsonify({'error': 'Authentication required'}), 401
-
-    if current_user.role not in ('authority', 'admin'):
-        return jsonify({'error': 'Authority or admin role required'}), 403
-
-    device = IoTDevice.query.get_or_404(device_id)
-
-    if current_user.role == 'authority' and device.authority_id != current_user.authority_id:
+    device = db.session.get(IoTDevice, device_id)
+    if device is None:
+        return jsonify({'error': 'Not found'}), 404
+    if not _can_manage_device(device):
         return jsonify({'error': 'Not authorized for this device'}), 403
 
     if not request.is_json:
         return jsonify({'error': 'Content-Type must be application/json'}), 400
 
-    data = request.get_json()
-    if not data:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
         return jsonify({'error': 'Invalid JSON payload'}), 400
+    unknown = sorted(set(data) - DEVICE_UPDATE_FIELDS)
+    if unknown:
+        return jsonify({'error': f"Field(s) not allowed: {', '.join(unknown)}"}), 400
+
+    try:
+        if 'enabled' in data and not isinstance(data['enabled'], bool):
+            raise _Invalid('enabled must be true or false')
+        if 'status' in data and data['status'] not in DEVICE_STATUSES:
+            raise _Invalid(f'status must be one of {DEVICE_STATUSES}')
+        texts = {key: _text(data, key) for key in ('firmware_version', 'location_description') if key in data}
+        coords = None
+        if 'latitude' in data or 'longitude' in data:
+            coords = _coords(data)
+            if None in coords:
+                raise _Invalid('latitude and longitude must be given together as valid coordinates')
+        river_id = None
+        if data.get('river_id') is not None:
+            river_id = _strict_int(data['river_id'], 'river_id')
+            river = db.session.get(River, river_id)
+            if not river:
+                raise _Invalid('Invalid river_id')
+            if river.district_id != device.district_id:
+                raise _Invalid('River does not belong to the device district')
+    except _Invalid as e:
+        return jsonify({'error': str(e)}), 400
 
     if 'enabled' in data:
-        device.enabled = bool(data['enabled'])
-
+        device.enabled = data['enabled']
     if 'status' in data:
-        valid_statuses = ['active', 'inactive', 'maintenance', 'decommissioned']
-        if data['status'] in valid_statuses:
-            device.status = data['status']
-
-    if 'firmware_version' in data:
-        device.firmware_version = data['firmware_version']
-
-    if 'location_description' in data:
-        device.location_description = data['location_description']
-
-    if 'latitude' in data and 'longitude' in data:
-        device.latitude = data['latitude']
-        device.longitude = data['longitude']
-
+        device.status = data['status']
+    for key, value in texts.items():
+        setattr(device, key, value)
+    if coords:
+        device.latitude, device.longitude = coords
     if 'river_id' in data:
-        river_id = data['river_id']
-        if river_id is not None:
-            river = River.query.get(river_id)
-            if not river:
-                return jsonify({'error': 'Invalid river_id'}), 400
-            if river.district_id != device.district_id:
-                return jsonify({'error': 'River does not belong to the device district'}), 400
         device.river_id = river_id
 
     db.session.commit()
@@ -445,17 +518,14 @@ def update_device(device_id):
 @iot_bp.route('/devices/<int:device_id>/rotate-key', methods=['POST'])
 def rotate_device_key(device_id):
     """Rotate device API key (admin/authority only)."""
-    from flask_login import current_user, login_required
+    error = _manager_error()
+    if error:
+        return error
 
-    if not current_user.is_authenticated:
-        return jsonify({'error': 'Authentication required'}), 401
-
-    if current_user.role not in ('authority', 'admin'):
-        return jsonify({'error': 'Authority or admin role required'}), 403
-
-    device = IoTDevice.query.get_or_404(device_id)
-
-    if current_user.role == 'authority' and device.authority_id != current_user.authority_id:
+    device = db.session.get(IoTDevice, device_id)
+    if device is None:
+        return jsonify({'error': 'Not found'}), 404
+    if not _can_manage_device(device):
         return jsonify({'error': 'Not authorized for this device'}), 403
 
     new_api_key = IoTDevice.generate_api_key()

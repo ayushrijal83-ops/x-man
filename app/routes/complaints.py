@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, request, flash
+from flask import Blueprint, abort, render_template, redirect, url_for, request, flash
 from flask_login import current_user, login_required
 from app.extensions import db
 from app.models import Complaint, Authority, District
@@ -33,13 +33,13 @@ def new_complaint():
         description = request.form.get('description')
         location = request.form.get('location')
         urgency = request.form.get('urgency', 'medium')
-        
+
         if not authority_id or not description:
             flash('Authority and description are required.', 'error')
             return redirect(url_for('complaints.new_complaint'))
-        
+
         ticket_number = generate_ticket_number(int(district_id))
-        
+
         complaint = Complaint(
             ticket_number=ticket_number,
             user_id=current_user.id,
@@ -50,16 +50,16 @@ def new_complaint():
             location=location,
             urgency=urgency
         )
-        
+
         db.session.add(complaint)
         db.session.commit()
-        
+
         flash(f'Complaint filed successfully! Ticket: {ticket_number}', 'success')
         return redirect(url_for('complaints.list_complaints'))
-    
+
     authorities = Authority.query.all()
     districts = District.query.order_by(District.name).all()
-    return render_template('pages/file_complaint.html', 
+    return render_template('pages/file_complaint.html',
                          authorities=authorities,
                          districts=districts)
 
@@ -67,5 +67,12 @@ def new_complaint():
 @login_required
 def complaint_detail(complaint_id):
     """View complaint details."""
-    complaint = Complaint.query.get_or_404(complaint_id)
+    complaint = db.session.get(Complaint, complaint_id)
+    # M10: only the complainant, the authority it was filed to, or an admin (was: any logged-in user)
+    allowed = complaint is not None and (
+        complaint.user_id == current_user.id or current_user.role == 'admin'
+        or (current_user.role == 'authority' and current_user.authority_id is not None
+            and complaint.authority_id == current_user.authority_id))
+    if not allowed:
+        abort(404)
     return render_template('pages/complaint_detail.html', complaint=complaint)

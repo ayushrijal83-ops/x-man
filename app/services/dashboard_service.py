@@ -16,6 +16,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.extensions import db
 from app.models import CitizenReport, District, Incident, IncidentAffectedDistrict, IoTDevice, Notification
 from app.models.citizen_report import AI_STATUS, REPORT_STATUS
+from app.models.incident_response import IncidentInvestigation, IncidentResponseAction
 from app.models.incident import ACTIVE_STATUSES, HAZARD_SEVERITY, HAZARD_TYPES
 from app.models.iot_device import SensorReading
 from app.services import citizen_report_service, notification_service
@@ -175,6 +176,24 @@ def recent_reports(user, admin_district_id=None):
     } for r in reports]
 
 
+def response_summaries(incident_ids):
+    """M09 investigation/response state per hazard for managers: counts only, two GROUP BYs."""
+    if not incident_ids:
+        return {}
+    result = {i: {'notes': 0, 'open_actions': 0, 'actions': 0} for i in incident_ids}
+    for incident_id, count in db.session.query(IncidentInvestigation.incident_id, db.func.count()) \
+            .filter(IncidentInvestigation.incident_id.in_(incident_ids)).group_by(IncidentInvestigation.incident_id):
+        result[incident_id]['notes'] = count
+    for incident_id, status, count in db.session.query(IncidentResponseAction.incident_id,
+                                                       IncidentResponseAction.status, db.func.count()) \
+            .filter(IncidentResponseAction.incident_id.in_(incident_ids)) \
+            .group_by(IncidentResponseAction.incident_id, IncidentResponseAction.status):
+        result[incident_id]['actions'] += count
+        if status in ('planned', 'in_progress'):
+            result[incident_id]['open_actions'] += count
+    return result
+
+
 def admin_statistics(now):
     """System-wide counts for admins (never district-filtered): events (M02 service), reports,
     notification activity."""
@@ -213,6 +232,10 @@ def build(user, requested_district_id=None):
         'unread_notifications': notification_service.unread_count(user.id),
     }
     if is_manager(user):
+        summaries = response_summaries([h.id for h in hazards])
+        for item in payload['hazards']:
+            item['response'] = summaries.get(item['id'], {'notes': 0, 'open_actions': 0, 'actions': 0})
+            item['response_url'] = f"/hazards/{item['id']}/response"
         admin_district_id = requested_district_id if user.role == 'admin' else None
         payload['devices'] = device_payload(visible_devices(user, admin_district_id), now)
         payload['reports'] = recent_reports(user, admin_district_id)

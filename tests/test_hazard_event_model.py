@@ -240,14 +240,17 @@ class TestIncidentConstants:
 
     def test_hazard_status(self):
         from app.models.incident import HAZARD_STATUS
-        assert HAZARD_STATUS == ['detected', 'investigating', 'confirmed', 'resolved', 'rejected']
+        # M09 added 'response' (authority response under way) between confirmed and resolved
+        assert HAZARD_STATUS == ['detected', 'investigating', 'confirmed', 'response', 'resolved', 'rejected']
 
     def test_valid_status_transitions(self):
         from app.models.incident import VALID_STATUS_TRANSITIONS
+        # M09: every M02 transition kept; confirmed -> response -> resolved added; terminals unchanged
         assert VALID_STATUS_TRANSITIONS == {
             'detected': ['investigating', 'rejected'],
             'investigating': ['confirmed', 'rejected'],
-            'confirmed': ['resolved'],
+            'confirmed': ['response', 'resolved'],
+            'response': ['resolved'],
             'resolved': [],
             'rejected': [],
         }

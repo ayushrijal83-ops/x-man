@@ -10,11 +10,11 @@
     <p style="color: var(--text-muted); margin-bottom: 2rem;">
         {{ 'Share information with your community. AI will auto-classify your post.'|t }}
     </p>
-    
+
     <div class="card" style="max-width: 700px; margin: 0 auto;">
         <form method="POST" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            
+
             <div class="form-group">
                 <label>{{ 'District'|t }}</label>
                 <select name="district_id" class="form-input" required>
@@ -25,18 +25,18 @@
                     {% endfor %}
                 </select>
             </div>
-            
+
             <div class="form-group">
                 <label>{{ 'Location (optional)'|t }}</label>
                 <input type="text" name="location" class="form-input" placeholder="{{ 'e.g., Kamalamai, Sindhuli'|t }}">
             </div>
-            
+
             <div class="form-group">
                 <label>{{ 'Content'|t }}</label>
-                <textarea name="content" class="form-input" rows="5" required 
+                <textarea name="content" class="form-input" rows="5" required
                           placeholder="{{ "What's happening? (Nepali or English)"|t }}" id="post-content"></textarea>
             </div>
-            
+
             <!-- Photo Upload -->
             <div class="form-group">
                 <label><i data-lucide="camera"></i> {{ 'Add Photo (optional)'|t }}</label>
@@ -46,13 +46,13 @@
                 <input type="file" name="photo" id="photo-input" class="form-input" accept="image/*" onchange="previewPhoto(this)">
                 <small style="color: var(--text-muted);">{{ 'Supported: PNG, JPG, JPEG, GIF, WEBP (Max 16MB)'|t }}</small>
             </div>
-            
+
             <!-- AI Preview -->
             <div id="ai-preview" style="display: none; margin: 1rem 0; padding: 1rem; background: var(--success-bg); border-radius: 0.5rem;">
                 <h4><i data-lucide="bot"></i> {{ 'AI Will Classify This As:'|t }}</h4>
                 <p id="ai-preview-text" style="margin-top: 0.5rem;"></p>
             </div>
-            
+
             <button type="submit" class="btn btn-primary btn-block">{{ 'Post'|t }}</button>
         </form>
     </div>
@@ -63,7 +63,7 @@
 function previewPhoto(input) {
     const preview = document.getElementById('photo-preview');
     const container = document.getElementById('photo-preview-container');
-    
+
     if (input.files && input.files[0]) {
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -80,12 +80,12 @@ function previewPhoto(input) {
 let classifyTimeout;
 document.getElementById('post-content').addEventListener('input', function() {
     const content = this.value.trim();
-    
+
     if (content.length < 5) {
         document.getElementById('ai-preview').style.display = 'none';
         return;
     }
-    
+
     clearTimeout(classifyTimeout);
     classifyTimeout = setTimeout(function() {
         fetch('/ai/classify', {
@@ -100,12 +100,17 @@ document.getElementById('post-content').addEventListener('input', function() {
         .then(data => {
             const preview = document.getElementById('ai-preview');
             const previewText = document.getElementById('ai-preview-text');
-            
+
             preview.style.display = 'block';
-            previewText.innerHTML = 
-                'Category: <strong>' + (data.category || 'N/A') + '</strong><br>' +
-                'Severity: <strong>' + (data.severity || 'N/A') + '</strong><br>' +
-                'Language: <strong>' + (data.language || 'N/A') + '</strong>';
+            // M10: classifier output is text, never HTML
+            previewText.textContent = '';
+            [['Category', data.category], ['Severity', data.severity], ['Language', data.language]].forEach(function (pair, index) {
+                if (index) { previewText.appendChild(document.createElement('br')); }
+                previewText.appendChild(document.createTextNode(pair[0] + ': '));
+                const strong = document.createElement('strong');
+                strong.textContent = pair[1] || 'N/A';
+                previewText.appendChild(strong);
+            });
         })
         .catch(error => {
             document.getElementById('ai-preview').style.display = 'none';
