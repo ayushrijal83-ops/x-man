@@ -25,6 +25,10 @@ DEDUP_DISTANCE_KM = 5.0
 # risk_engine risk_level (0 unknown, 1 normal, 2 rising, 3 flooding) -> severity
 RISK_LEVEL_SEVERITY = {2: 'medium', 3: 'high'}
 
+# A citizen report is unverified evidence: it opens/joins an event at 'medium'
+# and can never escalate it. Severity changes come from authorities (or M06 later).
+CITIZEN_REPORT_SEVERITY = 'medium'
+
 
 def _validate_hazard_type(event_type):
     if event_type not in HAZARD_TYPES:
@@ -181,7 +185,11 @@ def report_hazard(event_type, severity, source, escalate=True, **fields):
 
     escalate=False: merged evidence never raises the existing event's severity
     (used for unverified citizen photo reports).
+    source='citizen_report' always uses CITIZEN_REPORT_SEVERITY and never escalates,
+    whatever the caller passes (M05.1).
     """
+    if source == 'citizen_report':
+        severity, escalate = CITIZEN_REPORT_SEVERITY, False
     _validate_hazard_type(event_type)
     _validate_severity(severity)
     _validate_coordinates(fields.get('latitude'), fields.get('longitude'))

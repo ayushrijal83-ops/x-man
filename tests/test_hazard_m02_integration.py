@@ -116,7 +116,7 @@ class TestHazardApiSecurity:
         event = second.get_json()['event']
         assert event['id'] == first.get_json()['event']['id']
         assert event['report_count'] == 2
-        assert event['severity'] == 'critical'
+        assert event['severity'] == 'medium'  # M05.1: citizen severity is server-controlled
         assert event['district_id'] == ids['a']  # defaults to the citizen's district
 
     def test_authority_isolated_to_own_district(self, app, client):

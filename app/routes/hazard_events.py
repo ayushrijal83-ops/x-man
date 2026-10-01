@@ -6,6 +6,8 @@ public-safety data, same as /rivers and /roads). Writes:
   - authorities manage events in their authority's district
   - admins manage all events
 The event `source` is derived from the caller's role, never taken from the payload.
+Citizens cannot set severity either: their reports are fixed at the service-level
+citizen severity and never escalate an existing event (M05.1).
 """
 from functools import wraps
 
@@ -19,7 +21,7 @@ from app.services.hazard_event_service import (
     report_hazard, transition_event_status, update_event,
     add_affected_district, remove_affected_district, resolve_event, reject_event,
     affects_district, get_active_events_for_district, get_events_by_type, get_events_by_source,
-    get_event_statistics, _validate_hazard_type, _validate_severity,
+    get_event_statistics, CITIZEN_REPORT_SEVERITY, _validate_hazard_type, _validate_severity,
     _validate_coordinates,
 )
 
@@ -150,7 +152,9 @@ def create_hazard():
     event_type = data.get('event_type')
     if not event_type:
         return jsonify({'error': 'event_type is required'}), 400
-    severity = data.get('severity', 'medium')
+    # Citizens: severity/status/source/incident_id in the body are ignored (same as /api/reports).
+    is_citizen = current_user.role == 'citizen'
+    severity = CITIZEN_REPORT_SEVERITY if is_citizen else data.get('severity', 'medium')
 
     try:
         _validate_hazard_type(event_type)
@@ -164,7 +168,7 @@ def create_hazard():
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
 
-    if current_user.role == 'citizen':
+    if is_citizen:
         source = 'citizen_report'
         district_id = district_id or current_user.district_id
     else:

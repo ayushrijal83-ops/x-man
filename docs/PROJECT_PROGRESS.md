@@ -1,6 +1,6 @@
 # NepalSathi - Project Progress
 
-## Current Status: M05 Mobile Camera Citizen Reporting Complete (M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
+## Current Status: M05.1 Citizen Hazard API Security Hardening Complete (M05 Mobile Camera Citizen Reporting, M04 Affected Areas, M03 Notifications, M02 Hazard Events, M01 Hardware Readiness)
 
 ### ✅ Completed (Core Features)
 - Flask application
@@ -873,3 +873,81 @@ feat(m05): add mobile citizen hazard reporting
 ### 🏷️ Status
 **M05 — MOBILE CAMERA CITIZEN REPORTING COMPLETE**
 **NO VISION AI · HARDWARE NOT YET CONNECTED**
+
+M05 remains **COMPLETE / LOCKED**. M05.1 is a hardening patch on top of it, not a replacement.
+
+---
+
+## M05.1 — Citizen Hazard API Security Hardening
+
+### 1. Status
+Complete. Application/service/test change only — no migration.
+
+### 2. Vulnerability
+`POST /api/hazards` (M02 JSON endpoint) read `severity` from the request body for every role,
+including citizens. A citizen could open an event at `critical`/`high`, or merge into an existing
+active event with a higher severity, which escalated it and sent a district-wide
+`hazard_escalated` notification (M03/M04).
+
+### 3. Root cause
+`create_hazard()` in `app/routes/hazard_events.py`: `severity = data.get('severity', 'medium')`
+→ `report_hazard(event_type, severity, 'citizen_report', ...)` (default `escalate=True`)
+→ `add_evidence()` raised severity and called `notify_hazard_escalated()`.
+`source`, `status` and `incident_id` were already safe (source derived from role, new events
+always `detected`, `incident_id` never read). The M05 `/api/reports` path was already safe
+(fixed `medium`, `escalate=False`) — the rule just lived only in that one caller.
+
+### 4. Fix
+- `hazard_event_service.report_hazard()` — the single entry point for citizen-sourced evidence —
+  now forces `severity = CITIZEN_REPORT_SEVERITY ('medium')` and `escalate=False` whenever
+  `source == 'citizen_report'`, regardless of what the caller passes.
+- `CITIZEN_REPORT_SEVERITY` moved from M05's `citizen_report_service` (which now aliases it as
+  `REPORT_SEVERITY`, behaviour unchanged) so there is one definition.
+- `POST /api/hazards` ignores a citizen's `severity` (no validation error for a value that is
+  discarded), matching `/api/reports` (Option A: ignore, server decides).
+
+### 5. Citizen behaviour
+Citizens control: `event_type`, `title`, `description`, `location`, `latitude`/`longitude`,
+`district_id` (defaults to their own), `river_id`, `road_segment_id`.
+Ignored: `severity`, `status`, `source`, `incident_id`, `reporter_id`, `role`, any other key.
+Result: always `source=citizen_report`, `severity=medium` on create, `status=detected`; merging
+into an existing event only bumps `report_count` — never severity, never status, no escalation alert.
+
+### 6. Authority/admin behaviour
+Unchanged. Role comes from the authenticated session. Authority/admin may set severity on
+create (`source=authority`), their evidence may still escalate a merged event, authorities stay
+limited to their own district, and PATCH/status/resolve/reject remain manager-only.
+
+### 7. Tests
+`tests/test_hazard_api_security_m051.py` (21 tests): severity injection (critical/high/low/invalid),
+no escalation of an existing event + no `hazard_escalated` notification, status injection
+(confirmed/investigating/resolved/rejected), source spoofing (iot/authority/system), role/reporter
+spoofing, `incident_id` abuse, service-level guard for any `citizen_report` caller, normal citizen
+submission, authority/admin severity control kept, invalid manager severity still 400, and M05
+`/api/reports` unchanged.
+`tests/test_hazard_m02_integration.py::test_citizen_reports_merge_into_active_event` asserted the
+vulnerable behaviour (citizen escalating to `critical`); it now expects `medium`.
+Baseline before M05.1: 267 passed, 57 warnings. After: **288 passed, 57 warnings** (267 + 21 new).
+
+### 8. Known limitations
+- A citizen whose report merges into an existing event overwrites that event's
+  `source_reference` with `user_<id>` (pre-existing M02/M05 behaviour on both citizen paths; it is
+  manager-only internal data, but the original reference is lost).
+- No rate limiting: a citizen can inflate `report_count` with repeated reports (out of scope).
+
+### 9. Next milestone
+**M06 — ROAD DAMAGE + LANDSLIDE VISION AI** (not started).
+
+### 10. Files
+- Modified: `app/routes/hazard_events.py`, `app/services/hazard_event_service.py`,
+  `app/services/citizen_report_service.py`, `tests/test_hazard_m02_integration.py`,
+  `docs/PROJECT_PROGRESS.md`
+- Added: `tests/test_hazard_api_security_m051.py`
+
+### 11. Git commit
+```
+fix(m05.1): harden citizen hazard severity handling
+```
+
+### 🏷️ Status
+**M05.1 — SECURITY HARDENING COMPLETE**

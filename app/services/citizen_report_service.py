@@ -20,7 +20,7 @@ from app.extensions import db
 from app.models import CitizenReport, District
 from app.models.citizen_report import VISUAL_HAZARD_TYPES, REPORT_REVIEW_STATUSES
 from app.services import notification_service
-from app.services.hazard_event_service import report_hazard
+from app.services.hazard_event_service import CITIZEN_REPORT_SEVERITY, report_hazard
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB upload limit (app-wide MAX_CONTENT_LENGTH is 16 MB)
 MAX_IMAGE_PIXELS = 40_000_000  # ~40 MP: phone photos fit; decompression bombs don't
@@ -28,9 +28,7 @@ MAX_STORED_SIDE = 2560  # stored copy is downscaled to this longest side
 ALLOWED_FORMATS = {'jpg': 'JPEG', 'jpeg': 'JPEG', 'png': 'PNG', 'webp': 'WEBP'}  # extension -> real format
 MAX_DESCRIPTION = 1000
 MAX_LOCATION = 200
-# A citizen report is unverified evidence: it opens/joins an event at 'medium'
-# and can never escalate it. Severity changes come from authorities (or M06 later).
-REPORT_SEVERITY = 'medium'
+REPORT_SEVERITY = CITIZEN_REPORT_SEVERITY  # see hazard_event_service
 _STORED_NAME = re.compile(r'^[0-9a-f]{32}\.jpg$')
 
 
