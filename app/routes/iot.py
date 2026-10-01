@@ -357,7 +357,7 @@ def register_device():
     {
         "device_id": "ESP32-RIVER-001",
         "name": "Kamala River Sensor 1",
-        "description": "Flood node: JSN-SR04T waterproof ultrasonic water level + DHT22",
+        "description": "Flood node: JSN-SR04T waterproof ultrasonic water level",
         "district_id": 1,
         "river_id": 5,  // optional: explicit river association
         "latitude": 27.27,

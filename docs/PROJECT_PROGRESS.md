@@ -1197,22 +1197,23 @@ Documentation/architecture sync only. No physical hardware has been built or tes
 firmware, no GPIO/driver code and no change to the telemetry API. M06 stays **COMPLETE / LOCKED**.
 
 ### Final hardware selection
+*(Updated after M11: the DHT22 that was originally listed on the flood node has been removed. See
+"Hardware architecture update — DHT22 removed" at the end of this file.)*
 ```
 ESP32 #1 — flood node
-├── JSN-SR04T waterproof ultrasonic sensor → water level
-└── DHT22 → temperature / humidity (environmental context only)
+└── JSN-SR04T waterproof ultrasonic sensor → water_level (metres)
 
 ESP32 #2 — seismic node
-└── MPU6050 → abnormal ground-motion prototype
+└── GY-521 (MPU6050) → vibration, tilt (abnormal ground-motion prototype)
 
 Existing smartphone
 └── Camera + GPS → citizen landslide / road-damage reports (M05/M06)
 ```
-Components: ESP32 DevKit ×2, JSN-SR04T ×1, MPU6050 ×1, DHT22 ×1, breadboard ×2, jumper wire set ×2,
+Components: ESP32 DevKit ×2, JSN-SR04T ×1, GY-521 (MPU6050) ×1, breadboard ×2, jumper wire set ×2,
 USB cable ×2, USB power supply/power bank ×2, JSN-SR04T mounting/protection ×1, MPU6050 stable
 mounting platform ×1, running-water channel/container ×1, stilling/measurement chamber ×1, existing
 smartphone ×1.
-**Not required:** HC-SR04, hydrostatic pressure sensor, HFS-DC06 microwave motion sensor, rain sensor,
+**Not required:** DHT22 (removed after M11), HC-SR04, hydrostatic pressure sensor, HFS-DC06 microwave motion sensor, rain sensor,
 water pump, relay, MOSFET, Raspberry Pi, Arduino, separate GPS module, dedicated camera, GSM module,
 third ESP32.
 
@@ -1222,7 +1223,7 @@ third ESP32.
   - It measures the distance from the sensor down to the water surface.
   - The firmware derives `water_level_m = (reference_height_cm − distance_cm) / 100` and sends
     `water_level` in **m**.
-  - The DHT22 sends `temperature` (°C) and `humidity` (%) as context. It is never a flood trigger.
+  - No other sensor on this node (the DHT22 temperature/humidity context sensor was removed after M11).
 - **Running-water demo:** the sensor reads the level inside a stilling/measurement chamber
   connected to the channel, so turbulent surface motion is not the measurement target.
 - **ESP32 #2 (seismic):**
@@ -1262,7 +1263,7 @@ CSRF, telemetry validation and hazard lifecycle code were not touched.
 
 ### Known limitations (for M07/M08)
 - Nothing physical has been validated yet: JSN-SR04T accuracy and its minimum range (blind zone,
-  to be measured on the real module), chamber behaviour, the DHT22 and MPU6050 noise floors, and
+  to be measured on the real module), chamber behaviour, the MPU6050 noise floor, and
   power.
 - `vibration` is capped at 1000 mg (1 g) by validation. Strong shaking above that would be
   rejected, so the range needs revisiting with the real MPU6050 settings before seismic rules are
@@ -1645,8 +1646,8 @@ Changed existing tests: none. **Full suite: see §13.**
 - The M07 `/api/iot/devices` unlinked-authority gap remains for M10.
 
 ### 12. Hardware dependency
-The JSN-SR04T (water level in metres, converted on the ESP32), DHT22 (context only, not used in
-rules) and MPU6050 have **not** been built or validated. The motion rule cannot be enabled
+The JSN-SR04T (water level in metres, converted on the ESP32) and the GY-521 (MPU6050) have
+**not** been built or validated. The motion rule cannot be enabled
 meaningfully before hardware characterization (H-milestones).
 
 ### 13. Files
@@ -2289,10 +2290,9 @@ FK relationships were checked after the flows:
   (no partial save, no retry queue).
 - **No load or soak testing.** No browser-level end-to-end automation beyond the manual Chrome
   checks of M07, M09 and M10.
-- **Documentation conflict (DHT22).** The M11 brief states the DHT22 has been removed from the
-  final hardware, but `README.md` and the pre-M07 hardware entry still list it. M11 tests use only
-  `water_level`, `vibration` and `tilt`. The hardware docs were left unchanged pending
-  confirmation.
+- **Documentation conflict (DHT22), resolved after M11.** The DHT22 has been removed from the final
+  hardware documentation (see "Hardware architecture update — DHT22 removed"). M11 tests use only
+  `water_level`, `vibration` and `tilt`.
 
 ### Files
 - **Created:** `tests/test_integration_m11.py`
@@ -2313,3 +2313,42 @@ test(m11): add full software integration testing
 
 ### 🏷️ Status
 **M11 — FULL SOFTWARE INTEGRATION TESTING COMPLETE · SOFTWARE INTEGRATION VERIFIED · PHYSICAL HARDWARE NOT YET VALIDATED**
+
+---
+
+## Hardware architecture update — DHT22 removed (after M11)
+
+The DHT22 temperature/humidity sensor is **no longer part of the final X-MAN hardware**. It only
+ever provided environmental context, never drove a risk rule, and no other environmental sensor
+replaces it.
+
+**Final hardware:**
+```
+ESP32 #1 — Flood
+└── JSN-SR04T waterproof ultrasonic sensor → water_level (metres)
+
+ESP32 #2 — Seismic
+└── GY-521 (MPU6050) → vibration (mg), tilt (°)
+
+Smartphone
+├── Camera → landslide / road-damage evidence
+└── GPS → citizen report location
+```
+
+**Effect on software: none.**
+- **Code:** no code, firmware, model, migration or test depended on the DHT22. The only code
+  mention was the example text in the `POST /api/iot/devices` docstring, which was updated.
+- **Sensor types:** the final hardware uses `water_level` (m), `vibration` (mg) and `tilt` (°).
+- **API unchanged:** the telemetry API, units and validation table are unchanged. The generic
+  `temperature`, `humidity` and `rainfall` types are still accepted by the validation table, but no
+  final device sends them and no risk rule uses them.
+
+**Documentation changed:**
+- `README.md`: hardware tree, flood/seismic node notes, telemetry table, component list, and
+  not-required list.
+- This file: the pre-M07 hardware entry is updated in place with a note; the M08 hardware
+  dependency and the M11 conflict note are updated.
+
+Physical hardware is still **not built or validated**.
+
+**Next milestone:** H01 — ESP32 Hardware Foundation (not started).

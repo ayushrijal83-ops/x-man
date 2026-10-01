@@ -69,14 +69,14 @@ code in this repo, and the JSN-SR04T has not been validated in our setup.
 
 ```
 ESP32 #1 — flood node
-├── JSN-SR04T waterproof ultrasonic sensor → water level
-└── DHT22 → temperature / humidity (environmental context only, not a flood detector)
+└── JSN-SR04T waterproof ultrasonic sensor → water_level (metres)
 
 ESP32 #2 — seismic node
-└── MPU6050 accelerometer + gyroscope → abnormal ground-motion prototype
+└── GY-521 (MPU6050) accelerometer + gyroscope → vibration, tilt (abnormal ground-motion prototype)
 
 Existing smartphone
-└── Camera + GPS → citizen landslide / road-damage reports (/report)
+├── Camera → landslide / road-damage photo evidence (/report)
+└── GPS → citizen report location
 ```
 
 **Sensors provide evidence; X-MAN interprets it.** No device or phone declares "flood",
@@ -94,12 +94,13 @@ physical sensor → ESP32 → telemetry → X-MAN ingestion → risk engine → 
 - For the running-water demonstration the sensor points into a **stilling/measurement chamber**
   connected to the channel. Water in the chamber follows the channel level, so turbulent,
   rippling surface flow does not become the measurement target.
-- The DHT22 adds temperature and humidity for context. It never triggers a flood on its own.
+- The flood node has no other sensor: there is no environmental (temperature/humidity) sensor in
+  the final design.
 
 ### Seismic node (ESP32 #2)
 
-- The MPU6050 is mounted on a stable platform and reports motion as `vibration` (mg) and
-  `tilt` (°).
+- The GY-521 breakout (MPU6050 chip) is mounted on a stable platform and reports motion as
+  `vibration` (mg) and `tilt` (°).
 - It is a **prototype for detecting abnormal ground motion**. It is not a certified seismometer
   or earthquake early-warning instrument, and it does not predict earthquakes.
 
@@ -111,10 +112,12 @@ doesn't know or care which chip produced them, so a different sensor model needs
 | Sensor type | Unit | Range | Source in this prototype |
 | --- | --- | --- | --- |
 | `water_level` | `m` | 0–50 | JSN-SR04T (firmware converts its cm distance into a water level in metres) |
-| `temperature` | `°C` | -40–85 | DHT22 |
-| `humidity` | `%` | 0–100 | DHT22 |
-| `vibration` | `mg` | 0–1000 | MPU6050 |
-| `tilt` | `°` | -180–180 | MPU6050 |
+| `vibration` | `mg` | 0–1000 | GY-521 / MPU6050 |
+| `tilt` | `°` | -180–180 | GY-521 / MPU6050 |
+
+The backend's validation table also still accepts the generic logical types `temperature`,
+`humidity` and `rainfall` (the API is unchanged), but no device in the final hardware sends them
+and no risk rule uses them.
 
 Readings with a different unit or out of range are rejected (for example `"unit": "cm"` for
 `water_level`). Devices authenticate with their own hashed API key (`Authorization: Bearer
@@ -126,19 +129,19 @@ Readings with a different unit or out of range are rejected (for example `"unit"
 | --- | --- |
 | ESP32 DevKit | 2 |
 | JSN-SR04T waterproof ultrasonic sensor | 1 |
-| MPU6050 accelerometer/gyroscope | 1 |
-| DHT22 temperature/humidity sensor | 1 |
+| GY-521 (MPU6050) accelerometer/gyroscope | 1 |
 | Breadboard | 2 |
 | Jumper wire set | 2 |
 | USB cable | 2 |
 | USB power supply / power bank | 2 |
 | JSN-SR04T mounting / protection | 1 |
-| MPU6050 stable mounting platform | 1 |
+| GY-521 / MPU6050 stable mounting platform | 1 |
 | Running-water channel / container | 1 |
 | Stilling / measurement chamber | 1 |
 | Existing smartphone | 1 |
 
-**Not required:** HC-SR04 (replaced by the waterproof JSN-SR04T), hydrostatic pressure sensor,
+**Not required:** DHT22 (considered for temperature/humidity context, removed after M11),
+HC-SR04 (replaced by the waterproof JSN-SR04T), hydrostatic pressure sensor,
 HFS-DC06 microwave motion sensor, rain sensor, water pump, relay, MOSFET, Raspberry Pi, Arduino,
 separate GPS module, dedicated camera, GSM module, third ESP32.
 
