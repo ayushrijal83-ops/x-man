@@ -2568,7 +2568,7 @@ read-only aggregation were added.
   data).
 - **Stray dev-DB row:** the dev DB still contains a stray `Test District` (id 78, "Test Province")
   that makes the landing page show 78 districts / 8 provinces. It was left in place pending the
-  owner's decision.
+  owner's decision. *(Resolved in FQA: see "Dev-DB cleanup".)*
 - **Not fully restyled:** older inner pages (projects, travel, social, complaints) inherit the new
   system but were not rebuilt; some still have inline layout styles.
 - **Visual review** was manual (Chrome); there is no automated visual regression.
@@ -2981,8 +2981,6 @@ firmware work. Starting point: `9fc5b38`, **844 passed, 31 warnings**.
   and sound. **No SMS.**
 - **Warnings:** the 2 remaining test warnings come from the third-party `sentencepiece` SWIG
   bindings, loaded only when the real SigLIP model runs. Not fixable here.
-- **Dev DB:** still contains the stray `Test District` (id 78), so `test_nepal_data.py` (expects 77
-  districts) fails on that database; left for the owner to delete.
 - **Readings and hazard text are public by design:** `/api/iot/latest` readings are visible to any
   logged-in user (M01 decision), and hazard `description` is a public field (authority-written;
   citizens' report text is never copied into it).
@@ -3000,13 +2998,35 @@ firmware work. Starting point: `9fc5b38`, **844 passed, 31 warnings**.
     language, and those tests assert English text.
   - `test_product_quality.py`, `test_vision_m06.py`: readable AI labels.
   - `test_hazard_event_service.py`, `test_iot_water_level.py`: `db.session.get`.
-- **Standalone scripts:** `test_features.py`, `test_language.py`, `test_ui.py` and `test_theme.py`
-  pass. `test_nepal_data.py` fails only on the stray district.
+- **Standalone scripts:** `test_nepal_data.py`, `test_features.py`, `test_language.py`, `test_ui.py`
+  and `test_theme.py` all pass (after the cleanup below).
 
 ### Recommendation
 **Freeze the software and move to H01.** Every defect found in this pass was fixed and is covered by
 a regression test. The remaining items are documented limitations or need real hardware or a manual
 push check.
 
+### Dev-DB cleanup: stray `Test District` (resolved)
+- **Audit:** district 78 (`Test District`, "Test Province") was referenced by exactly one row: river 1
+  (`Test River`). Every other district-referencing table had zero references: users, authorities,
+  road segments, projects, bridges, IoT devices, posts, complaints, incidents, affected districts,
+  citizen reports. Nothing referenced river 1 (river updates, devices, incidents, bridges), and no
+  other district used "Test Province".
+- **Origin:** both rows were created in the same second on 2026-09-30 (before the M01 commit) with
+  the fixture names used only in `tests/`. They are leaked test data from an ad-hoc run against the
+  dev DB. They are already present in the pre-M06 backup. No seed, init or application code
+  creates them.
+- **Cleaned:**
+  - backup `instance/hackforge.pre-fqa-cleanup.db`, then one transaction that deletes only that
+    river and that district (each delete guarded by id + name)
+  - result: 77 districts, 7 provinces, 96 road segments (56 districts), 115 rivers (66 districts),
+    7 authorities, 2 projects
+  - `PRAGMA integrity_check` ok, no foreign-key violations, no orphan district references
+- **Not needed:** no migration (development data only; the schema is unchanged) and no seed/init
+  change. A fresh `init_db.py` + `seed_data.py` + `import_nepal_data.py` gives 77 districts,
+  7 provinces and no test rows.
+- **After cleanup:** the landing page shows "77 districts · 7 provinces" (was 78 / 8), and
+  `test_nepal_data.py` passes.
+
 ### 🏷️ Status
-**FQA — FINAL SOFTWARE QA COMPLETE · READY TO FREEZE · NEXT: H01 (not started)**
+**FQA — FINAL SOFTWARE QA COMPLETE · SOFTWARE FROZEN (872 passed, 2 third-party warnings) · NEXT: H01 (not started)**
