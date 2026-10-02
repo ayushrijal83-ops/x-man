@@ -2,30 +2,26 @@
 {% import "components/ui.html" as ui with context %}
 {% import "components/admin_ui.html" as aui with context %}
 
-{% block title %}{{ 'Admin Control Center'|t }} - {{ t('app_name') }}{% endblock %}
+{% block title %}{{ 'Super Admin Control Center'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
 
 <div class="container">
-    <div class="page-head">
-        <div>
-            <span class="eyebrow"><i data-lucide="shield"></i> {{ 'Administrator'|t }}</span>
-            <h1>{{ 'Admin Control Center'|t }}</h1>
-            <p class="page-sub">{{ 'Accounts, authorities and emergency notification delivery across all districts.'|t }}</p>
-        </div>
-        <a href="/monitoring" class="btn btn-primary"><i data-lucide="activity"></i> {{ 'Disaster Monitoring'|t }}</a>
-    </div>
+    {% call aui.head('Super Admin Control Center'|t, 'The whole X-MAN platform from live database values: accounts, IoT devices, hazards, reports, notifications and system health.'|t, eyebrow='Super Administrator') %}
+    <a href="/monitoring" class="btn btn-primary"><i data-lucide="activity"></i> {{ 'Disaster Monitoring'|t }}</a>
+    {% endcall %}
     {{ aui.tabs('home') }}
 
+    {% set uc = o.users %}
     <div class="grid grid-4" style="margin-bottom:16px;">
+        <a class="stat-card tilt" href="/admin/citizens" style="text-decoration:none; color:inherit;"><i data-lucide="users"></i>
+            <div class="stat-value">{{ uc.citizen.total }}</div><div class="stat-label">{{ 'Citizens'|t }}</div>
+            <div class="stat-note">{{ uc.citizen.active }} {{ 'active'|t }} · {{ uc.citizen.disabled }} {{ 'disabled'|t }}</div></a>
         <a class="stat-card tilt" href="/admin/authorities" style="text-decoration:none; color:inherit;"><i data-lucide="landmark"></i>
             <div class="stat-value">{{ o.authorities }}</div><div class="stat-label">{{ 'Authorities'|t }}</div>
-            <div class="stat-note">{{ o.authority_accounts }} {{ 'authority accounts'|t }}</div></a>
-        <a class="stat-card tilt" href="/admin/citizens" style="text-decoration:none; color:inherit;"><i data-lucide="users"></i>
-            <div class="stat-value">{{ o.citizens }}</div><div class="stat-label">{{ 'Citizens'|t }}</div>
-            <div class="stat-note">{{ o.disabled_accounts }} {{ 'disabled accounts'|t }}</div></a>
-        <a class="stat-card tilt" href="/monitoring" style="text-decoration:none; color:inherit;"><i data-lucide="siren"></i>
+            <div class="stat-note">{{ uc.authority.total }} {{ 'authority accounts'|t }}: {{ uc.authority.active }} {{ 'active'|t }} · {{ uc.authority.disabled }} {{ 'disabled'|t }}</div></a>
+        <a class="stat-card tilt" href="/admin/hazards?status=active" style="text-decoration:none; color:inherit;"><i data-lucide="siren"></i>
             <div class="stat-value">{{ o.active_hazards }}</div><div class="stat-label">{{ 'Active hazards'|t }}</div>
             <div class="stat-note">{{ o.districts }} {{ 'districts'|t }}</div></a>
         <a class="stat-card tilt" href="/admin/notifications" style="text-decoration:none; color:inherit;"><i data-lucide="bell-ring"></i>
@@ -34,11 +30,64 @@
     </div>
 
     <div class="bento">
+        <section class="card span-4" aria-labelledby="h-users">
+            <h2 class="card-title" id="h-users"><i data-lucide="user-cog"></i> {{ 'Users'|t }}</h2>
+            <dl class="kv">
+                <dt>{{ 'Citizens'|t }}</dt><dd>{{ uc.citizen.total }} ({{ uc.citizen.active }} {{ 'active'|t }}, {{ uc.citizen.disabled }} {{ 'disabled'|t }})</dd>
+                <dt>{{ 'Authority accounts'|t }}</dt><dd>{{ uc.authority.total }} ({{ uc.authority.active }} {{ 'active'|t }}, {{ uc.authority.disabled }} {{ 'disabled'|t }})</dd>
+                <dt>{{ 'Super Admins'|t }}</dt><dd>{{ uc.admin.total }}</dd>
+            </dl>
+            <p style="margin-top:12px;"><a href="/admin/users">{{ 'All users'|t }} →</a></p>
+        </section>
+
+        <section class="card span-8" aria-labelledby="h-iot">
+            <h2 class="card-title" id="h-iot"><i data-lucide="cpu"></i> {{ 'IoT devices'|t }}</h2>
+            {% set i = o.iot %}
+            <div class="grid grid-4" style="margin-bottom:12px;">
+                <a class="stat-card" href="/admin/devices" style="text-decoration:none; color:inherit;"><div class="stat-value">{{ i.total }}</div><div class="stat-label">{{ 'Total'|t }}</div><div class="stat-note">{{ i.enabled }} {{ 'enabled'|t }} · {{ i.disabled }} {{ 'disabled'|t }}</div></a>
+                <a class="stat-card" href="/admin/devices?status=online" style="text-decoration:none; color:inherit;"><div class="stat-value">{{ i.states.online }}</div><div class="stat-label">{{ 'Recently seen'|t }}</div></a>
+                <a class="stat-card" href="/admin/devices?status=stale" style="text-decoration:none; color:inherit;"><div class="stat-value">{{ i.states.stale }}</div><div class="stat-label">{{ 'Stale'|t }}</div></a>
+                <a class="stat-card" href="/admin/devices?status=offline" style="text-decoration:none; color:inherit;"><div class="stat-value">{{ i.states.offline + i.states.never }}</div><div class="stat-label">{{ 'Offline'|t }}</div><div class="stat-note">{{ i.states.never }} {{ 'never reported'|t }}</div></a>
+            </div>
+            <div class="grid grid-2">
+                <div><h3 class="meta">{{ 'By district'|t }}</h3>
+                    <ul class="count-list">{% for name, n in i.by_district %}<li><span>{{ name }}</span><strong>{{ n }}</strong></li>{% else %}<li class="meta">{{ 'No devices registered.'|t }}</li>{% endfor %}</ul></div>
+                <div><h3 class="meta">{{ 'By sensor type'|t }}</h3>
+                    <ul class="count-list">{% for name, n in i.by_sensor %}<li><span>{{ name }}</span><strong>{{ n }}</strong></li>{% else %}<li class="meta">{{ 'No telemetry yet.'|t }}</li>{% endfor %}</ul></div>
+            </div>
+            <p class="meta" style="margin-top:8px;">{{ 'Last telemetry received'|t }}: {{ aui.when(i.last_telemetry) }}</p>
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-haz">
+            <h2 class="card-title" id="h-haz"><i data-lucide="siren"></i> {{ 'Hazards'|t }}</h2>
+            {% set hz = o.hazards %}
+            <div class="grid grid-2">
+                <div><h3 class="meta">{{ 'Active by severity'|t }}</h3>
+                    <ul class="count-list">{% for s, n in hz.by_severity.items() %}<li><a href="/admin/hazards?status=active&severity={{ s }}">{{ ui.sev(s) }}</a><strong>{{ n }}</strong></li>{% endfor %}</ul></div>
+                <div><h3 class="meta">{{ 'Active by type'|t }}</h3>
+                    <ul class="count-list">{% for k, n in hz.by_type.items() %}<li><a href="/admin/hazards?status=active&event_type={{ k }}">{{ ui.hazard_name(k) }}</a><strong>{{ n }}</strong></li>{% endfor %}</ul></div>
+            </div>
+            <h3 class="meta" style="margin-top:12px;">{{ 'Active by affected district'|t }}</h3>
+            <ul class="count-list">{% for name, n in hz.by_district[:8] %}<li><span>{{ name }}</span><strong>{{ n }}</strong></li>{% else %}<li class="meta">{{ 'No active hazards.'|t }}</li>{% endfor %}</ul>
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-rep">
+            <h2 class="card-title" id="h-rep"><i data-lucide="camera"></i> {{ 'Citizen reports'|t }}</h2>
+            {% set r = o.reports %}
+            <ul class="count-list">
+                <li><a href="/admin/reports?status=submitted">{{ 'Pending review'|t }}</a><strong>{{ r.pending }}</strong></li>
+                <li><a href="/admin/reports?status=accepted">{{ 'Accepted'|t }}</a><strong>{{ r.accepted }}</strong></li>
+                <li><a href="/admin/reports?status=rejected">{{ 'Rejected'|t }}</a><strong>{{ r.rejected }}</strong></li>
+                <li><a href="/admin/reports?ai=completed">{{ 'AI-analyzed'|t }}</a><strong>{{ r.ai_analyzed }}</strong></li>
+                <li><a href="/admin/reports?ai=disagree">{{ 'AI disagrees with reporter'|t }}</a><strong>{{ r.ai_disagree }}</strong></li>
+            </ul>
+        </section>
+
         <section class="card span-7" aria-labelledby="h-emerg">
             <h2 class="card-title" id="h-emerg"><i data-lucide="triangle-alert"></i> {{ 'Recent emergency events'|t }}</h2>
             {% if o.recent_emergencies %}
             <div class="list">
-                {% for h in o.recent_emergencies %}{{ ui.hazard_row(h, '/hazards/' ~ h.id ~ '/response') }}{% endfor %}
+                {% for h in o.recent_emergencies %}{{ ui.hazard_row(h, '/admin/hazards/' ~ h.id) }}{% endfor %}
             </div>
             {% else %}{{ ui.empty('shield-check', 'No emergency-level hazards recorded.') }}{% endif %}
         </section>
@@ -50,8 +99,28 @@
                 <dt>{{ 'Web Push'|t }}</dt><dd>{% if o.push_configured %}<span class="badge badge-success"><i data-lucide="circle-check"></i>{{ 'Configured'|t }}</span>{% else %}<span class="badge badge-warning"><i data-lucide="circle-alert"></i>{{ 'Not configured'|t }}</span>{% endif %}</dd>
                 <dt>{{ 'SMS'|t }}</dt><dd><span class="badge badge-neutral"><i data-lucide="circle-minus"></i>{{ 'Not implemented'|t }}</span></dd>
                 <dt>{{ 'Notifications (24 h)'|t }}</dt><dd>{{ o.notifications_24h }}</dd>
+                <dt>{{ 'Unread (all users)'|t }}</dt><dd>{{ o.unread }}</dd>
+                <dt>{{ 'Push subscriptions'|t }}</dt><dd>{{ o.push.enabled }} {{ 'active'|t }} · {{ o.push.disabled }} {{ 'disabled'|t }} · {{ o.push.failing }} {{ 'failing'|t }}</dd>
             </dl>
-            <p style="margin-top:12px;"><a href="/admin/notifications">{{ 'Notification status'|t }} →</a></p>
+            <p style="margin-top:12px;"><a href="/admin/notifications">{{ 'Notification status'|t }} →</a> · <a href="/admin/push">{{ 'Web Push'|t }} →</a></p>
+        </section>
+
+        <section class="card span-5" aria-labelledby="h-health">
+            <h2 class="card-title" id="h-health"><i data-lucide="heart-pulse"></i> {{ 'System health'|t }}</h2>
+            {% set h = o.health %}
+            <dl class="kv">
+                <dt>{{ 'Latest telemetry'|t }}</dt><dd>{{ aui.when(h.latest_reading.received_at if h.latest_reading else None) }}</dd>
+                <dt>{{ 'Latest hazard detected'|t }}</dt><dd>{{ aui.when(h.latest_hazard.detected_at if h.latest_hazard else None) }}</dd>
+                <dt>{{ 'Latest emergency notification'|t }}</dt><dd>{{ aui.when(h.latest_emergency.created_at if h.latest_emergency else None) }}</dd>
+                <dt>{{ 'Rejected telemetry (since start)'|t }}</dt><dd>{{ h.runtime.telemetry_rejected_auth + h.runtime.telemetry_rejected_invalid }}</dd>
+                <dt>{{ 'Server errors (since start)'|t }}</dt><dd>{{ h.runtime.server_errors }}</dd>
+            </dl>
+            <p style="margin-top:12px;"><a href="/admin/health">{{ 'System health'|t }} →</a></p>
+        </section>
+        <section class="card span-7" aria-labelledby="h-audit">
+            <h2 class="card-title" id="h-audit"><i data-lucide="scroll-text"></i> {{ 'Recent administrative actions'|t }}</h2>
+            {{ aui.audit_table(o.recent_audit) }}
+            <p style="margin-top:12px;"><a href="/admin/audit">{{ 'Full audit log'|t }} →</a></p>
         </section>
     </div>
 </div>

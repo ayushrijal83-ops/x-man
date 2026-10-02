@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Hazards'|t }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    {{ aui.head('Hazards'|t, 'Every hazard event in every district. Lifecycle changes follow the normal rules and are audited.'|t, icon='siren') }}
+    {{ aui.tabs('hazards') }}
+
+    <section class="card" aria-labelledby="h-list">
+        <h2 class="card-title" id="h-list"><i data-lucide="siren"></i> {{ pagination.total }} {{ 'hazards'|t }}</h2>
+        <form method="get" class="filter-bar" role="search">
+            <div class="form-group"><label for="q">{{ 'Search'|t }}</label>
+                <input id="q" name="q" class="form-input" value="{{ f.q }}" placeholder="{{ 'Title or location'|t }}"></div>
+            <div class="form-group"><label for="status">{{ 'Lifecycle'|t }}</label>
+                <select id="status" name="status" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    {% for s in statuses %}<option value="{{ s }}" {% if f.status == s %}selected{% endif %}>{{ s|t }}</option>{% endfor %}</select></div>
+            <div class="form-group"><label for="event_type">{{ 'Type'|t }}</label>
+                <select id="event_type" name="event_type" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    {% for k in types %}<option value="{{ k }}" {% if f.event_type == k %}selected{% endif %}>{{ ui.hazard_name(k) }}</option>{% endfor %}</select></div>
+            <div class="form-group"><label for="severity">{{ 'Severity'|t }}</label>
+                <select id="severity" name="severity" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    {% for s in severities|reverse %}<option value="{{ s }}" {% if f.severity == s %}selected{% endif %}>{{ s|t }}</option>{% endfor %}</select></div>
+            <div class="form-group"><label for="district_id">{{ 'Affected district'|t }}</label>
+                <select id="district_id" name="district_id" class="form-input"><option value="">{{ 'All districts'|t }}</option>
+                    {% for d in districts %}<option value="{{ d.id }}" {% if f.district_id == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> {{ 'Filter'|t }}</button>
+        </form>
+
+        {% if pagination.items %}
+        <div class="table-wrap"><table>
+            <thead><tr><th scope="col">{{ 'Hazard'|t }}</th><th scope="col">{{ 'Severity'|t }}</th><th scope="col">{{ 'Lifecycle'|t }}</th>
+                <th scope="col">{{ 'Districts'|t }}</th><th scope="col">{{ 'Source'|t }}</th><th scope="col">{{ 'Evidence'|t }}</th>
+                <th scope="col">{{ 'Notifications'|t }}</th><th scope="col">{{ 'Created'|t }}</th><th scope="col">{{ 'Updated'|t }}</th></tr></thead>
+            <tbody>{% for h in pagination.items %}{% set r = rows[h.id] %}
+            <tr>
+                <td><a href="{{ url_for('admin.hazard_detail', incident_id=h.id) }}">#{{ h.id }} {{ h.title or ui.hazard_name(h.event_type) }}</a><div class="meta">{{ ui.hazard_name(h.event_type) }}</div></td>
+                <td>{{ ui.sev(h.severity) }}</td>
+                <td>{{ ui.status(h.status) }}</td>
+                <td>{{ h.affected_districts|map(attribute='name')|join(', ') or '—' }}</td>
+                <td>{{ h.source|t }}</td>
+                <td>{{ h.report_count or 0 }}{% if r.photos %} <span class="meta">({{ r.photos }} {{ 'photos'|t }})</span>{% endif %}</td>
+                <td>{% if r.notified %}{{ r.notified }} <div class="meta">{{ aui.when(r.last_notified) }}</div>{% else %}<span class="meta">{{ 'None'|t }}</span>{% endif %}</td>
+                <td>{{ aui.when(h.created_at or h.detected_at) }}</td>
+                <td>{{ aui.when(h.updated_at) }}</td>
+            </tr>
+            {% endfor %}</tbody>
+        </table></div>
+        {{ aui.pager(pagination, 'admin.hazards', f) }}
+        {% else %}{{ ui.empty('shield-check', 'No hazards match these filters.') }}{% endif %}
+    </section>
+</div>
+{% endblock %}

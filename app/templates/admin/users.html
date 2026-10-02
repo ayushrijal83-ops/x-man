@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Users'|t }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    {{ aui.head('Users'|t, 'Every account by role and status. Passwords exist only as one-way hashes and are never shown.'|t) }}
+    {{ aui.tabs('users') }}
+
+    <div class="bento">
+        <section class="card span-12" aria-labelledby="h-roles">
+            <h2 class="card-title" id="h-roles"><i data-lucide="user-cog"></i> {{ 'Accounts by role'|t }}</h2>
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'Role'|t }}</th><th scope="col">{{ 'Total'|t }}</th><th scope="col">{{ 'Active'|t }}</th><th scope="col">{{ 'Disabled'|t }}</th><th scope="col">{{ 'Manage'|t }}</th></tr></thead>
+                <tbody>
+                {% for role, label, link in [('citizen', 'Citizens', '/admin/citizens'), ('authority', 'Authority accounts', '/admin/authorities'), ('admin', 'Super Admins', None)] %}
+                {% set c = u.counts[role] %}
+                <tr><th scope="row">{{ label|t }}</th><td>{{ c.total }}</td><td>{{ c.active }}</td><td>{{ c.disabled }}</td>
+                    <td>{% if link %}<a href="{{ link }}">{{ 'Open directory'|t }} →</a>{% else %}<span class="meta">{{ 'Provisioned on the server only'|t }}</span>{% endif %}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table></div>
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-admins">
+            <h2 class="card-title" id="h-admins"><i data-lucide="shield"></i> {{ 'Super Admin accounts'|t }}</h2>
+            <p class="meta">{{ 'Super Admin accounts cannot be disabled, reset or created from the web interface, so a compromised session cannot lock out or take over another administrator. They are created on the server (see README).'|t }}</p>
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'Username'|t }}</th><th scope="col">{{ 'Account'|t }}</th><th scope="col">{{ 'Last login'|t }}</th><th scope="col">{{ 'Created'|t }}</th></tr></thead>
+                <tbody>{% for a in u.admins %}
+                <tr><td>@{{ a.username }}{% if a.id == current_user.id %} <span class="badge badge-info">{{ 'You'|t }}</span>{% endif %}</td>
+                    <td>{{ aui.account_status(a) }}</td><td>{{ aui.when(a.last_login_at) }}</td><td>{{ aui.when(a.created_at) }}</td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+        </section>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'System health'|t }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    {{ aui.head('System health'|t, 'Timestamps and counters only. No configuration secrets, keys or request contents are shown here.'|t) }}
+    {{ aui.tabs('health') }}
+
+    <div class="bento">
+        <section class="card span-6" aria-labelledby="h-latest">
+            <h2 class="card-title" id="h-latest"><i data-lucide="history"></i> {{ 'Latest activity'|t }}</h2>
+            <dl class="kv">
+                <dt>{{ 'Latest telemetry received'|t }}</dt>
+                <dd>{% if h.latest_reading %}{{ aui.when(h.latest_reading.received_at) }} · <a href="/admin/devices/{{ h.latest_reading.device_id }}">{{ h.latest_reading.device.device_id }}</a> ({{ h.latest_reading.sensor_type }}){% else %}—{% endif %}</dd>
+                <dt>{{ 'Readings (24 h)'|t }}</dt><dd>{{ h.readings_24h }}</dd>
+                <dt>{{ 'Latest hazard detected'|t }}</dt>
+                <dd>{% if h.latest_hazard %}{{ aui.when(h.latest_hazard.detected_at) }} · <a href="/admin/hazards/{{ h.latest_hazard.id }}">#{{ h.latest_hazard.id }} {{ ui.hazard_name(h.latest_hazard.event_type) }}</a>{% else %}—{% endif %}</dd>
+                <dt>{{ 'Latest emergency notification'|t }}</dt>
+                <dd>{% if h.latest_emergency %}{{ aui.when(h.latest_emergency.created_at) }} · {{ ui.sev(h.latest_emergency.severity) }}{% else %}—{% endif %}</dd>
+            </dl>
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-iot">
+            <h2 class="card-title" id="h-iot"><i data-lucide="cpu"></i> {{ 'Device connectivity'|t }}</h2>
+            <ul class="count-list">
+                {% for state in ('online', 'stale', 'offline', 'never', 'disabled') %}
+                <li><a href="/admin/devices?status={{ state }}">{{ aui.device_state(state) }}</a><strong>{{ iot.states[state] }}</strong></li>
+                {% endfor %}
+            </ul>
+            <p class="meta" style="margin-top:8px;">{{ 'Online = reported within 5 min, stale = within 60 min. Derived from the last telemetry time, exactly like Disaster Monitoring.'|t }}</p>
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-errors">
+            <h2 class="card-title" id="h-errors"><i data-lucide="octagon-alert"></i> {{ 'Errors and rejections'|t }}</h2>
+            <dl class="kv">
+                <dt>{{ 'Telemetry refused: bad or disabled credentials'|t }}</dt><dd>{{ h.runtime.telemetry_rejected_auth }}</dd>
+                <dt>{{ 'Telemetry refused: invalid payload'|t }}</dt><dd>{{ h.runtime.telemetry_rejected_invalid }}</dd>
+                <dt>{{ 'Last refused telemetry'|t }}</dt><dd>{{ aui.when(h.runtime.last_telemetry_rejected_at) }}</dd>
+                <dt>{{ 'Server errors (5xx)'|t }}</dt><dd>{{ h.runtime.server_errors }}</dd>
+                <dt>{{ 'Last server error'|t }}</dt><dd>{{ aui.when(h.runtime.last_server_error_at) }}</dd>
+                <dt>{{ 'Refused admin actions (24 h)'|t }}</dt><dd><a href="/admin/audit?outcome=failure">{{ h.audit_failures_24h }}</a></dd>
+            </dl>
+            <p class="meta" style="margin-top:8px;">{{ 'Counters are kept in memory by this server process since it started; details are in the application log.'|t }}</p>
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-platform">
+            <h2 class="card-title" id="h-platform"><i data-lucide="server"></i> {{ 'Platform'|t }}</h2>
+            <dl class="kv">
+                <dt>{{ 'Database schema revision'|t }}</dt><dd>{% if h.schema_revision %}<code>{{ h.schema_revision }}</code>{% else %}{{ 'Not tracked (created without migrations)'|t }}{% endif %}</dd>
+                <dt>{{ 'Web Push'|t }}</dt><dd>{% if h.push_configured %}<span class="badge badge-success"><i data-lucide="circle-check"></i>{{ 'Configured'|t }}</span>{% else %}<span class="badge badge-warning"><i data-lucide="circle-alert"></i>{{ 'Not configured'|t }}</span>{% endif %}</dd>
+            </dl>
+        </section>
+    </div>
+</div>
+{% endblock %}

@@ -3030,3 +3030,177 @@ push check.
 
 ### 🏷️ Status
 **FQA — FINAL SOFTWARE QA COMPLETE · SOFTWARE FROZEN (872 passed, 2 third-party warnings) · NEXT: H01 (not started)**
+
+---
+
+# SA — Super Admin Control Center (final software feature, then freeze)
+
+One deliberate addition after FQA, on top of the frozen `4895b39`. H01 was **not** started; no
+hardware or firmware was touched.
+
+### Architecture decision: no second login
+The M12 `admin` role was already the highest application role, guarded server-side on every
+`/admin/*` rule (blueprint `before_request`), with CSRF-protected session login, hashed passwords,
+account disable and forced password change. A separate Super Admin login would have duplicated all of
+that and added a second attack surface without adding a privilege boundary, so **`admin` is the
+Super Admin** and `/admin` was extended in place (same blueprint, service and design system).
+- No "normal admin" tier exists, so there is no admin-vs-super-admin boundary to enforce. Instead, no
+  admin can disable, reset, force-change or end the sessions of **any** admin account (including
+  their own) from the web UI: user actions are limited to citizen and authority accounts (404
+  otherwise). Admin accounts are provisioned on the server only (README snippet); there are no
+  default or hard-coded credentials.
+- Rate limiting: the existing architecture has none (no limiter dependency); not added (see
+  limitations).
+
+### Capabilities (`/admin/...`, admin role only)
+| Page | What it shows / does |
+|---|---|
+| `/admin` | Dashboard from live DB counts: citizens / authority accounts / admins (active, disabled); IoT total, enabled, disabled, recently seen, stale, offline, never, by district, by sensor type, last telemetry; active hazards by severity, type and affected district; reports pending / accepted / rejected / AI-analyzed / AI disagreement; notification delivery, unread totals, push health; system health summary; recent audit entries |
+| `/admin/users` | Accounts by role and status; Super Admin list (read-only) |
+| `/admin/citizens`, `/<id>` | Search, district/status filter, pagination, registration, last login, report count, notification state. Detail: account, own reports, notification/push state, audit history; disable / re-enable, reset password, force password change, end all sessions |
+| `/admin/authorities`, `/<id>` | Directory (district, linked accounts, status, devices, last activity). Detail: accounts with the same per-account actions, district hazards, devices, open response actions, audit history, **Deactivate / Reactivate authority** |
+| `/admin/devices`, `/<id>` | IoT Device Control Center: search, district, sensor type, status filter (online / stale / offline / never / disabled), 30 s status poll. Detail: device facts (no key material), latest reading per sensor, telemetry history (sensor and 1 h / 6 h / 24 h / 7 d filters, 50 per page), **Connect / Disconnect**, **Rotate API key** |
+| `/admin/hazards`, `/<id>` | All hazards in all districts: type, severity, lifecycle, primary + affected districts, source, created/updated, evidence count, notification state. Detail: status history, photo evidence, notification layers per event, **administrative intervention** (valid lifecycle transitions only) |
+| `/admin/reports` | All citizen reports: id, type, district, status, reporter, submitted, AI result (+ disagreement flag), review state; accept/reject through the M05 review path |
+| `/admin/notifications` | M12 delivery status + unread totals; states that there is no broadcast button |
+| `/admin/push` | Subscriptions total / active / disabled / failing, by user, recent failures; disable a subscription |
+| `/admin/audit` | Append-only audit log with search and action / target / result filters |
+| `/admin/health` | Latest telemetry / hazard / emergency notification, readings (24 h), device connectivity, refused-telemetry and 5xx counters, refused admin actions (24 h), schema revision, push configured |
+
+### IoT control semantics
+- **Connect** = `enabled = true`: authenticated telemetry is accepted again.
+- **Disconnect** = `enabled = false`: telemetry with that device's key is refused (HTTP 401) by the
+  existing `authenticate_device`. The page says "Device disabled by Super Admin." with who, when and why.
+- **Super Admin can disable an IoT device's authenticated access, but cannot physically disconnect
+  the ESP32.** The node may still be powered and on Wi-Fi and will keep trying to send; the UI says so.
+- **Offline** ("Offline — no telemetry received recently") is a separate, derived state: `online`
+  ≤ 5 min, `stale` ≤ 60 min, `offline` older, `never` no telemetry. It is the same rule as Disaster
+  Monitoring (`dashboard_service.freshness`), computed at read time and never written to
+  `IoTDevice.status` (the operator setting is unchanged). Disabled always wins over freshness.
+- **Rotate key:** new `secrets.token_urlsafe(32)`, only its SHA-256 is stored, and the old key fails
+  at commit. The plaintext is rendered once in the POST response (`Cache-Control: no-store`). It is
+  never flashed (the session cookie is client-readable), stored, logged or audited.
+
+### Authority / citizen deactivation model
+Nothing is ever hard-deleted from the Super Admin UI. No delete feature was added: deactivation
+covers every requirement, and nothing needed true deletion.
+- **Deactivate authority** disables every linked account and ends their sessions. Hazards, citizen
+  reports, response records, status history and devices are preserved; the authority's devices keep
+  reporting (disable them separately). Requires a reason + typed `DISABLE AUTHORITY`. Reactivate
+  re-enables the accounts. Deactivating an authority with no linked account is refused (and audited).
+- **Disable account** (citizen or authority) blocks login and ends sessions; all records stay.
+  Requires a reason + typed `DISABLE ACCOUNT`.
+- **Session termination is real:** new `users.session_version`. `User.get_id()` is
+  `"<id>:<version>"` and `load_user` rejects any other version, so bumping it ends every session
+  *and* remember-me cookie. Disable, password reset and "End all sessions" bump it, so re-enabling an
+  account never revives a session from before the disable. Sessions created before this release
+  (bare `"<id>"`) count as version 0, so the upgrade signs nobody out.
+- **Password reset** (now for citizens too): the admin sets a temporary password (hash only), the
+  user must change it at next login, and sessions end. "Force password change" sets only the flag.
+  Current passwords are never visible (only one-way hashes exist).
+
+### Hazard and report intervention
+- Hazard: only transitions in `VALID_STATUS_TRANSITIONS` are offered and accepted. They go through
+  `hazard_event_service.transition_event_status` (compare-and-set, an `IncidentStatusHistory` row with
+  the admin as actor and `Super Admin intervention: <reason>` as note, normal lifecycle
+  notifications). Requires a reason + typed `CHANGE HAZARD STATUS`. Evidence, history and audit rows
+  cannot be edited.
+- Reports: accept/reject via `citizen_report_service.review_report` (never your own report, never
+  twice), reason required. Photo, description and hazard type are never changed.
+- Notifications: no new architecture. Hazard Event → Notification Service → DB notification /
+  website emergency alert / Web Push, unchanged. There is no button that sends notifications.
+
+### Audit log
+- New `audit_logs` table: actor id + username/role snapshot, action, target type/id/label, reason
+  (required, ≤ 500 chars), safe summary, success flag, timestamp.
+- Every action is recorded, including refusals (e.g. invalid transition, already disabled, unlinked
+  authority). Requests rejected before the action (missing reason, wrong typed phrase, bad form value)
+  change nothing and are not recorded.
+- Append-only: SQLAlchemy `before_update` / `before_delete` listeners raise, and `/admin/audit` is
+  GET-only.
+- Never recorded: passwords, temporary passwords, password hashes, API keys or their hashes, VAPID
+  keys, push endpoints/keys, session secrets. Summaries are built from usernames, device ids and
+  statuses; the reason is the operator's own text.
+
+### Security
+- Server-side authorization on every rule: citizen/authority → 403, anonymous → login. Tested by
+  iterating every `/admin` rule and method, with direct GETs and POSTs.
+- CSRF on every new POST (tested with CSRF enabled); Jinja autoescaping on every new page (XSS tests
+  with device names, hazard titles and audit reasons); IDOR (admin targets 404, unknown ids 404).
+- Pages never render: password hashes, device key hashes, push endpoints / `p256dh` / `auth`, the
+  VAPID private key, the secret key, or citizens' current-location coordinates.
+
+### Database changes
+Migration **`a9c4e2f81d57`** (revises `f3b8d2e6a417`), additive only: `users.session_version`
+(int, default 0) and the `audit_logs` table with indexes on `created_at`, `action` and
+`(target_type, target_id)`. Tested: fresh install (`init_db.py`) at head + `flask db check`;
+downgrade to M12 (table and column gone); upgrade again + check (`test_super_admin.py`); and an
+upgrade of a copy of the real dev DB (f3b8d2e6a417 → a9c4e2f81d57). No old migration was modified.
+The dev DB itself was then backed up to `instance/hackforge.pre-super-admin.db` and upgraded
+(`integrity_check` ok, `flask db check` clean). Existing deployments: run `flask db upgrade`.
+
+### Tests
+`tests/test_super_admin.py` (40 tests):
+- authorization: every rule × method for citizen and authority, anonymous, admin-on-admin IDOR, no
+  broadcast route
+- IoT: list/filter/search/status; reason + typed-phrase enforcement; disable → telemetry 401, enable →
+  201; key rotation shown once and old key invalid; no key hash on any page; telemetry history
+  filters/pagination; authority device API untouched
+- authorities: deactivate/reactivate with session end and history preserved; unlinked refusal;
+  password-reset audit
+- citizens: directory; disable/re-enable without session revival; end sessions; force change + reset;
+  own reports only
+- hazards: filters; intervention through the lifecycle with history + notifications + audit; closed
+  hazard
+- reports: view/filter/review/double review; authority blocked
+- push: state without secrets; disable
+- audit: append-only, GET-only, filters, escaping, no credentials
+- security: CSRF, versioned session ids (legacy, forged, bumped), remember-me revocation, XSS, health
+  counters
+- dashboard numbers; migration
+
+Changed existing assertions in `test_admin_push_m12.py`, all to the new required behaviour:
+- admin POSTs now send `reason` (and the typed phrase for disables)
+- citizens can now be reset (admins still cannot)
+- the audit log line uses `action=RESET_PASSWORD`
+- the route-guard test substitutes any `<int:…>` parameter
+- the fresh-install test accepts any head
+
+### Chrome QA (dev server on a migrated **copy** of the dev DB, seeded with QA-only data)
+- Citizen session: every Super Admin page and a direct POST → 403. A pre-existing (bare-id) session
+  cookie still worked, confirming the backward-compatible session format.
+- Super Admin: 24 pages (including every filter state and each device) → 200 with no leaked secrets
+  (the only hit was the env-var *name* in the "Web Push not configured" hint).
+- Disconnect through the confirmation dialog → "Device disabled by Super Admin." with the reason;
+  telemetry 401. A wrong typed phrase (HTML pattern bypassed) → the server refuses with a clear
+  message. Rotate key → shown once; absent from cookies, localStorage, sessionStorage and a reload;
+  refused while disabled; accepted after Connect; a wrong key gets 401.
+- Authority deactivation through the dialog (consequences listed, typed phrase), citizen reset / end
+  sessions / disable / enable, hazard intervention, report review and push disable all succeeded and
+  all appear in the audit log (16 entries, no temporary password on the page).
+- The 30 s status poll fired and kept the badges correct. Console: no errors. No JS-readable cookies
+  (the session is HttpOnly); localStorage empty; sessionStorage holds only the existing
+  `xman-alarmed` flag.
+- Responsive: all 14 page types measured at 390 px and 768 px. **Bug found and fixed:**
+  `/admin/notifications` overflowed at 390 px (the pre-existing "Not configured: set VAPID_…" badge
+  could not wrap). The disabled-device banner was also reworded so the reason no longer runs into the
+  next sentence.
+
+### Limitations
+- One role: there is no lower "normal admin" tier, and admin accounts are managed on the server only.
+- No login rate limiting (not part of the existing architecture).
+- No permanent deletion of authorities or citizens: deactivation only, by design.
+- Health counters (refused telemetry, 5xx) are per process and reset on restart; details are in the
+  application log. A refused telemetry payload is never stored.
+- The hazard intervention commits through `hazard_event_service`, and the audit row is committed right
+  after it. The status-history row (actor, reason, time) is written atomically with the change.
+- Reloading the page that shows a newly rotated key asks the browser to resubmit the form, which would
+  rotate again (audited; the key that was shown then stops working). Copy the key before reloading.
+- Long explanatory sentences on the new pages are in English; navigation, headings and dialog labels
+  are translated to Nepali.
+
+- **Final:** **`python -m pytest tests/ -q` → 912 passed, 2 warnings, 0 failed** (872 + 40 new). The 2
+  warnings are the same third-party SWIG `DeprecationWarning`s as at FQA.
+
+### 🏷️ Status
+**SA — SUPER ADMIN CONTROL CENTER COMPLETE · SOFTWARE FROZEN AGAIN (912 passed, 2 third-party warnings) · NEXT: H01 (not started)**

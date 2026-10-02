@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Web Push'|t }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    {{ aui.head('Web Push'|t, 'Browser subscriptions for emergency push. Endpoints, browser keys and the VAPID private key are never shown. Emergency pushes are sent only by hazard events, never from this page.'|t, icon='smartphone') }}
+    {{ aui.tabs('push') }}
+
+    <div class="grid grid-4" style="margin-bottom:16px;">
+        <a class="stat-card" href="{{ url_for('admin.push') }}" style="text-decoration:none; color:inherit;"><i data-lucide="smartphone"></i><div class="stat-value">{{ p.total }}</div><div class="stat-label">{{ 'Total subscriptions'|t }}</div>
+            <div class="stat-note">{{ p.users }} {{ 'users with an active subscription'|t }}</div></a>
+        <a class="stat-card" href="{{ url_for('admin.push', status='enabled') }}" style="text-decoration:none; color:inherit;"><i data-lucide="circle-check"></i><div class="stat-value">{{ p.enabled }}</div><div class="stat-label">{{ 'Active subscriptions'|t }}</div></a>
+        <a class="stat-card" href="{{ url_for('admin.push', status='disabled') }}" style="text-decoration:none; color:inherit;"><i data-lucide="circle-off"></i><div class="stat-value">{{ p.disabled }}</div><div class="stat-label">{{ 'Disabled subscriptions'|t }}</div></a>
+        <a class="stat-card" href="{{ url_for('admin.push', status='failing') }}" style="text-decoration:none; color:inherit;"><i data-lucide="circle-alert"></i><div class="stat-value">{{ p.failing }}</div><div class="stat-label">{{ 'Failing'|t }}</div>
+            <div class="stat-note">{% if p.configured %}{{ 'Web Push configured'|t }}{% else %}{{ 'Web Push not configured'|t }}{% endif %}</div></a>
+    </div>
+
+    <div class="bento">
+        <section class="card span-12" aria-labelledby="h-fail">
+            <h2 class="card-title" id="h-fail"><i data-lucide="circle-alert"></i> {{ 'Recent push failures'|t }}</h2>
+            {% if failures %}
+            <div class="list">{% for s in failures %}
+                <div class="list-item"><div class="grow"><h3>@{{ s.user.username }} · {{ (s.user_agent or 'Unknown browser')|truncate(60) }}</h3>
+                    <div class="meta">{{ s.failure_count }} {{ 'consecutive failures'|t }} · {{ 'last change'|t }} {{ aui.when(s.updated_at) }} · {{ 'Enabled'|t if s.enabled else 'Disabled'|t }}</div></div></div>
+            {% endfor %}</div>
+            {% else %}<p class="meta">{{ 'No delivery failures recorded.'|t }}</p>{% endif %}
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-list">
+            <h2 class="card-title" id="h-list"><i data-lucide="list"></i> {{ pagination.total }} {{ 'subscriptions'|t }}</h2>
+            <form method="get" class="filter-bar" role="search">
+                <div class="form-group"><label for="q">{{ 'Search'|t }}</label>
+                    <input id="q" name="q" class="form-input" value="{{ f.q }}" placeholder="{{ 'Username'|t }}"></div>
+                <div class="form-group"><label for="status">{{ 'Status'|t }}</label>
+                    <select id="status" name="status" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                        {% for s, label in [('enabled', 'Enabled'), ('disabled', 'Disabled'), ('failing', 'Failing')] %}<option value="{{ s }}" {% if f.status == s %}selected{% endif %}>{{ label|t }}</option>{% endfor %}</select></div>
+                <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> {{ 'Filter'|t }}</button>
+            </form>
+            {% if pagination.items %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'User'|t }}</th><th scope="col">{{ 'Browser'|t }}</th><th scope="col">{{ 'Status'|t }}</th><th scope="col">{{ 'Failures'|t }}</th>
+                    <th scope="col">{{ 'Created'|t }}</th><th scope="col">{{ 'Last delivery'|t }}</th><th scope="col">{{ 'Actions'|t }}</th></tr></thead>
+                <tbody>{% for s in pagination.items %}
+                <tr><td>@{{ s.user.username }}<div class="meta">{{ s.user.role|t }}</div></td>
+                    <td>{{ (s.user_agent or 'Unknown browser')|truncate(60) }}</td>
+                    <td>{% if s.enabled %}<span class="badge badge-success"><i data-lucide="circle-check"></i>{{ 'Enabled'|t }}</span>{% else %}<span class="badge badge-neutral"><i data-lucide="circle-minus"></i>{{ 'Disabled'|t }}</span>{% endif %}</td>
+                    <td>{{ s.failure_count }}</td><td>{{ aui.when(s.created_at) }}</td><td>{{ aui.when(s.last_used_at) }}</td>
+                    <td>{% if s.enabled %}{{ aui.confirm_form(url_for('admin.push_disable', subscription_id=s.id), 'Disable', 'circle-off', 'sub-' ~ s.id,
+                                                             kind='btn-secondary', consequences=['This browser stops receiving emergency push. In-app and in-website alerts still reach the user.']) }}{% else %}—{% endif %}</td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {{ aui.pager(pagination, 'admin.push', f) }}
+            {% else %}{{ ui.empty('smartphone', 'No subscriptions match these filters.') }}{% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}

@@ -2,7 +2,7 @@
 {% import "components/ui.html" as ui with context %}
 {% import "components/admin_ui.html" as aui with context %}
 
-{% block title %}{{ 'Citizens'|t }} - {{ 'Admin'|t }} - {{ t('app_name') }}{% endblock %}
+{% block title %}{{ 'Citizens'|t }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
@@ -10,7 +10,7 @@
 <div class="container">
     <div class="page-head">
         <div>
-            <span class="eyebrow"><i data-lucide="shield"></i> {{ 'Admin Control Center'|t }}</span>
+            <span class="eyebrow"><i data-lucide="shield"></i> {{ 'Super Admin Control Center'|t }}</span>
             <h1>{{ 'Citizens'|t }}{% if selected %} · {{ selected.name }}{% elif f.district_id == 0 %} · {{ 'No district'|t }}{% endif %}</h1>
             <p class="page-sub">{{ 'District-wise citizen directory. Counts come from the database.'|t }}</p>
         </div>
@@ -58,7 +58,7 @@
             <div class="table-wrap">
                 <table>
                     <thead><tr><th scope="col">{{ 'Name'|t }}</th><th scope="col">{{ 'District'|t }}</th><th scope="col">{{ 'Account'|t }}</th>
-                        <th scope="col">{{ 'Notification permission'|t }}</th><th scope="col">{{ 'Emergency push'|t }}</th><th scope="col">{{ 'Registered'|t }}</th></tr></thead>
+                        <th scope="col">{{ 'Notification permission'|t }}</th><th scope="col">{{ 'Emergency push'|t }}</th><th scope="col">{{ 'Reports'|t }}</th><th scope="col">{{ 'Registered'|t }}</th><th scope="col">{{ 'Last login'|t }}</th></tr></thead>
                     <tbody>
                     {% for u in pagination.items %}
                     <tr>
@@ -67,7 +67,9 @@
                         <td>{{ aui.account_status(u) }}</td>
                         <td>{{ aui.alert_state(u.emergency_alert_state) }}</td>
                         <td>{{ aui.push(push_counts.get(u.id, 0) if u.emergency_alert_state == 'granted' else 0) }}</td>
+                        <td>{% if report_counts.get(u.id) %}<a href="{{ url_for('admin.citizen_detail', user_id=u.id) }}#h-reports">{{ report_counts[u.id] }}</a>{% else %}0{% endif %}</td>
                         <td>{{ aui.when(u.created_at) }}</td>
+                        <td>{{ aui.when(u.last_login_at) }}</td>
                     </tr>
                     {% endfor %}
                     </tbody>

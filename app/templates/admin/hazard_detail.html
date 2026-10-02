@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Hazard'|t }} #{{ h.id }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    {% call aui.head('#' ~ h.id ~ ' ' ~ (h.title or ui.hazard_name(h.event_type)), None, icon='siren', eyebrow='Hazard event') %}
+    <span style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a href="/hazards/{{ h.id }}/response" class="btn btn-primary"><i data-lucide="clipboard-list"></i> {{ 'Response workspace'|t }}</a>
+        <a href="{{ url_for('admin.hazards') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> {{ 'Back to hazards'|t }}</a>
+    </span>
+    {% endcall %}
+    {{ aui.tabs('hazards') }}
+
+    <div class="bento">
+        <section class="card span-7" aria-labelledby="h-info">
+            <h2 class="card-title" id="h-info"><i data-lucide="info"></i> {{ 'Event'|t }}</h2>
+            <dl class="kv">
+                <dt>{{ 'Type'|t }}</dt><dd>{{ ui.hazard_icon(h.event_type) }} {{ ui.hazard_name(h.event_type) }}</dd>
+                <dt>{{ 'Severity'|t }}</dt><dd>{{ ui.sev(h.severity) }}</dd>
+                <dt>{{ 'Lifecycle'|t }}</dt><dd>{{ ui.status(h.status) }}</dd>
+                <dt>{{ 'Primary district'|t }}</dt><dd>{{ h.district.name if h.district else '—' }}</dd>
+                <dt>{{ 'Affected districts'|t }}</dt><dd>{{ h.affected_districts|map(attribute='name')|join(', ') or '—' }}</dd>
+                <dt>{{ 'Location'|t }}</dt><dd>{{ h.location or '—' }}</dd>
+                <dt>{{ 'Source'|t }}</dt><dd>{{ h.source|t }} {% if h.source_reference %}<span class="meta">({{ h.source_reference }})</span>{% endif %}</dd>
+                <dt>{{ 'Evidence count'|t }}</dt><dd>{{ h.report_count or 0 }} · {{ d.reports|length }} {{ 'photo reports'|t }}</dd>
+                <dt>{{ 'Open response actions'|t }}</dt><dd>{{ d.open_actions }}</dd>
+                <dt>{{ 'Detected'|t }}</dt><dd>{{ aui.when(h.detected_at) }}</dd>
+                <dt>{{ 'Updated'|t }}</dt><dd>{{ aui.when(h.updated_at) }}</dd>
+                {% if h.resolved_at %}<dt>{{ 'Resolved'|t }}</dt><dd>{{ aui.when(h.resolved_at) }}</dd>{% endif %}
+            </dl>
+            {% if h.description %}<p style="margin-top:12px;">{{ h.description }}</p>{% endif %}
+        </section>
+
+        <section class="card span-5" aria-labelledby="h-intervene">
+            <h2 class="card-title" id="h-intervene"><i data-lucide="gavel"></i> {{ 'Administrative intervention'|t }}</h2>
+            <p class="meta">{{ 'Only transitions allowed by the hazard lifecycle are offered. The change is written to the status history and the audit log, and lifecycle notifications go out exactly as for an authority. Evidence and history cannot be edited.'|t }}</p>
+            {% if d.transitions %}
+            <div class="actions-row" style="flex-direction:column;">
+            {% for s in d.transitions %}
+                {{ aui.confirm_form(url_for('admin.hazard_status', incident_id=h.id), 'Move to ' ~ s, 'arrow-right', 'st-' ~ s,
+                                    phrase=PHRASES.hazard, hidden={'status': s}, kind='btn-danger' if s == 'rejected' else 'btn-secondary',
+                                    consequences=['Lifecycle: ' ~ h.status ~ ' → ' ~ s,
+                                                  'Recorded with your name and reason in the status history and audit log.'] +
+                                                 (['Affected users are notified (hazard ' ~ s ~ ').'] if s in ('confirmed', 'resolved') else [])) }}
+            {% endfor %}
+            </div>
+            {% else %}<p class="meta">{{ 'This hazard is closed; its lifecycle cannot change.'|t }}</p>{% endif %}
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-history">
+            <h2 class="card-title" id="h-history"><i data-lucide="history"></i> {{ 'Status history'|t }}</h2>
+            {% if d.history %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'When'|t }}</th><th scope="col">{{ 'Change'|t }}</th><th scope="col">{{ 'By'|t }}</th><th scope="col">{{ 'Note'|t }}</th></tr></thead>
+                <tbody>{% for row in d.history %}
+                <tr><td>{{ aui.when(row.created_at) }}</td><td>{{ ui.status(row.previous_status) }} → {{ ui.status(row.new_status) }}</td>
+                    <td>{{ ('@' ~ row.changed_by.username) if row.changed_by else 'system'|t }}</td><td>{{ row.note or '—' }}</td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {% else %}<p class="meta">{{ 'No status changes yet.'|t }}</p>{% endif %}
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-notif">
+            <h2 class="card-title" id="h-notif"><i data-lucide="bell-ring"></i> {{ 'Notification state'|t }}</h2>
+            {% if d.notifications %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'Event'|t }}</th><th scope="col">{{ 'Severity'|t }}</th><th scope="col">{{ 'Layers'|t }}</th><th scope="col">{{ 'Recipients'|t }}</th><th scope="col">{{ 'Unread'|t }}</th><th scope="col">{{ 'Sent'|t }}</th></tr></thead>
+                <tbody>{% for n in d.notifications %}
+                <tr><td>{{ n.type.replace('hazard_', '')|t }}</td><td>{{ ui.sev(n.severity) if n.severity else '—' }}</td>
+                    <td>{{ 'In-app'|t }}{% if n.emergency %} + {{ 'website alert'|t }}{% endif %}{% if n.pushed %} + {{ 'push'|t }}{% endif %}</td>
+                    <td>{{ n.recipients }}</td><td>{{ n.unread }}</td><td>{{ aui.when(n.at) }}</td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {% else %}<p class="meta">{{ 'No notifications were sent for this hazard.'|t }}</p>{% endif %}
+        </section>
+
+        <section class="card span-6" aria-labelledby="h-reports">
+            <h2 class="card-title" id="h-reports"><i data-lucide="camera"></i> {{ 'Citizen photo evidence'|t }}</h2>
+            {% if d.reports %}
+            <div class="list">{% for r in d.reports %}
+                <div class="list-item"><div class="grow"><h3>#{{ r.id }} {{ ui.hazard_name(r.hazard_type) }} {{ ui.status(r.status) }}</h3>
+                    <div class="meta">@{{ r.reporter.username if r.reporter else '—' }} · {{ aui.when(r.created_at) }} · {{ ui.ai_result(r.ai_label, r.ai_confidence) if r.ai_status == 'completed' else (r.ai_status|t) }}</div></div>
+                    <a class="btn btn-sm btn-secondary" href="/api/reports/{{ r.id }}/image" target="_blank" rel="noopener"><i data-lucide="image"></i> {{ 'Photo'|t }}</a></div>
+            {% endfor %}</div>
+            {% else %}<p class="meta">{{ 'No photo reports are linked.'|t }}</p>{% endif %}
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-audit">
+            <h2 class="card-title" id="h-audit"><i data-lucide="scroll-text"></i> {{ 'Administrative history'|t }}</h2>
+            {{ aui.audit_table(d.audit, show_target=False) }}
+        </section>
+    </div>
+</div>
+{% endblock %}

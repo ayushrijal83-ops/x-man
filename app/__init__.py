@@ -26,8 +26,15 @@ def create_app(config_name=None):
 
     @login_manager.user_loader
     def load_user(user_id):
-        user = db.session.get(User, int(user_id))
-        return user if user is not None and user.is_active else None  # M12: disabling ends sessions
+        # '<id>:<session_version>'; a bare '<id>' (sessions from before versioning) counts as version 0
+        uid, _, version = str(user_id).partition(':')
+        version = version or '0'
+        if not (uid.isascii() and uid.isdigit() and version.isascii() and version.isdigit()):
+            return None
+        user = db.session.get(User, int(uid))
+        if user is None or not user.is_active or int(version) != (user.session_version or 0):
+            return None  # M12: disabling ends sessions; Super Admin: so does a session_version bump
+        return user
 
     from flask import jsonify as _jsonify, redirect as _redirect, request as _request, url_for as _url_for
 
@@ -141,8 +148,10 @@ def create_app(config_name=None):
             'languages': translation_service.get_supported_languages(),
         }
 
+    from datetime import datetime
     from flask import jsonify, request
     from werkzeug.exceptions import HTTPException
+    from app.extensions import RUNTIME
 
     @app.teardown_request
     def rollback_failed_request(error):
@@ -157,6 +166,9 @@ def create_app(config_name=None):
     def api_errors_as_json(error):
         """M10: /api/* errors (404, 405, 413, CSRF 400, 500...) are short JSON, never HTML pages or
         tracebacks. Other paths keep Flask's standard error pages."""
+        if error.code and error.code >= 500:
+            RUNTIME['server_errors'] += 1
+            RUNTIME['last_server_error_at'] = datetime.utcnow()
         if request.path.startswith('/api/'):
             message = error.description if error.code < 500 else 'Internal server error'
             return jsonify({'error': message}), error.code

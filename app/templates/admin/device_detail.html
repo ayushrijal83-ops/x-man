@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ device.device_id }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    {% call aui.head(device.name, None, icon='cpu', eyebrow='IoT device') %}
+    <a href="{{ url_for('admin.devices') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> {{ 'Back to devices'|t }}</a>
+    {% endcall %}
+    {{ aui.tabs('devices') }}
+
+    {% if new_key %}
+    <section class="secret-once" role="alert" style="margin-bottom:16px;">
+        <strong><i data-lucide="key-round"></i> {{ 'New API key for'|t }} <code style="display:inline">{{ device.device_id }}</code></strong>
+        <code>{{ new_key }}</code>
+        <p class="meta" style="margin:0;">{{ 'Shown only once. Copy it into the device firmware now: it is stored only as a hash and cannot be displayed again. The previous key already stopped working.'|t }}</p>
+    </section>
+    {% endif %}
+
+    {% if d.state == 'disabled' %}
+    <div class="alert alert-error" role="status" style="margin-bottom:16px;">
+        <i data-lucide="shield-off"></i>
+        {% if d.disabled_by_admin %}<strong>{{ 'Device disabled by Super Admin.'|t }}</strong> {{ aui.when(d.disabled_by_admin.created_at) }} · @{{ d.disabled_by_admin.actor_username }} · {{ 'Reason'|t }}: {{ d.disabled_by_admin.reason }}.
+        {% else %}<strong>{{ 'Device disabled.'|t }}</strong>{% endif %}
+        {{ 'Its telemetry is refused. The ESP32 itself may still be powered and on Wi-Fi.'|t }}
+    </div>
+    {% elif d.state == 'offline' %}
+    <div class="alert alert-warning" role="status" style="margin-bottom:16px;"><i data-lucide="wifi-off"></i> {{ 'Offline — no telemetry received recently.'|t }}</div>
+    {% endif %}
+
+    <div class="bento">
+        <section class="card span-7" aria-labelledby="h-device">
+            <h2 class="card-title" id="h-device"><i data-lucide="info"></i> {{ 'Device'|t }}</h2>
+            <dl class="kv">
+                <dt>{{ 'Device ID'|t }}</dt><dd><code>{{ device.device_id }}</code></dd>
+                <dt>{{ 'Status'|t }}</dt><dd>{{ aui.device_state(d.state) }}</dd>
+                <dt>{{ 'Communication'|t }}</dt><dd>{{ 'Enabled (telemetry accepted)'|t if device.enabled else 'Disabled (telemetry refused)'|t }}</dd>
+                <dt>{{ 'Operator status'|t }}</dt><dd>{{ device.status|t }}</dd>
+                <dt>{{ 'Sensor types'|t }}</dt><dd>{{ d.sensor_types|join(', ') or '—' }}</dd>
+                <dt>{{ 'District'|t }}</dt><dd>{{ device.district.name if device.district else '—' }}</dd>
+                <dt>{{ 'River'|t }}</dt><dd>{{ device.river.name if device.river else '—' }}</dd>
+                <dt>{{ 'Authority'|t }}</dt><dd>{% if device.authority %}<a href="{{ url_for('admin.authority_detail', authority_id=device.authority_id) }}">{{ device.authority.name }}</a>{% else %}—{% endif %}</dd>
+                <dt>{{ 'Coordinates'|t }}</dt><dd>{% if device.latitude is not none %}{{ '%.5f'|format(device.latitude) }}, {{ '%.5f'|format(device.longitude) }}{% else %}—{% endif %}{% if device.location_description %}<div class="meta">{{ device.location_description }}</div>{% endif %}</dd>
+                <dt>{{ 'Firmware'|t }}</dt><dd>{{ device.firmware_version or '—' }}</dd>
+                <dt>{{ 'Last seen'|t }}</dt><dd>{{ aui.when(device.last_seen) }}{% if d.age is not none %} <span class="meta">({{ (d.age // 60) }} {{ 'min ago'|t }})</span>{% endif %}</dd>
+                <dt>{{ 'Created'|t }}</dt><dd>{{ aui.when(device.created_at) }}</dd>
+                <dt>{{ 'API key'|t }}</dt><dd><span class="meta">{{ 'Stored only as a hash; never displayed. Rotate to issue a new one.'|t }}</span></dd>
+            </dl>
+        </section>
+
+        <section class="card span-5" aria-labelledby="h-control">
+            <h2 class="card-title" id="h-control"><i data-lucide="sliders-horizontal"></i> {{ 'Control'|t }}</h2>
+            <div class="actions-row" style="flex-direction:column;">
+            {% if device.enabled %}
+                {{ aui.confirm_form(url_for('admin.device_enable', device_id=device.id), 'Disconnect (disable device)', 'shield-off', 'dis',
+                                    phrase=PHRASES.device, hidden={'enabled': '0'},
+                                    consequences=['Telemetry with this device key is refused immediately (HTTP 401).',
+                                                  'The ESP32 is not powered off or removed from Wi-Fi; it keeps trying to send.',
+                                                  'Stored readings and hazards are kept.']) }}
+            {% else %}
+                {{ aui.confirm_form(url_for('admin.device_enable', device_id=device.id), 'Connect (enable device)', 'shield-check', 'en',
+                                    hidden={'enabled': '1'}, kind='btn-success',
+                                    consequences=['Authenticated telemetry from this device is accepted again.']) }}
+            {% endif %}
+                {{ aui.confirm_form(url_for('admin.device_rotate_key', device_id=device.id), 'Rotate API key', 'key-round', 'rot',
+                                    phrase=PHRASES.rotate, kind='btn-secondary',
+                                    consequences=['A new key is generated and shown once on the next page.',
+                                                  'The current key stops working immediately: the device must be re-flashed with the new key.']) }}
+            </div>
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-latest">
+            <h2 class="card-title" id="h-latest"><i data-lucide="gauge"></i> {{ 'Latest reading per sensor'|t }}</h2>
+            {% if d.latest %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'Sensor'|t }}</th><th scope="col">{{ 'Value'|t }}</th><th scope="col">{{ 'Quality'|t }}</th><th scope="col">{{ 'Received'|t }}</th></tr></thead>
+                <tbody>{% for r in d.latest %}
+                <tr><td>{{ r.sensor_type }}</td><td>{{ r.value }} {{ r.unit }}</td><td>{{ r.quality }}</td><td>{{ r.received_at[:16].replace('T', ' ') if r.received_at else '—' }}</td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {% else %}{{ ui.empty('gauge', 'This device has not sent telemetry.') }}{% endif %}
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-telemetry">
+            <h2 class="card-title" id="h-telemetry"><i data-lucide="list"></i> {{ 'Telemetry history'|t }} · {{ d.readings.total }}</h2>
+            <form method="get" class="filter-bar">
+                <div class="form-group"><label for="sensor_type">{{ 'Sensor type'|t }}</label>
+                    <select id="sensor_type" name="sensor_type" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                        {% for s in d.sensor_types %}<option value="{{ s }}" {% if f.sensor_type == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+                <div class="form-group"><label for="hours">{{ 'Period'|t }}</label>
+                    <select id="hours" name="hours" class="form-input"><option value="">{{ 'All time'|t }}</option>
+                        {% for hr in windows %}<option value="{{ hr }}" {% if f.hours == hr %}selected{% endif %}>{{ 'Last'|t }} {{ hr if hr < 168 else 7 }} {{ 'hours'|t if hr < 168 else 'days'|t }}</option>{% endfor %}</select></div>
+                <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> {{ 'Filter'|t }}</button>
+            </form>
+            {% if d.readings.items %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'Received'|t }}</th><th scope="col">{{ 'Recorded'|t }}</th><th scope="col">{{ 'Sensor'|t }}</th><th scope="col">{{ 'Value'|t }}</th><th scope="col">{{ 'Unit'|t }}</th><th scope="col">{{ 'Quality'|t }}</th></tr></thead>
+                <tbody>{% for r in d.readings.items %}
+                <tr><td>{{ aui.when(r.received_at) }}</td><td>{{ aui.when(r.recorded_at) }}</td><td>{{ r.sensor_type }}</td><td>{{ r.value }}</td><td>{{ r.unit }}</td><td>{{ r.quality }}</td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {{ aui.pager(d.readings, 'admin.device_detail', f) }}
+            {% else %}{{ ui.empty('list', 'No readings in this period.') }}{% endif %}
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-audit">
+            <h2 class="card-title" id="h-audit"><i data-lucide="scroll-text"></i> {{ 'Administrative history'|t }}</h2>
+            {{ aui.audit_table(d.audit, show_target=False) }}
+        </section>
+    </div>
+</div>
+{% endblock %}

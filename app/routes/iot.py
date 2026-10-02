@@ -1,7 +1,7 @@
 """IoT API blueprint for hardware device telemetry ingestion."""
 from flask import Blueprint, jsonify, request, g
 from flask_login import current_user
-from app.extensions import csrf, db
+from app.extensions import RUNTIME, csrf, db
 from app.models import IoTDevice, SensorReading, District, Authority, River
 from app.services.risk_engine import validate_sensor_reading, compute_river_status
 from app.services import risk_service
@@ -117,6 +117,15 @@ def authenticate_device():
         return None
 
     return device
+
+
+@iot_bp.after_request
+def count_rejected_telemetry(response):
+    """Super Admin health: count refused telemetry (bad credentials vs bad payload). No payload kept."""
+    if request.endpoint == 'iot.ingest_telemetry' and response.status_code >= 400:
+        RUNTIME['telemetry_rejected_auth' if response.status_code == 401 else 'telemetry_rejected_invalid'] += 1
+        RUNTIME['last_telemetry_rejected_at'] = datetime.utcnow()
+    return response
 
 
 @iot_bp.route('/telemetry', methods=['POST'])

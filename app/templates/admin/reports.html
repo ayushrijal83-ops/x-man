@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Citizen reports'|t }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    {{ aui.head('Citizen reports'|t, 'All photo reports from every district. Reviews go through the normal review path; the original photo and text are never changed.'|t, icon='camera') }}
+    {{ aui.tabs('reports') }}
+
+    <div class="grid grid-4" style="margin-bottom:16px;">
+        <a class="stat-card" href="?status=submitted" style="text-decoration:none; color:inherit;"><i data-lucide="inbox"></i><div class="stat-value">{{ r.pending }}</div><div class="stat-label">{{ 'Pending review'|t }}</div></a>
+        <a class="stat-card" href="?status=accepted" style="text-decoration:none; color:inherit;"><i data-lucide="circle-check"></i><div class="stat-value">{{ r.accepted }}</div><div class="stat-label">{{ 'Accepted'|t }}</div><div class="stat-note">{{ r.rejected }} {{ 'rejected'|t }}</div></a>
+        <a class="stat-card" href="?ai=completed" style="text-decoration:none; color:inherit;"><i data-lucide="scan-search"></i><div class="stat-value">{{ r.ai_analyzed }}</div><div class="stat-label">{{ 'AI-analyzed'|t }}</div></a>
+        <a class="stat-card" href="?ai=disagree" style="text-decoration:none; color:inherit;"><i data-lucide="git-compare"></i><div class="stat-value">{{ r.ai_disagree }}</div><div class="stat-label">{{ 'AI disagrees with reporter'|t }}</div></a>
+    </div>
+
+    <section class="card" aria-labelledby="h-list">
+        <h2 class="card-title" id="h-list"><i data-lucide="camera"></i> {{ pagination.total }} {{ 'reports'|t }}</h2>
+        <form method="get" class="filter-bar" role="search">
+            <div class="form-group"><label for="q">{{ 'Search'|t }}</label>
+                <input id="q" name="q" class="form-input" value="{{ f.q }}" placeholder="{{ 'Reporter or location'|t }}"></div>
+            <div class="form-group"><label for="status">{{ 'Review state'|t }}</label>
+                <select id="status" name="status" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    {% for s in statuses %}<option value="{{ s }}" {% if f.status == s %}selected{% endif %}>{{ s|t }}</option>{% endfor %}</select></div>
+            <div class="form-group"><label for="hazard_type">{{ 'Type'|t }}</label>
+                <select id="hazard_type" name="hazard_type" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    {% for k in types %}<option value="{{ k }}" {% if f.hazard_type == k %}selected{% endif %}>{{ ui.hazard_name(k) }}</option>{% endfor %}</select></div>
+            <div class="form-group"><label for="ai">{{ 'AI result'|t }}</label>
+                <select id="ai" name="ai" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    {% for a in ai_filters %}<option value="{{ a }}" {% if f.ai == a %}selected{% endif %}>{{ {'not_analyzed': 'Not analyzed', 'completed': 'Analyzed', 'failed': 'Analysis failed', 'disagree': 'AI disagrees'}[a]|t }}</option>{% endfor %}</select></div>
+            <div class="form-group"><label for="district_id">{{ 'District'|t }}</label>
+                <select id="district_id" name="district_id" class="form-input"><option value="">{{ 'All districts'|t }}</option>
+                    {% for d in districts %}<option value="{{ d.id }}" {% if f.district_id == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> {{ 'Filter'|t }}</button>
+        </form>
+
+        {% if pagination.items %}
+        <div class="table-wrap"><table>
+            <thead><tr><th scope="col">{{ 'Report'|t }}</th><th scope="col">{{ 'District'|t }}</th><th scope="col">{{ 'Reporter'|t }}</th>
+                <th scope="col">{{ 'Submitted'|t }}</th><th scope="col">{{ 'AI result'|t }}</th><th scope="col">{{ 'Review state'|t }}</th><th scope="col">{{ 'Actions'|t }}</th></tr></thead>
+            <tbody>{% for rep in pagination.items %}
+            <tr>
+                <td>#{{ rep.id }} {{ ui.hazard_name(rep.hazard_type) }}
+                    {% if rep.incident_id %}<div class="meta"><a href="{{ url_for('admin.hazard_detail', incident_id=rep.incident_id) }}">{{ 'Hazard'|t }} #{{ rep.incident_id }}</a></div>{% endif %}</td>
+                <td>{{ rep.district.name if rep.district else '—' }}</td>
+                <td>{% if rep.reporter and rep.reporter.role == 'citizen' %}<a href="{{ url_for('admin.citizen_detail', user_id=rep.reporter_id) }}">@{{ rep.reporter.username }}</a>{% elif rep.reporter %}@{{ rep.reporter.username }}{% else %}—{% endif %}</td>
+                <td>{{ aui.when(rep.created_at) }}</td>
+                <td>{% if rep.ai_status == 'completed' %}{{ ui.ai_result(rep.ai_label, rep.ai_confidence) }}{% if rep.ai_label in types and rep.ai_label != rep.hazard_type %} <span class="badge badge-warning">{{ 'Disagrees'|t }}</span>{% endif %}{% else %}<span class="meta">{{ rep.ai_status.replace('_', ' ')|t }}</span>{% endif %}</td>
+                <td>{{ ui.status(rep.status) }}{% if rep.reviewed_by %}<div class="meta">@{{ rep.reviewed_by.username }} · {{ aui.when(rep.reviewed_at) }}</div>{% endif %}</td>
+                <td><div class="actions-row">
+                    <a class="btn btn-sm btn-secondary" href="/api/reports/{{ rep.id }}/image" target="_blank" rel="noopener"><i data-lucide="image"></i> {{ 'Photo'|t }}</a>
+                    {% if rep.status == 'submitted' and rep.reporter_id != current_user.id %}
+                    {{ aui.confirm_form(url_for('admin.report_review', report_id=rep.id), 'Accept', 'circle-check', 'acc-' ~ rep.id,
+                                        hidden={'status': 'accepted'}, kind='btn-success',
+                                        consequences=['The report is marked accepted and the reporter is notified. The hazard lifecycle is not changed.']) }}
+                    {{ aui.confirm_form(url_for('admin.report_review', report_id=rep.id), 'Reject', 'circle-x', 'rej-' ~ rep.id,
+                                        hidden={'status': 'rejected'},
+                                        consequences=['The report is marked rejected and the reporter is notified. The photo and text are kept as evidence.']) }}
+                    {% endif %}
+                </div></td>
+            </tr>
+            {% endfor %}</tbody>
+        </table></div>
+        {{ aui.pager(pagination, 'admin.reports', f) }}
+        {% else %}{{ ui.empty('camera', 'No reports match these filters.') }}{% endif %}
+    </section>
+</div>
+{% endblock %}

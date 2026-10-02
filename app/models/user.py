@@ -41,10 +41,19 @@ class User(UserMixin, db.Model):
     emergency_alert_state = db.Column(db.String(20), nullable=False, default='not_requested',
                                       server_default='not_requested')
     emergency_sound_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    # Super Admin: bumping this ends every session and remember-me cookie of the account (see get_id)
+    session_version = db.Column(db.Integer, nullable=False, default=0, server_default='0')
 
     authority = db.relationship('Authority', foreign_keys=[authority_id])
     district = db.relationship('District', foreign_keys=[district_id])
     
+    def get_id(self):
+        """Session identity '<id>:<session_version>'; load_user rejects any other version."""
+        return f'{self.id}:{self.session_version or 0}'
+
+    def end_sessions(self):
+        self.session_version = (self.session_version or 0) + 1
+
     def set_password(self, password):
         """Hash and set password."""
         self.password_hash = generate_password_hash(password)

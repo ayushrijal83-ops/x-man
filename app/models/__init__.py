@@ -20,6 +20,7 @@ from app.models.authority_response import AuthorityResponse
 from app.models.iot_device import IoTDevice, SensorReading
 from app.models.citizen_report import CitizenReport
 from app.models.push_subscription import PushSubscription
+from app.models.audit_log import AuditLog
 from app.models.incident_response import IncidentStatusHistory, IncidentInvestigation, IncidentResponseAction
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     'IncidentInvestigation',
     'IncidentResponseAction',
     'PushSubscription',
+    'AuditLog',
 ]

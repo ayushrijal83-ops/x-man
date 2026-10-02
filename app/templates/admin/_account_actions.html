@@ -1,0 +1,28 @@
+{# Super Admin actions for one citizen/authority account (`target`). Every form is audited server-side. #}
+<div class="actions-row" style="flex-direction:column;">
+{% if target.is_active %}
+    {{ aui.confirm_form(url_for('admin.set_status', user_id=target.id), 'Disable account', 'ban', 'dis-' ~ target.id,
+                        phrase=PHRASES.user, hidden={'active': '0'},
+                        consequences=['Login is blocked and every open session ends immediately.',
+                                      'Reports, hazard evidence, notifications and audit records are kept.',
+                                      'The account can be re-enabled later.'] +
+                                     (['This authority account can no longer manage hazards, reports or devices.'] if target.role == 'authority' else [])) }}
+{% else %}
+    {{ aui.confirm_form(url_for('admin.set_status', user_id=target.id), 'Re-enable account', 'circle-check', 'en-' ~ target.id,
+                        hidden={'active': '1'}, kind='btn-success', consequences=['The user can log in again.']) }}
+{% endif %}
+{% call aui.confirm_form(url_for('admin.reset_password', user_id=target.id), 'Reset password', 'key-round', 'pw-' ~ target.id, kind='btn-secondary',
+                         consequences=['You set a temporary password; the current one is never visible (only its hash exists).',
+                                       'Every open session ends; the user must choose a new password at next login.']) %}
+    <div class="form-group"><label for="tp-{{ target.id }}">{{ 'Temporary password'|t }}</label>
+        <input type="password" id="tp-{{ target.id }}" name="temporary_password" class="form-input" minlength="8" required autocomplete="new-password"></div>
+    <div class="form-group"><label for="tc-{{ target.id }}">{{ 'Confirm temporary password'|t }}</label>
+        <input type="password" id="tc-{{ target.id }}" name="confirm_password" class="form-input" minlength="8" required autocomplete="new-password"></div>
+{% endcall %}
+{% if not target.must_change_password %}
+    {{ aui.confirm_form(url_for('admin.force_password_change', user_id=target.id), 'Force password change', 'lock-keyhole', 'fpc-' ~ target.id,
+                        kind='btn-secondary', consequences=['The user must set a new password before they can do anything else.']) }}
+{% endif %}
+    {{ aui.confirm_form(url_for('admin.end_sessions', user_id=target.id), 'End all sessions', 'log-out', 'es-' ~ target.id,
+                        kind='btn-secondary', consequences=['Every browser where this account is signed in (including remember-me) is signed out.']) }}
+</div>

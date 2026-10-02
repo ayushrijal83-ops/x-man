@@ -38,10 +38,13 @@
         <a href="/complaints/new"><i data-lucide="megaphone"></i>{{ t('file_complaint') }}</a>
         {% if current_user.is_authenticated and current_user.role == 'admin' %}
         <div class="sidebar-label">{{ 'Administration'|t }}</div>
-        <a href="/admin"><i data-lucide="shield"></i>{{ 'Admin Control Center'|t }}</a>
+        <a href="/admin"><i data-lucide="shield"></i>{{ 'Super Admin Control Center'|t }}</a>
         <a href="/admin/citizens"><i data-lucide="users"></i>{{ 'Citizens'|t }}</a>
         <a href="/admin/authorities"><i data-lucide="landmark"></i>{{ 'Authorities'|t }}</a>
+        <a href="/admin/devices"><i data-lucide="cpu"></i>{{ 'IoT devices'|t }}</a>
+        <a href="/admin/hazards"><i data-lucide="siren"></i>{{ 'Hazards'|t }}</a>
         <a href="/admin/notifications"><i data-lucide="radio-tower"></i>{{ 'Notification status'|t }}</a>
+        <a href="/admin/audit"><i data-lucide="scroll-text"></i>{{ 'Audit log'|t }}</a>
         {% endif %}
     </nav>
 

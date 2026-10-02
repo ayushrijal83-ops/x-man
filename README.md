@@ -44,7 +44,7 @@
 | **Authority panel** | Separate login where authorities update the roads, rivers, and projects they own |
 | **Citizen hazard reports** | `/report`: photo (JPG/PNG/WebP, re-encoded, EXIF/GPS stripped) + optional location for landslides and road damage; merged into the matching hazard event; private to the reporter, the district authority and admins |
 | **Emergency alerts** | Three layers for hazards affecting your district: in-app notification, on-screen emergency alert with an optional short alarm, and opt-in browser Web Push (see limitations) |
-| **Admin control center** | `/admin`: district-wise citizen directory, authority accounts (enable/disable, temporary-password reset), notification delivery status |
+| **Super Admin Control Center** | `/admin`: live platform dashboard; citizen and authority directories (deactivate/reactivate, password reset, force password change, end sessions); IoT device control (connect/disconnect = accept/refuse authenticated telemetry, key rotation, telemetry history); all hazards (lifecycle-checked intervention) and citizen reports; notification and Web Push health; append-only audit log; system health. Every action needs a reason, dangerous ones a typed confirmation |
 | **Disaster monitoring** | `/monitoring`: role-scoped view of active hazards (summary, Leaflet map, list), IoT devices with latest readings and freshness, citizen photo reports with AI evidence, and your alerts. Periodically refreshed (30 s polling), not real-time |
 | **Four languages** | English, Nepali, Newari (Nepal Bhasa), Maithili |
 | **Light + dark themes** | X-MAN design system (`static/css/xman.css`): glass surfaces, bento grid, severity always shown as icon + word + colour; preference persisted in `localStorage` |
@@ -248,9 +248,11 @@ with app.app_context():
 
 For a throwaway local demo only, `AUTHORITY_SELF_REGISTRATION=true` re-enables `/auth/authority/register`.
 
-**Administrators** use the same snippet with `role='admin'` (no `authority_id`). Admins sign in at
-`/auth/authority/login` and manage citizens, authority accounts (enable/disable, temporary-password reset)
-and emergency notification status at `/admin`. Citizens register themselves at `/auth/register`
+**Administrators** use the same snippet with `role='admin'` (no `authority_id`). The admin role is the
+**Super Admin**: the highest role, with no separate login and no default credentials. Admins sign in at
+`/auth/authority/login` and run the Super Admin Control Center at `/admin`. Admin accounts can only be
+created or changed on the server, never from the web UI. Super Admin can disable an IoT device's
+authenticated access but cannot physically disconnect the ESP32. Citizens register themselves at `/auth/register`
 (name, username, email, Nepal mobile, password, district and permanent address; current location is optional).
 
 **Production:** `FLASK_ENV=production` refuses to start unless `SECRET_KEY` is set to your own random
@@ -456,11 +458,17 @@ GET      /monitoring                          dashboard page (any logged-in user
 GET      /api/dashboard?district_id=<id>      JSON for the page; district_id is admin-only
 ```
 
-**Admin control center** (admin role only; everything else gets 403)
+**Super Admin Control Center** (admin role only; everything else gets 403). Every POST needs a `reason`
+(audited); disables, key rotation and hazard changes also need the typed phrase shown in the dialog.
 ```
-GET      /admin  /admin/citizens  /admin/citizens/<id>  /admin/authorities  /admin/authorities/<id>
-GET      /admin/notifications
-POST     /admin/users/<id>/status  /admin/users/<id>/reset-password
+GET      /admin  /admin/users  /admin/health  /admin/audit
+GET      /admin/citizens  /admin/citizens/<id>  /admin/authorities  /admin/authorities/<id>
+GET      /admin/devices  /admin/devices/<id>  /admin/devices/status.json
+GET      /admin/hazards  /admin/hazards/<id>  /admin/reports  /admin/notifications  /admin/push
+POST     /admin/users/<id>/status  /reset-password  /force-password-change  /end-sessions
+POST     /admin/authorities/<id>/status
+POST     /admin/devices/<id>/status  /admin/devices/<id>/rotate-key
+POST     /admin/hazards/<id>/status  /admin/reports/<id>/review  /admin/push/<id>/disable
 ```
 
 **Emergency alerts** (own account only)

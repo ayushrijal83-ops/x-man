@@ -2,7 +2,7 @@
 {% import "components/ui.html" as ui with context %}
 {% import "components/admin_ui.html" as aui with context %}
 
-{% block title %}{{ authority.name }} - {{ 'Admin'|t }} - {{ t('app_name') }}{% endblock %}
+{% block title %}{{ authority.name }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
@@ -42,22 +42,9 @@
                             <span>{{ 'Last login'|t }}: {{ aui.when(u.last_login_at) }}</span>
                         </div>
                     </div>
-                    <form method="post" action="{{ url_for('admin.set_status', user_id=u.id) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="active" value="{{ '0' if u.is_active else '1' }}">
-                        {% if u.is_active %}<button class="btn btn-sm btn-danger" type="submit"><i data-lucide="ban"></i> {{ 'Disable'|t }}</button>
-                        {% else %}<button class="btn btn-sm btn-success" type="submit"><i data-lucide="circle-check"></i> {{ 'Enable'|t }}</button>{% endif %}
-                    </form>
                     <details style="flex-basis:100%;">
-                        <summary>{{ 'Reset password'|t }}</summary>
-                        <form method="post" action="{{ url_for('admin.reset_password', user_id=u.id) }}" class="form-row" style="margin-top:8px;" autocomplete="off">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="form-group"><label for="tp-{{ u.id }}">{{ 'Temporary password'|t }}</label>
-                                <input type="password" id="tp-{{ u.id }}" name="temporary_password" class="form-input" minlength="8" required autocomplete="new-password"></div>
-                            <div class="form-group"><label for="tc-{{ u.id }}">{{ 'Confirm temporary password'|t }}</label>
-                                <input type="password" id="tc-{{ u.id }}" name="confirm_password" class="form-input" minlength="8" required autocomplete="new-password"></div>
-                            <div class="form-group" style="align-self:end;"><button class="btn btn-secondary" type="submit"><i data-lucide="key-round"></i> {{ 'Set temporary password'|t }}</button></div>
-                        </form>
+                        <summary>{{ 'Manage account'|t }}</summary>
+                        <div style="margin-top:8px;">{% with target=u %}{% include "admin/_account_actions.html" %}{% endwith %}</div>
                     </details>
                 </div>
             {% endfor %}
@@ -65,10 +52,30 @@
             {% else %}{{ ui.empty('unlink', 'No user account is linked to this authority.') }}{% endif %}
         </section>
 
+        <section class="card span-12" aria-labelledby="h-deact">
+            <h2 class="card-title" id="h-deact"><i data-lucide="power"></i> {{ 'Authority access'|t }}</h2>
+            {% set active_accounts = d.accounts|selectattr('is_active')|list %}
+            {% if not d.accounts %}<p class="meta">{{ 'No linked accounts: nothing to deactivate.'|t }}</p>
+            {% elif active_accounts %}
+            <p class="meta">{{ 'Deactivating never deletes the authority or anything that depends on it.'|t }}</p>
+            {{ aui.confirm_form(url_for('admin.authority_status', authority_id=authority.id), 'Deactivate authority', 'power-off', 'auth-off',
+                                phrase=PHRASES.authority, hidden={'active': '0'},
+                                consequences=['All linked accounts are disabled; their sessions end immediately.',
+                                              'The authority can no longer manage hazards, reports or devices.',
+                                              'Historical hazards, citizen reports and response records are preserved.',
+                                              'Registered IoT devices keep reporting; disable them separately if needed.']) }}
+            {% else %}
+            <p><span class="badge badge-danger"><i data-lucide="ban"></i>{{ 'Deactivated: all linked accounts are disabled'|t }}</span></p>
+            {{ aui.confirm_form(url_for('admin.authority_status', authority_id=authority.id), 'Reactivate authority', 'power', 'auth-on',
+                                hidden={'active': '1'}, kind='btn-success',
+                                consequences=['All linked accounts can log in and manage their district again.']) }}
+            {% endif %}
+        </section>
+
         <section class="card span-7" aria-labelledby="h-hazards">
             <h2 class="card-title" id="h-hazards"><i data-lucide="triangle-alert"></i> {{ 'Active hazards in this district'|t }}</h2>
             {% if d.hazards %}
-            <div class="list">{% for h in d.hazards %}{{ ui.hazard_row(h, '/hazards/' ~ h.id ~ '/response') }}{% endfor %}</div>
+            <div class="list">{% for h in d.hazards %}{{ ui.hazard_row(h, '/admin/hazards/' ~ h.id) }}{% endfor %}</div>
             {% else %}{{ ui.empty('shield-check', 'No active hazards.') }}{% endif %}
         </section>
 
@@ -76,7 +83,7 @@
             <h2 class="card-title" id="h-devices"><i data-lucide="cpu"></i> {{ 'IoT devices'|t }}</h2>
             {% if d.devices %}
             <div class="list">{% for dev in d.devices %}
-                <div class="list-item"><div class="grow"><h3>{{ dev.name }}</h3>
+                <div class="list-item"><div class="grow"><h3><a href="{{ url_for('admin.device_detail', device_id=dev.id) }}">{{ dev.name }}</a></h3>
                     <div class="meta"><code>{{ dev.device_id }}</code>
                         {% if dev.enabled %}<span class="badge badge-success"><i data-lucide="circle-check"></i>{{ dev.status|t }}</span>{% else %}<span class="badge badge-neutral"><i data-lucide="circle-minus"></i>{{ 'Disabled'|t }}</span>{% endif %}
                         <span>{{ 'Last seen'|t }}: {{ aui.when(dev.last_seen) }}</span></div></div></div>
@@ -93,6 +100,10 @@
                 <dt>{{ 'Email'|t }}</dt><dd>{{ authority.email or '—' }}</dd>
                 <dt>{{ 'Address'|t }}</dt><dd>{{ authority.address or '—' }}</dd>
             </dl>
+        </section>
+        <section class="card span-12" aria-labelledby="h-audit">
+            <h2 class="card-title" id="h-audit"><i data-lucide="scroll-text"></i> {{ 'Administrative history'|t }}</h2>
+            {{ aui.audit_table(d.audit) }}
         </section>
     </div>
 </div>

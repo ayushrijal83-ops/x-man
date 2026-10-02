@@ -2,6 +2,7 @@
 Web Push (RFC 8291/8292) and the three notification layers on top of M03/M04 hazard notifications."""
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -174,8 +175,8 @@ class TestAdminAccess:
         rules = [r for r in app.url_map.iter_rules() if r.rule.startswith('/admin')]
         assert len(rules) >= 8
         for rule in rules:
-            url = rule.rule.replace('<int:user_id>', str(world['u']['cit_b'])).replace(
-                '<int:authority_id>', str(world['auth_b']))
+            url = re.sub(r'<int:\w+>', '1', rule.rule.replace('<int:user_id>', str(world['u']['cit_b'])).replace(
+                '<int:authority_id>', str(world['auth_b'])))
             method = 'POST' if 'POST' in rule.methods and 'GET' not in rule.methods else 'GET'
             assert client.open(url, method=method).status_code == 403, url
 
@@ -244,7 +245,7 @@ class TestAuthorityManagement:
         with app.app_context():
             old_hash = user(app, uid).password_hash
         response = client.post(f'/admin/users/{uid}/reset-password',
-                               data={'temporary_password': 'Temp-Pass-123', 'confirm_password': 'Temp-Pass-123'},
+                               data={'temporary_password': 'Temp-Pass-123', 'confirm_password': 'Temp-Pass-123', 'reason': 'test reset'},
                                follow_redirects=True)
         assert response.status_code == 200 and 'Temp-Pass-123' not in body(response)
         with app.app_context():
@@ -280,23 +281,24 @@ class TestAuthorityManagement:
     def test_reset_rejects_bad_temporary_password(self, app, client, world, temp, confirm):
         login(client, 'admin')
         uid = world['u']['auth_a']
-        client.post(f'/admin/users/{uid}/reset-password', data={'temporary_password': temp, 'confirm_password': confirm})
+        client.post(f'/admin/users/{uid}/reset-password', data={'temporary_password': temp, 'confirm_password': confirm, 'reason': 'test reset'})
         with app.app_context():
             assert user(app, uid).check_password('original-pw') and not user(app, uid).must_change_password
 
-    def test_reset_only_for_authority_accounts(self, app, client, world):
+    def test_reset_for_managed_accounts_never_admins(self, app, client, world):
         login(client, 'admin')
-        data = {'temporary_password': 'Temp-Pass-123', 'confirm_password': 'Temp-Pass-123'}
+        data = {'temporary_password': 'Temp-Pass-123', 'confirm_password': 'Temp-Pass-123', 'reason': 'test reset'}
+        # Super Admin release: citizen accounts can be reset too; admin accounts never
         client.post(f"/admin/users/{world['u']['cit_a1']}/reset-password", data=data)
         assert client.post(f"/admin/users/{world['u']['admin']}/reset-password", data=data).status_code == 404
         with app.app_context():
-            assert user(app, world['u']['cit_a1']).check_password('original-pw')
+            assert user(app, world['u']['cit_a1']).check_password('Temp-Pass-123')
             assert user(app, world['u']['admin']).check_password('original-pw')
 
     def test_authority_cannot_reset_another_authority(self, app, client, world):
         login(client, 'auth_a')
         response = client.post(f"/admin/users/{world['u']['auth_b']}/reset-password",
-                               data={'temporary_password': 'Temp-Pass-123', 'confirm_password': 'Temp-Pass-123'})
+                               data={'temporary_password': 'Temp-Pass-123', 'confirm_password': 'Temp-Pass-123', 'reason': 'test reset'})
         assert response.status_code == 403
         with app.app_context():
             assert user(app, world['u']['auth_b']).check_password('original-pw')
@@ -313,7 +315,7 @@ class TestAuthorityManagement:
         as_other('POST', '/auth/authority/login', data={'username': 'auth_a', 'password': 'original-pw'})
         assert as_other('GET', '/authority/dashboard').status_code == 200
         login(client, 'admin')
-        client.post(f"/admin/users/{world['u']['auth_a']}/status", data={'active': '0'})
+        client.post(f"/admin/users/{world['u']['auth_a']}/status", data={'active': '0', 'reason': 'test', 'confirm': 'DISABLE ACCOUNT'})
         with app.app_context():
             assert user(app, world['u']['auth_a']).is_active is False
         # the open session ends, and login is refused
@@ -322,7 +324,7 @@ class TestAuthorityManagement:
         assert as_other('GET', '/authority/dashboard').status_code == 302
         g.pop('_login_user', None)
         login(client, 'admin')
-        client.post(f"/admin/users/{world['u']['auth_a']}/status", data={'active': '1'})
+        client.post(f"/admin/users/{world['u']['auth_a']}/status", data={'active': '1', 'reason': 'test'})
         as_other('POST', '/auth/authority/login', data={'username': 'auth_a', 'password': 'original-pw'})
         assert as_other('GET', '/authority/dashboard').status_code == 200
 
@@ -338,8 +340,8 @@ class TestAuthorityManagement:
         login(client, 'admin')
         with caplog.at_level('INFO'):
             client.post(f"/admin/users/{world['u']['auth_a']}/reset-password",
-                        data={'temporary_password': 'Temp-Pass-123', 'confirm_password': 'Temp-Pass-123'})
-        assert any('action=reset_password' in r.getMessage() for r in caplog.records)
+                        data={'temporary_password': 'Temp-Pass-123', 'confirm_password': 'Temp-Pass-123', 'reason': 'test reset'})
+        assert any('action=RESET_PASSWORD' in r.getMessage() for r in caplog.records)
         assert not any('Temp-Pass-123' in r.getMessage() for r in caplog.records)
 
 
@@ -399,7 +401,8 @@ class TestCitizenManagement:
 
     def test_disable_citizen(self, app, client, world):
         login(client, 'admin')
-        client.post(f"/admin/users/{world['u']['cit_a1']}/status", data={'active': '0'})
+        client.post(f"/admin/users/{world['u']['cit_a1']}/status",
+                    data={'active': '0', 'reason': 'test', 'confirm': 'DISABLE ACCOUNT'})
         response = login(client, 'cit_a1')
         assert response.status_code == 403 and 'disabled' in body(response)
         assert client.get('/dashboard').status_code == 302
@@ -847,7 +850,7 @@ def test_fresh_install_has_m12_schema(tmp_path):
 
     assert run('init_db.py').returncode == 0
     current = run('-m', 'flask', 'db', 'current')
-    assert 'f3b8d2e6a417 (head)' in current.stdout + current.stderr
+    assert '(head)' in current.stdout + current.stderr  # M12 or a later additive head (Super Admin)
     assert run('-m', 'flask', 'db', 'check').returncode == 0
     import sqlite3
     con = sqlite3.connect(path)

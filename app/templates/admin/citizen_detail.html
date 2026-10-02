@@ -2,7 +2,7 @@
 {% import "components/ui.html" as ui with context %}
 {% import "components/admin_ui.html" as aui with context %}
 
-{% block title %}{{ user.full_name or user.username }} - {{ 'Admin'|t }} - {{ t('app_name') }}{% endblock %}
+{% block title %}{{ user.full_name or user.username }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 {% include "components/navbar.html" %}
@@ -36,16 +36,8 @@
 
         <section class="card span-5" aria-labelledby="h-manage">
             <h2 class="card-title" id="h-manage"><i data-lucide="settings"></i> {{ 'Manage'|t }}</h2>
-            <form method="post" action="{{ url_for('admin.set_status', user_id=user.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="active" value="{{ '0' if user.is_active else '1' }}">
-                {% if user.is_active %}
-                <p class="meta">{{ 'Disabling signs the citizen out and blocks login. Their data and notification history are kept.'|t }}</p>
-                <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> {{ 'Disable account'|t }}</button>
-                {% else %}
-                <button class="btn btn-success" type="submit"><i data-lucide="circle-check"></i> {{ 'Enable account'|t }}</button>
-                {% endif %}
-            </form>
+            {% if user.must_change_password %}<p><span class="badge badge-warning"><i data-lucide="key-round"></i>{{ 'Must change password'|t }}</span></p>{% endif %}
+            {% with target=user %}{% include "admin/_account_actions.html" %}{% endwith %}
         </section>
 
         <section class="card span-12" aria-labelledby="h-notif">
@@ -65,6 +57,24 @@
                 {% endfor %}</tbody>
             </table></div>
             {% else %}<p class="meta">{{ 'No push subscriptions.'|t }}</p>{% endif %}
+        </section>
+        <section class="card span-12" aria-labelledby="h-reports">
+            <h2 class="card-title" id="h-reports"><i data-lucide="camera"></i> {{ 'Submitted reports'|t }} · {{ d.report_total }}</h2>
+            {% if d.reports %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">{{ 'Report'|t }}</th><th scope="col">{{ 'District'|t }}</th><th scope="col">{{ 'Submitted'|t }}</th><th scope="col">{{ 'Review state'|t }}</th><th scope="col">{{ 'Hazard'|t }}</th></tr></thead>
+                <tbody>{% for r in d.reports %}
+                <tr><td>#{{ r.id }} {{ ui.hazard_name(r.hazard_type) }}</td><td>{{ r.district.name if r.district else '—' }}</td><td>{{ aui.when(r.created_at) }}</td>
+                    <td>{{ ui.status(r.status) }}</td><td>{% if r.incident_id %}<a href="{{ url_for('admin.hazard_detail', incident_id=r.incident_id) }}">#{{ r.incident_id }}</a>{% else %}—{% endif %}</td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {% if d.report_total > d.reports|length %}<p class="meta"><a href="{{ url_for('admin.reports', q=user.username) }}">{{ 'All reports by this citizen'|t }} →</a></p>{% endif %}
+            {% else %}<p class="meta">{{ 'No reports submitted.'|t }}</p>{% endif %}
+        </section>
+
+        <section class="card span-12" aria-labelledby="h-audit">
+            <h2 class="card-title" id="h-audit"><i data-lucide="scroll-text"></i> {{ 'Administrative history'|t }}</h2>
+            {{ aui.audit_table(d.audit, show_target=False) }}
         </section>
     </div>
 </div>

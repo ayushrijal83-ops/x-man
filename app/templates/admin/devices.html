@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'IoT devices'|t }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    {{ aui.head('IoT Device Control Center'|t, 'Connect = accept authenticated telemetry. Disconnect = refuse it. Super Admin cannot power off or physically disconnect an ESP32.'|t, icon='cpu') }}
+    {{ aui.tabs('devices') }}
+
+    <div class="grid grid-4" style="margin-bottom:16px;">
+        {% for state, icon in [('online', 'wifi'), ('stale', 'clock-alert'), ('offline', 'wifi-off'), ('disabled', 'shield-off')] %}
+        <a class="stat-card" href="{{ url_for('admin.devices', status=state) }}" style="text-decoration:none; color:inherit;"><i data-lucide="{{ icon }}"></i>
+            <div class="stat-value">{{ summary.states[state] + (summary.states.never if state == 'offline' else 0) }}</div>
+            <div class="stat-label">{{ {'online': 'Online', 'stale': 'Stale', 'offline': 'Offline', 'disabled': 'Disabled'}[state]|t }}</div>
+            {% if state == 'offline' %}<div class="stat-note">{{ summary.states.never }} {{ 'never reported'|t }}</div>{% endif %}</a>
+        {% endfor %}
+    </div>
+
+    <section class="card" aria-labelledby="h-list">
+        <h2 class="card-title" id="h-list"><i data-lucide="cpu"></i> {{ pagination.total }} {{ 'devices'|t }}
+            <span class="meta" style="margin-left:auto; font-weight:400;" id="poll-note">{{ 'Status refreshes every 30 s'|t }}</span></h2>
+        <form method="get" class="filter-bar" role="search">
+            <div class="form-group"><label for="q">{{ 'Search'|t }}</label>
+                <input id="q" name="q" class="form-input" value="{{ f.q }}" placeholder="{{ 'Name or device ID'|t }}"></div>
+            <div class="form-group"><label for="district_id">{{ 'District'|t }}</label>
+                <select id="district_id" name="district_id" class="form-input"><option value="">{{ 'All districts'|t }}</option>
+                    {% for d in districts %}<option value="{{ d.id }}" {% if f.district_id == d.id %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+            <div class="form-group"><label for="sensor_type">{{ 'Sensor type'|t }}</label>
+                <select id="sensor_type" name="sensor_type" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    {% for s in sensors %}<option value="{{ s }}" {% if f.sensor_type == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+            <div class="form-group"><label for="status">{{ 'Status'|t }}</label>
+                <select id="status" name="status" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    {% for s, label in [('online', 'Online'), ('stale', 'Stale'), ('offline', 'Offline'), ('never', 'Never reported'), ('disabled', 'Disabled')] %}
+                    <option value="{{ s }}" {% if f.status == s %}selected{% endif %}>{{ label|t }}</option>{% endfor %}</select></div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> {{ 'Filter'|t }}</button>
+        </form>
+
+        {% if pagination.items %}
+        <div class="table-wrap"><table>
+            <thead><tr><th scope="col">{{ 'Device'|t }}</th><th scope="col">{{ 'District'|t }}</th><th scope="col">{{ 'River'|t }}</th>
+                <th scope="col">{{ 'Status'|t }}</th><th scope="col">{{ 'Last seen'|t }}</th><th scope="col">{{ 'Firmware'|t }}</th><th scope="col">{{ 'Authority'|t }}</th></tr></thead>
+            <tbody>{% for dev in pagination.items %}
+            <tr>
+                <td><a href="{{ url_for('admin.device_detail', device_id=dev.id) }}">{{ dev.name }}</a><div class="meta"><code>{{ dev.device_id }}</code></div></td>
+                <td>{{ dev.district.name if dev.district else '—' }}</td>
+                <td>{{ dev.river.name if dev.river else '—' }}</td>
+                <td>{{ aui.device_state(states[dev.id], dev.id) }}</td>
+                <td>{{ aui.when(dev.last_seen) }}</td>
+                <td>{{ dev.firmware_version or '—' }}</td>
+                <td>{% if dev.authority %}<a href="{{ url_for('admin.authority_detail', authority_id=dev.authority_id) }}">{{ dev.authority.name }}</a>{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}</tbody>
+        </table></div>
+        {{ aui.pager(pagination, 'admin.devices', f) }}
+        {% else %}{{ ui.empty('cpu', 'No devices match these filters.') }}{% endif %}
+    </section>
+</div>
+
+<script>
+(function () {
+    // Same freshness rule as /monitoring, derived server-side from last_seen; nothing is written.
+    var LABELS = {{ {'online': 'Online'|t, 'stale': 'Stale'|t, 'offline': 'Offline — no telemetry received recently'|t,
+                     'never': 'Never reported'|t, 'disabled': 'Disabled — telemetry refused'|t}|tojson }};
+    var KIND = {online: 'success', stale: 'warning', offline: 'danger', never: 'neutral', disabled: 'neutral'};
+    function poll() {
+        fetch('{{ url_for("admin.device_status") }}', {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data) { return; }
+                document.querySelectorAll('[data-device-state]').forEach(function (el) {
+                    var state = data.states[el.getAttribute('data-device-state')];
+                    if (!state) { return; }
+                    el.className = 'badge badge-' + KIND[state];
+                    el.querySelector('span').textContent = LABELS[state];
+                });
+            }).catch(function () {});
+    }
+    setInterval(poll, 30000);
+})();
+</script>
+{% endblock %}

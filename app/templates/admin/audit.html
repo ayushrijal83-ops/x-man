@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% import "components/ui.html" as ui with context %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Audit log'|t }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    {{ aui.head('Audit log'|t, 'Every Super Admin action, including refused attempts. Append-only: entries cannot be edited or deleted from the application. Credentials are never recorded.'|t) }}
+    {{ aui.tabs('audit') }}
+
+    <section class="card" aria-labelledby="h-list">
+        <h2 class="card-title" id="h-list"><i data-lucide="scroll-text"></i> {{ pagination.total }} {{ 'entries'|t }}</h2>
+        <form method="get" class="filter-bar" role="search">
+            <div class="form-group"><label for="q">{{ 'Search'|t }}</label>
+                <input id="q" name="q" class="form-input" value="{{ f.q }}" placeholder="{{ 'Actor, target or reason'|t }}"></div>
+            <div class="form-group"><label for="action">{{ 'Action'|t }}</label>
+                <select id="action" name="action" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    {% for a in actions %}<option value="{{ a }}" {% if f.action == a %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></div>
+            <div class="form-group"><label for="target_type">{{ 'Target'|t }}</label>
+                <select id="target_type" name="target_type" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    {% for tt in targets %}<option value="{{ tt }}" {% if f.target_type == tt %}selected{% endif %}>{{ tt.replace('_', ' ')|t }}</option>{% endfor %}</select></div>
+            <div class="form-group"><label for="outcome">{{ 'Result'|t }}</label>
+                <select id="outcome" name="outcome" class="form-input"><option value="">{{ 'Any'|t }}</option>
+                    <option value="success" {% if f.outcome == 'success' %}selected{% endif %}>{{ 'Success'|t }}</option>
+                    <option value="failure" {% if f.outcome == 'failure' %}selected{% endif %}>{{ 'Refused'|t }}</option></select></div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> {{ 'Filter'|t }}</button>
+        </form>
+        {% if pagination.items %}
+        {{ aui.audit_table(pagination.items) }}
+        {{ aui.pager(pagination, 'admin.audit', f) }}
+        {% else %}{{ ui.empty('scroll-text', 'No audit entries match these filters.') }}{% endif %}
+    </section>
+</div>
+{% endblock %}

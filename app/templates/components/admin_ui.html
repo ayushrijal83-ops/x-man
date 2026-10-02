@@ -1,13 +1,31 @@
-{# M12 admin helpers. Import with: {% import "components/admin_ui.html" as aui with context %} #}
+{# Super Admin helpers. Import with: {% import "components/admin_ui.html" as aui with context %} #}
 
 {% macro tabs(active) -%}
-<nav class="filter-bar" aria-label="{{ 'Admin sections'|t }}">
-    {% for key, href, icon, label in [('home', '/admin', 'shield', 'Overview'), ('citizens', '/admin/citizens', 'users', 'Citizens'),
+<nav class="filter-bar admin-tabs" aria-label="{{ 'Super Admin sections'|t }}">
+    {% for key, href, icon, label in [('home', '/admin', 'shield', 'Overview'), ('users', '/admin/users', 'user-cog', 'Users'),
+                                      ('citizens', '/admin/citizens', 'users', 'Citizens'),
                                       ('authorities', '/admin/authorities', 'landmark', 'Authorities'),
-                                      ('notifications', '/admin/notifications', 'radio-tower', 'Notification status')] %}
+                                      ('devices', '/admin/devices', 'cpu', 'IoT devices'),
+                                      ('hazards', '/admin/hazards', 'siren', 'Hazards'),
+                                      ('reports', '/admin/reports', 'camera', 'Reports'),
+                                      ('notifications', '/admin/notifications', 'radio-tower', 'Notification status'),
+                                      ('push', '/admin/push', 'smartphone', 'Web Push'),
+                                      ('audit', '/admin/audit', 'scroll-text', 'Audit log'),
+                                      ('health', '/admin/health', 'heart-pulse', 'System health')] %}
     <a href="{{ href }}" class="btn btn-sm {{ 'btn-primary' if key == active else 'btn-secondary' }}" {% if key == active %}aria-current="page"{% endif %}><i data-lucide="{{ icon }}"></i> {{ label|t }}</a>
     {% endfor %}
 </nav>
+{%- endmacro %}
+
+{% macro head(title, sub, icon='shield', eyebrow='Super Admin Control Center') -%}
+<div class="page-head">
+    <div>
+        <span class="eyebrow"><i data-lucide="{{ icon }}"></i> {{ eyebrow|t }}</span>
+        <h1>{{ title }}</h1>
+        {% if sub %}<p class="page-sub">{{ sub }}</p>{% endif %}
+    </div>
+    {{ caller() if caller is defined else '' }}
+</div>
 {%- endmacro %}
 
 {% macro account_status(user) -%}
@@ -28,13 +46,29 @@
 {% else %}<span class="badge badge-neutral"><i data-lucide="smartphone" aria-hidden="true"></i>{{ 'Push off'|t }}</span>{% endif %}
 {%- endmacro %}
 
-{# keeps the current filters when paging #}
+{# Device UI state (derived from last_seen + enabled; never stored). "disabled" = telemetry refused, not unplugged. #}
+{% set DEVICE_STATE = {'online': ('wifi', 'Online', 'success'), 'stale': ('clock-alert', 'Stale', 'warning'),
+                       'offline': ('wifi-off', 'Offline — no telemetry received recently', 'danger'),
+                       'never': ('circle-dashed', 'Never reported', 'neutral'),
+                       'disabled': ('shield-off', 'Disabled — telemetry refused', 'neutral')} %}
+{% macro device_state(state, device_pk=None) -%}
+{% set icon, label, kind = DEVICE_STATE.get(state, ('circle', state, 'neutral')) %}
+<span class="badge badge-{{ kind }}" {% if device_pk %}data-device-state="{{ device_pk }}"{% endif %}><i data-lucide="{{ icon }}" aria-hidden="true"></i><span>{{ label|t }}</span></span>
+{%- endmacro %}
+
+{% macro outcome(entry) -%}
+{% if entry.success %}<span class="badge badge-success"><i data-lucide="circle-check" aria-hidden="true"></i>{{ 'Success'|t }}</span>
+{% else %}<span class="badge badge-danger"><i data-lucide="circle-x" aria-hidden="true"></i>{{ 'Refused'|t }}</span>{% endif %}
+{%- endmacro %}
+
+{# keeps every current filter when paging #}
 {% macro pager(pagination, endpoint, f) -%}
 {% if pagination.pages > 1 %}
 <nav class="pager" aria-label="{{ 'Pagination'|t }}">
     <span class="meta">{{ 'Page'|t }} {{ pagination.page }} / {{ pagination.pages }} · {{ pagination.total }} {{ 'total'|t }}</span>
     <span style="display:flex; gap:8px;">
-        {% set args = {'q': f.q or None, 'status': f.status, 'district_id': f.district_id} %}
+        {% set args = {} %}
+        {% for k, v in f.items() if k != 'page' and v is not none and v != '' %}{% set _ = args.update({k: v}) %}{% endfor %}
         {% if pagination.has_prev %}<a class="btn btn-sm btn-secondary" rel="prev" href="{{ url_for(endpoint, page=pagination.prev_num, **args) }}">← {{ 'Previous'|t }}</a>{% endif %}
         {% if pagination.has_next %}<a class="btn btn-sm btn-secondary" rel="next" href="{{ url_for(endpoint, page=pagination.next_num, **args) }}">{{ 'Next'|t }} →</a>{% endif %}
     </span>
@@ -43,3 +77,46 @@
 {%- endmacro %}
 
 {% macro when(dt) -%}{{ dt.strftime('%Y-%m-%d %H:%M') if dt else '—' }}{%- endmacro %}
+
+{# Confirmation dialog for an audited action: consequences, a required reason and (for dangerous
+   actions) a typed phrase, all checked again server-side. Extra fields go in the call block. #}
+{% macro confirm_form(action, label, icon, uid, phrase=None, consequences=(), hidden={}, kind='btn-danger', submit=None) -%}
+<details class="confirm-box">
+    <summary class="btn btn-sm {{ kind }}"><i data-lucide="{{ icon }}"></i> {{ label|t }}…</summary>
+    <form method="post" action="{{ action }}" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% for k, v in hidden.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+        {% if consequences %}
+        <p class="meta" style="margin:0 0 4px;"><strong>{{ 'What happens'|t }}:</strong></p>
+        <ul class="consequences">{% for c in consequences %}<li>{{ c|t }}</li>{% endfor %}</ul>
+        {% endif %}
+        {{ caller() if caller is defined else '' }}
+        <div class="form-group"><label for="reason-{{ uid }}">{{ 'Reason (recorded in the audit log)'|t }}</label>
+            <textarea id="reason-{{ uid }}" name="reason" class="form-input" rows="2" maxlength="500" required></textarea></div>
+        {% if phrase %}
+        <div class="form-group"><label for="confirm-{{ uid }}">{{ 'Type'|t }} <span class="phrase">{{ phrase }}</span> {{ 'to continue'|t }}</label>
+            <input id="confirm-{{ uid }}" name="confirm" class="form-input" required autocomplete="off" spellcheck="false" pattern="{{ phrase }}"></div>
+        {% endif %}
+        <button class="btn {{ kind }}" type="submit"><i data-lucide="{{ icon }}"></i> {{ (submit or label)|t }}</button>
+    </form>
+</details>
+{%- endmacro %}
+
+{% macro audit_table(entries, show_target=True) -%}
+{% if entries %}
+<div class="table-wrap"><table>
+    <thead><tr><th scope="col">{{ 'When'|t }}</th><th scope="col">{{ 'Actor'|t }}</th><th scope="col">{{ 'Action'|t }}</th>
+        {% if show_target %}<th scope="col">{{ 'Target'|t }}</th>{% endif %}<th scope="col">{{ 'Reason'|t }}</th><th scope="col">{{ 'Result'|t }}</th></tr></thead>
+    <tbody>{% for e in entries %}
+    <tr>
+        <td>{{ when(e.created_at) }}</td>
+        <td>@{{ e.actor_username }}<div class="meta">{{ 'SUPER_ADMIN' if e.actor_role == 'admin' else e.actor_role|upper }}</div></td>
+        <td><code>{{ e.action }}</code></td>
+        {% if show_target %}<td>{{ e.target_label or (e.target_type ~ ' #' ~ e.target_id) }}</td>{% endif %}
+        <td>{{ e.reason }}</td>
+        <td>{{ outcome(e) }}<div class="meta">{{ e.summary }}</div></td>
+    </tr>
+    {% endfor %}</tbody>
+</table></div>
+{% else %}<p class="meta">{{ 'No audit entries yet.'|t }}</p>{% endif %}
+{%- endmacro %}
