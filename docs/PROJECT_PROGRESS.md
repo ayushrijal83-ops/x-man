@@ -3078,8 +3078,7 @@ Super Admin** and `/admin` was extended in place (same blueprint, service and de
   Monitoring (`dashboard_service.freshness`), computed at read time and never written to
   `IoTDevice.status` (the operator setting is unchanged). Disabled always wins over freshness.
 - **Rotate key:** new `secrets.token_urlsafe(32)`, only its SHA-256 is stored, and the old key fails
-  at commit. The plaintext is rendered once in the POST response (`Cache-Control: no-store`). It is
-  never flashed (the session cookie is client-readable), stored, logged or audited.
+  at commit. Post/Redirect/Get, see "Key rotation fix" below.
 
 ### Authority / citizen deactivation model
 Nothing is ever hard-deleted from the Super Admin UI. No delete feature was added: deactivation
@@ -3194,13 +3193,46 @@ Changed existing assertions in `test_admin_push_m12.py`, all to the new required
   application log. A refused telemetry payload is never stored.
 - The hazard intervention commits through `hazard_event_service`, and the audit row is committed right
   after it. The status-history row (actor, reason, time) is written atomically with the change.
-- Reloading the page that shows a newly rotated key asks the browser to resubmit the form, which would
-  rotate again (audited; the key that was shown then stops working). Copy the key before reloading.
 - Long explanatory sentences on the new pages are in English; navigation, headings and dialog labels
   are translated to Nepali.
 
 - **Final:** **`python -m pytest tests/ -q` → 912 passed, 2 warnings, 0 failed** (872 + 40 new). The 2
   warnings are the same third-party SWIG `DeprecationWarning`s as at FQA.
 
+### Key rotation fix (after `9ca046b`)
+The first version rendered the new key in the POST response, so reloading that page re-submitted the
+form and rotated the key again. Now it is **Post/Redirect/Get**:
+1. `POST /admin/devices/<id>/rotate-key` (Super Admin, reason, typed `ROTATE KEY`, audited) rotates
+   the key: the new hash is stored and the old key is invalid at commit.
+2. The plaintext goes into `admin_service`'s one-time store: process memory only, bound to that admin
+   and that device, expiring after 5 minutes. The session cookie gets only `'<device>:<random token>'`.
+3. The POST answers `302` to `/admin/devices/<id>`.
+4. That GET takes the key from the store (removing it) and shows it once with `Cache-Control: no-store`.
+
+Every later GET is read-only, so a reload, Back/Forward, navigating away and back, or reopening the
+device shows no key and changes nothing; `GET /rotate-key` is 405. The plaintext is never in the
+database, the cookie, a URL, browser storage, the flash or a log. A token replayed by another admin,
+used on another device's page or used after 5 minutes yields nothing.
+- ponytail: the store is per process. That is correct for the current single-process server
+  (`run.py`). Behind several workers the redirected GET could land on another process and the key
+  would be lost (rotate again); a shared short-lived cache would then be needed.
+- Tests: `TestKeyRotation` in `test_super_admin.py` (+16 tests: GET/refresh/repeat never rotate, PRG
+  302, shown once, not in cookie/session/URL/scripts/logs/DB dump, old key 401 / new key 201, second
+  rotation, missing reason / wrong phrase (6 cases), citizen/authority/anonymous blocked, binding to
+  admin + device, expiry). Replaces the single old rotation test.
+- Chrome: rotate through the dialog → server log `POST /rotate-key 302` then `GET /admin/devices/1
+  200` with the key once; F5 (`navigation.type=reload`, no resubmit prompt) → no key, no rotation;
+  away and Back (`back_forward`), Forward, reopen → no key, no rotation; old key 401, new key 201;
+  the audit log shows exactly the two explicit rotations; key absent from the URL, JS-readable
+  cookies (none: the session is HttpOnly), localStorage, sessionStorage, the audit page and the
+  server log; no console errors. The smoke test of every section passed again.
+
+### Migration check
+Revision **`a9c4e2f81d57`**, file `migrations/versions/a9c4e2f81d57_super_admin_audit_log_session_version.py`,
+`down_revision = 'f3b8d2e6a417'` (M12), the only head; `flask db current` = `a9c4e2f81d57 (head)` and
+`flask db check` = "No new upgrade operations detected" on the dev DB. Schema: `audit_logs` (12
+columns, indexes `ix_audit_logs_created_at`, `ix_audit_logs_action`, `ix_audit_logs_target`) and
+`users.session_version`. No other Super Admin schema change.
+
 ### 🏷️ Status
-**SA — SUPER ADMIN CONTROL CENTER COMPLETE · SOFTWARE FROZEN AGAIN (912 passed, 2 third-party warnings) · NEXT: H01 (not started)**
+**SA — SUPER ADMIN CONTROL CENTER COMPLETE · KEY ROTATION ONE-TIME (PRG) · SOFTWARE FROZEN (927 passed, 2 third-party warnings) · NEXT: H01 (not started)**

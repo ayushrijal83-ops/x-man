@@ -245,27 +245,6 @@ class TestIotControl:
         client.post(f'/admin/devices/{pk}/status', data={'enabled': '1', 'reason': 'again'})
         assert audit('ENABLED_DEVICE')[0].success is False
 
-    def test_rotate_key_shows_new_key_once_and_invalidates_old(self, client, world):
-        pk = world['dev']['ESP32-FLOOD-001']
-        login(client, 'root')
-        client.post(f'/admin/devices/{pk}/rotate-key', data={'reason': 'leak'})  # no typed phrase
-        assert db.session.get(IoTDevice, pk).verify_api_key('key-ESP32-FLOOD-001')
-        response = client.post(f'/admin/devices/{pk}/rotate-key', data={'reason': 'leak', 'confirm': 'ROTATE KEY'})
-        assert response.status_code == 200 and response.headers['Cache-Control'] == 'no-store'
-        page = text(response)
-        new_key = re.search(r'<code>([A-Za-z0-9_-]{40,})</code>', page).group(1)
-        device = db.session.get(IoTDevice, pk)
-        assert device.verify_api_key(new_key) and new_key not in device.api_key_hash
-        assert 'Shown only once' in page
-        # session cookie (flash storage) never carries the key; later pages never show it
-        assert all(new_key not in c.value for c in client._cookies.values())
-        assert new_key not in text(client.get(f'/admin/devices/{pk}'))
-        assert telemetry(client.application.test_client(), 'ESP32-FLOOD-001').status_code == 401
-        assert telemetry(client.application.test_client(), 'ESP32-FLOOD-001', new_key).status_code == 201
-        entry = audit('ROTATED_DEVICE_KEY')[0]
-        assert all(new_key not in (v or '') and device.api_key_hash not in (v or '')
-                   for v in (entry.summary, entry.reason, entry.target_label))
-
     def test_device_pages_never_show_key_hashes(self, client, world):
         login(client, 'root')
         hashes = [d.api_key_hash for d in IoTDevice.query]
@@ -298,6 +277,153 @@ class TestIotControl:
         own, other = world['dev']['ESP32-FLOOD-001'], world['dev']['ESP32-MOTION-002']
         assert client.patch(f'/api/iot/devices/{own}', json={'enabled': False}).status_code == 200
         assert client.patch(f'/api/iot/devices/{other}', json={'enabled': False}).status_code == 403
+
+
+def shown_key(page):
+    """The plaintext key from the one-time box, or None."""
+    match = re.search(r'class="secret-once".*?<code>([A-Za-z0-9_-]{40,})</code>', page, re.S)
+    return match.group(1) if match else None
+
+
+class TestKeyRotation:
+    """Post/Redirect/Get: only an explicit, confirmed POST rotates; the key is shown once on the
+    redirected GET; reloads, revisits and back/forward are plain GETs and change nothing."""
+    OLD = 'key-ESP32-FLOOD-001'
+
+    def _rotate(self, client, pk, **data):
+        return client.post(f'/admin/devices/{pk}/rotate-key',
+                           data={'reason': 'credential leak', 'confirm': 'ROTATE KEY', **data})
+
+    def _hash(self, pk):
+        db.session.expire_all()
+        return db.session.get(IoTDevice, pk).api_key_hash
+
+    def test_get_never_rotates(self, client, world):
+        pk = world['dev']['ESP32-FLOOD-001']
+        login(client, 'root')
+        before = self._hash(pk)
+        for _ in range(5):  # open, refresh, revisit, with filters
+            assert client.get(f'/admin/devices/{pk}').status_code == 200
+            assert client.get(f'/admin/devices/{pk}?hours=24&page=2').status_code == 200
+        assert client.get(f'/admin/devices/{pk}/rotate-key').status_code == 405
+        assert self._hash(pk) == before and AuditLog.query.count() == 0
+
+    def test_rotation_is_post_redirect_get_and_shown_once(self, app, client, world, caplog):
+        pk = world['dev']['ESP32-FLOOD-001']
+        login(client, 'root')
+        before = self._hash(pk)
+        with caplog.at_level('DEBUG'):
+            response = self._rotate(client, pk)
+            # the POST answers with a redirect, not with the key
+            assert response.status_code == 302 and response.headers['Location'].endswith(f'/admin/devices/{pk}')
+            assert shown_key(text(response)) is None
+            after = self._hash(pk)
+            assert after != before
+            # the cookie holds only an opaque lookup token, never the key
+            with client.session_transaction() as s:
+                pending = s['one_time_key']
+            assert pending.startswith(f'{pk}:')
+
+            first = client.get(f'/admin/devices/{pk}')
+            assert first.headers['Cache-Control'] == 'no-store'
+            page = text(first)
+            key = shown_key(page)
+            assert key and IoTDevice.hash_api_key(key) == after and 'Shown only once' in page
+            assert key not in pending and key not in response.headers['Location']
+            # never inside a script block (no path into localStorage/sessionStorage)
+            assert not any(key in block for block in re.findall(r'<script.*?</script>', page, re.S))
+
+            # refresh, navigate away and back, reopen: no key shown, no rotation
+            for url in (f'/admin/devices/{pk}', '/admin/devices', '/admin', f'/admin/devices/{pk}',
+                        f'/admin/devices/{pk}'):
+                assert key not in text(client.get(url)), url
+            assert self._hash(pk) == after
+            with client.session_transaction() as s:
+                assert 'one_time_key' not in s
+            assert all(key not in c.value for c in client._cookies.values())
+        assert not any(key in r.getMessage() for r in caplog.records)
+        assert len(audit('ROTATED_DEVICE_KEY')) == 1
+
+        device_client = app.test_client()
+        assert telemetry(device_client, 'ESP32-FLOOD-001', self.OLD).status_code == 401
+        assert telemetry(device_client, 'ESP32-FLOOD-001', key).status_code == 201
+        # still valid later; only another explicit rotation changes it
+        client.get(f'/admin/devices/{pk}')
+        assert telemetry(device_client, 'ESP32-FLOOD-001', key).status_code == 201
+
+    def test_plaintext_key_is_not_persisted(self, client, world):
+        pk = world['dev']['ESP32-FLOOD-001']
+        login(client, 'root')
+        self._rotate(client, pk)
+        key = shown_key(text(client.get(f'/admin/devices/{pk}')))
+        dump = '\n'.join(db.session.connection().connection.driver_connection.iterdump())
+        assert key and key not in dump and IoTDevice.hash_api_key(key) in dump
+
+    def test_second_explicit_rotation_invalidates_first_key(self, app, client, world):
+        pk = world['dev']['ESP32-FLOOD-001']
+        login(client, 'root')
+        self._rotate(client, pk)
+        first = shown_key(text(client.get(f'/admin/devices/{pk}')))
+        self._rotate(client, pk, reason='second leak')
+        second = shown_key(text(client.get(f'/admin/devices/{pk}')))
+        assert first and second and first != second
+        device_client = app.test_client()
+        assert telemetry(device_client, 'ESP32-FLOOD-001', first).status_code == 401
+        assert telemetry(device_client, 'ESP32-FLOOD-001', second).status_code == 201
+
+    @pytest.mark.parametrize('data', [{'reason': ''}, {'reason': '   '}, {'confirm': ''}, {'confirm': 'rotate key'},
+                                      {'confirm': 'ROTATE'}, {'reason': 'x' * 501}])
+    def test_missing_reason_or_wrong_phrase_rejected(self, app, client, world, data):
+        pk = world['dev']['ESP32-FLOOD-001']
+        login(client, 'root')
+        before = self._hash(pk)
+        assert self._rotate(client, pk, **data).status_code == 302
+        assert shown_key(text(client.get(f'/admin/devices/{pk}'))) is None and self._hash(pk) == before
+        assert telemetry(app.test_client(), 'ESP32-FLOOD-001', self.OLD).status_code == 201
+        with client.session_transaction() as s:
+            assert 'one_time_key' not in s
+
+    @pytest.mark.parametrize('who', ['cit_a', 'auth_a', None])
+    def test_unauthorized_cannot_rotate(self, client, world, who):
+        pk = world['dev']['ESP32-FLOOD-001']
+        before = self._hash(pk)
+        if who:
+            login(client, who)
+            assert self._rotate(client, pk).status_code == 403
+        else:
+            assert '/auth/login' in self._rotate(client, pk).headers['Location']
+        assert self._hash(pk) == before
+
+    def test_key_is_bound_to_the_rotating_admin_and_device(self, app, client, world):
+        pk, other = world['dev']['ESP32-FLOOD-001'], world['dev']['ESP32-MOTION-002']
+        login(client, 'root')
+        self._rotate(client, pk)
+        with client.session_transaction() as s:
+            token = s['one_time_key'].partition(':')[2]
+        # another admin replaying the token gets nothing (and the token is spent)
+        second = app.test_client()
+        login(second, 'root2')
+        with second.session_transaction() as s:
+            s['one_time_key'] = f'{pk}:{token}'
+        assert shown_key(text(as_client(second, 'GET', f'/admin/devices/{pk}'))) is None
+        assert shown_key(text(client.get(f'/admin/devices/{pk}'))) is None
+        assert shown_key(text(client.get(f'/admin/devices/{other}'))) is None
+
+    def test_wrong_device_page_does_not_consume_the_key(self, client, world):
+        pk, other = world['dev']['ESP32-FLOOD-001'], world['dev']['ESP32-MOTION-002']
+        login(client, 'root')
+        self._rotate(client, pk)
+        assert shown_key(text(client.get(f'/admin/devices/{other}'))) is None
+        assert shown_key(text(client.get(f'/admin/devices/{pk}')))
+
+    def test_one_time_key_expires(self, client, world, monkeypatch):
+        from app.services import admin_service
+        pk = world['dev']['ESP32-FLOOD-001']
+        login(client, 'root')
+        self._rotate(client, pk)
+        real = admin_service.time.monotonic
+        monkeypatch.setattr(admin_service.time, 'monotonic', lambda: real() + admin_service.ONE_TIME_KEY_SECONDS + 1)
+        assert shown_key(text(client.get(f'/admin/devices/{pk}'))) is None
 
 
 # ============================================================================ authorities
@@ -600,8 +726,8 @@ class TestAuditLog:
         client.post(f"/admin/users/{world['u']['auth_b']}/reset-password",
                     data={'temporary_password': 'Super-Temp-77', 'confirm_password': 'Super-Temp-77', 'reason': 'r'})
         response = client.post(f"/admin/devices/{world['dev']['ESP32-MOTION-002']}/rotate-key",
-                               data={'reason': 'r', 'confirm': 'ROTATE KEY'})
-        key = re.search(r'<code>([A-Za-z0-9_-]{40,})</code>', text(response)).group(1)
+                               data={'reason': 'r', 'confirm': 'ROTATE KEY'}, follow_redirects=True)
+        key = shown_key(text(response))
         secrets = ['Super-Temp-77', key, db.session.get(User, world['u']['auth_b']).password_hash,
                    db.session.get(IoTDevice, world['dev']['ESP32-MOTION-002']).api_key_hash, PRIVATE,
                    client.application.config['SECRET_KEY']]

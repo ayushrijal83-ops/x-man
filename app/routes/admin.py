@@ -9,7 +9,8 @@ Every state-changing action needs a reason (and a typed phrase for the dangerous
 an AuditLog row, success or failure. Nothing here renders password hashes, device key hashes,
 push endpoints/keys or the VAPID private key.
 """
-from flask import Blueprint, abort, flash, jsonify, make_response, redirect, render_template, request, url_for
+from flask import (Blueprint, abort, flash, jsonify, make_response, redirect, render_template, request, session,
+                   url_for)
 from flask_login import current_user
 
 from app.extensions import db, login_manager
@@ -264,9 +265,23 @@ def _device_page(device, new_key=None):
                            d=admin_service.device_detail(device, f['sensor_type'], f['hours'], f['page']))
 
 
+ONE_TIME_KEY_SESSION = 'one_time_key'  # '<device pk>:<lookup token>', never the key itself
+
+
 @admin_bp.route('/devices/<int:device_id>')
 def device_detail(device_id):
-    return _device_page(_get(IoTDevice, device_id))
+    """Read-only: a GET never rotates or changes a key. Right after a rotation it shows the new key
+    once (taken from admin_service's one-time store); any later GET, reload or back/forward can't."""
+    device = _get(IoTDevice, device_id)
+    pending = session.get(ONE_TIME_KEY_SESSION) or ''
+    new_key = None
+    if pending.partition(':')[0] == str(device.id):
+        session.pop(ONE_TIME_KEY_SESSION)
+        new_key = admin_service.take_one_time_key(pending.partition(':')[2], current_user.id, device.id)
+    response = make_response(_device_page(device, new_key=new_key))
+    if new_key:
+        response.headers['Cache-Control'] = 'no-store'  # back/forward must not replay it from cache
+    return response
 
 
 @admin_bp.route('/devices/<int:device_id>/status', methods=['POST'])
@@ -285,8 +300,10 @@ def device_enable(device_id):
 
 @admin_bp.route('/devices/<int:device_id>/rotate-key', methods=['POST'])
 def device_rotate_key(device_id):
-    """The new key is rendered in this one response only: never flashed (the session cookie is
-    client-readable), never stored in plaintext, never logged; the response is not cached."""
+    """Post/Redirect/Get: rotate (reason + typed phrase, audited), keep the plaintext only in the
+    server-side one-time store, redirect to the device page, which shows it once. Reloading that page
+    is a plain GET and cannot rotate again. The key never goes into a flash, the session cookie, a
+    URL, the database or a log."""
     device = _get(IoTDevice, device_id)
     issued = {}
 
@@ -294,12 +311,11 @@ def device_rotate_key(device_id):
         issued['key'], summary = admin_service.rotate_device_key(current_user, device)
         return summary
 
-    if not _act('ROTATED_DEVICE_KEY', 'device', device.id, device.device_id, work,
-                'New API key generated. The previous key no longer works.', phrase=PHRASES['rotate']):
-        return redirect(url_for('admin.device_detail', device_id=device.id))
-    response = make_response(_device_page(device, new_key=issued['key']))
-    response.headers['Cache-Control'] = 'no-store'
-    return response
+    if _act('ROTATED_DEVICE_KEY', 'device', device.id, device.device_id, work,
+            'New API key generated. The previous key no longer works.', phrase=PHRASES['rotate']):
+        token = admin_service.stash_one_time_key(current_user.id, device.id, issued.pop('key'))
+        session[ONE_TIME_KEY_SESSION] = f'{device.id}:{token}'
+    return redirect(url_for('admin.device_detail', device_id=device.id))
 
 
 # --- hazards ------------------------------------------------------------------

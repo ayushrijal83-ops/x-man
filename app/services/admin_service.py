@@ -8,6 +8,9 @@ current-location coordinates of citizens.
 Actions mutate and return a safe one-line summary; the route records it in AuditLog and commits
 (see routes/admin.py _act), so the change and its audit row land together.
 """
+import secrets
+import threading
+import time
 from datetime import datetime, timedelta
 
 from flask import current_app
@@ -621,6 +624,36 @@ def rotate_device_key(admin, device):
     api_key = IoTDevice.generate_api_key()
     device.api_key_hash = IoTDevice.hash_api_key(api_key)
     return api_key, f'{device.device_id}: API key rotated; previous key invalid'
+
+
+# One-time display of a freshly rotated key (Post/Redirect/Get). The plaintext lives only here, in
+# process memory, until the redirected GET takes it or it expires: never in the DB, the session
+# cookie, a URL, browser storage or a log. The session only carries a random lookup token.
+# ponytail: per-process store; fine for the single-process server (run.py). Behind several workers
+# the redirected GET could land elsewhere and the key would be lost (rotate again): use a shared
+# short-lived cache (e.g. Redis with TTL) then.
+ONE_TIME_KEY_SECONDS = 300
+_one_time_keys = {}
+_one_time_lock = threading.Lock()
+
+
+def stash_one_time_key(admin_id, device_pk, api_key):
+    token = secrets.token_urlsafe(24)
+    now = time.monotonic()
+    with _one_time_lock:
+        for stale in [t for t, v in _one_time_keys.items() if v[3] <= now]:
+            del _one_time_keys[stale]
+        _one_time_keys[token] = (admin_id, device_pk, api_key, now + ONE_TIME_KEY_SECONDS)
+    return token
+
+
+def take_one_time_key(token, admin_id, device_pk):
+    """The key once, for the admin who rotated it and that device only; None otherwise."""
+    with _one_time_lock:
+        entry = _one_time_keys.pop(token, None) if token else None
+    if entry and entry[:2] == (admin_id, device_pk) and entry[3] > time.monotonic():
+        return entry[2]
+    return None
 
 
 def change_hazard_status(admin, incident, new_status, reason):

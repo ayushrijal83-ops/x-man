@@ -17,7 +17,7 @@
     <section class="secret-once" role="alert" style="margin-bottom:16px;">
         <strong><i data-lucide="key-round"></i> {{ 'New API key for'|t }} <code style="display:inline">{{ device.device_id }}</code></strong>
         <code>{{ new_key }}</code>
-        <p class="meta" style="margin:0;">{{ 'Shown only once. Copy it into the device firmware now: it is stored only as a hash and cannot be displayed again. The previous key already stopped working.'|t }}</p>
+        <p class="meta" style="margin:0;">{{ 'Shown only once. Copy it into the device firmware now: it is stored only as a hash and cannot be displayed again. Reloading this page will not show it again and will not generate another key. The previous key already stopped working.'|t }}</p>
     </section>
     {% endif %}
 
