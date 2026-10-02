@@ -17,7 +17,7 @@
     <section class="secret-once" role="alert" style="margin-bottom:16px;">
         <strong><i data-lucide="key-round"></i> {{ 'New API key for'|t }} <code style="display:inline">{{ device.device_id }}</code></strong>
         <code>{{ new_key }}</code>
-        <p class="meta" style="margin:0;">{{ 'Shown only once. Copy it into the device firmware now: it is stored only as a hash and cannot be displayed again. Reloading this page will not show it again and will not generate another key. The previous key already stopped working.'|t }}</p>
+        <p class="meta" style="margin:0;">{{ 'Shown only once. Copy it into the device firmware now: it is stored only as a hash and cannot be displayed again. Reloading this page will not show it again and will not generate another key. Any previous key for this device no longer works.'|t }}</p>
     </section>
     {% endif %}
 
@@ -70,6 +70,25 @@
                                     phrase=PHRASES.rotate, kind='btn-secondary',
                                     consequences=['A new key is generated and shown once on the next page.',
                                                   'The current key stops working immediately: the device must be re-flashed with the new key.']) }}
+                {% call aui.confirm_form(url_for('admin.device_edit', device_id=device.id), 'Edit device settings', 'pencil', 'edit',
+                                         kind='btn-secondary', submit='Save settings',
+                                         consequences=['District, device ID, API key and authority cannot be changed here.']) %}
+                <div class="form-group"><label for="edit-status">{{ 'Operator status'|t }}</label>
+                    <select id="edit-status" name="status" class="form-input">{% for s in statuses %}<option value="{{ s }}" {% if device.status == s %}selected{% endif %}>{{ s|t }}</option>{% endfor %}</select></div>
+                <div class="form-group"><label for="edit-river">{{ 'River'|t }} ({{ device.district.name if device.district else '—' }})</label>
+                    <select id="edit-river" name="river_id" class="form-input">
+                        {% if not device.river_id %}<option value="">{{ 'No river'|t }}</option>{% endif %}
+                        {% for rid, label in rivers %}<option value="{{ rid }}" {% if device.river_id == rid %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+                <div class="form-group"><label for="edit-fw">{{ 'Firmware version'|t }}</label>
+                    <input id="edit-fw" name="firmware_version" class="form-input" maxlength="50" value="{{ device.firmware_version or '' }}"></div>
+                <div class="form-group"><label for="edit-loc">{{ 'Location description'|t }}</label>
+                    <input id="edit-loc" name="location_description" class="form-input" maxlength="200" value="{{ device.location_description or '' }}"></div>
+                <div class="form-group"><label for="edit-lat">{{ 'Latitude'|t }}</label>
+                    <input id="edit-lat" name="latitude" class="form-input" type="number" step="any" min="-90" max="90" value="{{ device.latitude if device.latitude is not none else '' }}"></div>
+                <div class="form-group"><label for="edit-lon">{{ 'Longitude'|t }}</label>
+                    <input id="edit-lon" name="longitude" class="form-input" type="number" step="any" min="-180" max="180" value="{{ device.longitude if device.longitude is not none else '' }}">
+                    <p class="form-hint">{{ 'Give both, or leave both empty to keep the current coordinates.'|t }}</p></div>
+                {% endcall %}
             </div>
         </section>
 

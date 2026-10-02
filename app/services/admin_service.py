@@ -14,11 +14,12 @@ import time
 from datetime import datetime, timedelta
 
 from flask import current_app
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import RUNTIME, db
 from app.models import (AuditLog, Authority, CitizenReport, District, Incident, IncidentAffectedDistrict,
                         IncidentResponseAction, IncidentStatusHistory, IoTDevice, Notification, PushSubscription,
-                        SensorReading, User)
+                        River, SensorReading, User)
 from app.models.audit_log import AUDIT_ACTIONS, AUDIT_TARGETS, REASON_MAX
 from app.models.citizen_report import AI_STATUS, REPORT_STATUS, VISUAL_HAZARD_TYPES
 from app.models.incident import ACTIVE_STATUSES, HAZARD_SEVERITY, HAZARD_STATUS, HAZARD_TYPES, VALID_STATUS_TRANSITIONS
@@ -624,6 +625,59 @@ def rotate_device_key(admin, device):
     api_key = IoTDevice.generate_api_key()
     device.api_key_hash = IoTDevice.hash_api_key(api_key)
     return api_key, f'{device.device_id}: API key rotated; previous key invalid'
+
+
+def _river_in(district_id, river_id):
+    """The river (must exist and lie in district_id), or None for no river. Raises ValueError."""
+    if river_id is None:
+        return None
+    river = db.session.get(River, river_id)
+    if river is None:
+        raise ValueError('Unknown river.')
+    if river.district_id != district_id:
+        raise ValueError('The river does not belong to the selected district.')
+    return river
+
+
+def register_device(admin, fields, water_level):
+    """Create a device from the route's explicit, typed fields. Returns (plaintext key, device, summary).
+
+    The district (and river) are fixed here, server-side: telemetry never carries or changes them.
+    A water-level device must name its river: no "first river in the district" guess."""
+    district = db.session.get(District, fields['district_id']) if fields['district_id'] else None
+    if district is None:
+        raise ValueError('Select a valid district.')
+    if water_level and fields['river_id'] is None:
+        raise ValueError('A flood / water-level device needs an explicit river.')
+    river = _river_in(district.id, fields['river_id'])
+    if IoTDevice.query.filter_by(device_id=fields['device_id']).first():
+        raise ValueError(f"Device ID {fields['device_id']} already exists.")
+    api_key = IoTDevice.generate_api_key()
+    device = IoTDevice(**fields, api_key_hash=IoTDevice.hash_api_key(api_key), status='active', enabled=True)
+    db.session.add(device)
+    try:
+        db.session.flush()
+    except IntegrityError:  # registered concurrently between the check and the insert
+        raise ValueError(f"Device ID {fields['device_id']} already exists.")
+    return api_key, device, (f"{device.device_id} registered: district {district.name}, "
+                             f"river {river.name if river else 'none'}, "
+                             f"monitoring {'water level' if water_level else 'other'}")
+
+
+def update_device(admin, device, fields):
+    """Apply the PATCH-equivalent fields (status, firmware, location text, coordinates, river).
+    District, device id, key and authority are not editable. Returns a summary of the changes."""
+    if 'river_id' in fields:
+        if fields['river_id'] is None and device.river_id is not None:
+            raise ValueError('The river can be changed but not removed.')
+        _river_in(device.district_id, fields['river_id'])
+    changes = {k: v for k, v in fields.items() if getattr(device, k) != v}
+    if not changes:
+        raise ValueError('Nothing changed.')
+    summary = '; '.join(f'{k} {getattr(device, k)!r} -> {v!r}' for k, v in changes.items())
+    for k, v in changes.items():
+        setattr(device, k, v)
+    return f'{device.device_id}: {summary}'
 
 
 # One-time display of a freshly rotated key (Post/Redirect/Get). The plaintext lives only here, in

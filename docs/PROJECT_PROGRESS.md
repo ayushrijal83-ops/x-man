@@ -3236,3 +3236,88 @@ columns, indexes `ix_audit_logs_created_at`, `ix_audit_logs_action`, `ix_audit_l
 
 ### 🏷️ Status
 **SA — SUPER ADMIN CONTROL CENTER COMPLETE · KEY ROTATION ONE-TIME (PRG) · SOFTWARE FROZEN (927 passed, 2 third-party warnings) · NEXT: H01 (not started)**
+
+---
+
+# H01.5 — IoT Device Provisioning (Super Admin UI)
+
+Pre-hardware gap closed: a Super Admin can register an ESP32 from the IoT Control Center instead of
+a hand-made `POST /api/iot/devices`. The verified architecture is unchanged (telemetry, risk engine,
+hazard events, notifications untouched). No physical hardware connected yet: nothing here proves
+real telemetry works.
+
+### Provisioning workflow
+1. `/admin/devices` → **Register device** → `/admin/devices/new` (Super Admin only, same session login).
+2. Fields: device ID, name, district (existing Nepal districts), **monitoring** (flood / water level,
+   or other), river (only the selected district's rivers, each labelled with its danger level, or
+   "no danger level set: readings are stored but not assessed"), firmware version, latitude +
+   longitude, location description, description, and a required audit reason.
+3. `POST` (CSRF) → validated server-side → device created (`status=active`, `enabled`) → `302` to the
+   device page, which shows the API key **once** through the same one-time store as key rotation (PRG).
+4. Device page **Edit device settings** (`POST /admin/devices/<id>/edit`, reason, audited): operator
+   status, river (same district only; can be changed, not removed), firmware version, location
+   description, latitude + longitude (both, or both empty = keep). These are the fields the PATCH API
+   already allows; `enabled` keeps its own audited connect/disconnect action.
+
+### Server-owned device location
+- `IoTDevice.district_id` / `river_id` are set only here (or the existing API). The edit form cannot
+  change the district, device ID, key or authority; extra form fields are ignored (explicit allow-list).
+- Telemetry is unchanged: the device is identified by its header credentials; any `district`,
+  `district_id`, `river_id` or `device_id` in the JSON body is ignored. The reading is tied to the
+  registered district and river (test: a payload claiming Lalitpur still updates Kathmandu's Bagmati,
+  creates a Kathmandu flood event and notifies Kathmandu citizens/authority + admins, not Lalitpur).
+
+### Explicit river association
+- Monitoring = flood / water level → a river is required (server-side; the UI also marks it required).
+  A new water-level device therefore never relies on the telemetry fallback "first river in the
+  district" (Kathmandu has Bagmati, Bishnumati and Manohara).
+- The river must belong to the selected district (re-checked server-side; the JS filter is convenience).
+
+### Security model
+- Super Admin only (`/admin/*` `before_request`): citizens and authorities 403, anonymous → login.
+  Role hierarchy and login unchanged. CSRF on both POSTs.
+- Key: `IoTDevice.generate_api_key()`; only the SHA-256 hash is stored. The plaintext is held in the
+  in-process one-time store (admin + device bound, 5 min), shown once with `Cache-Control: no-store`;
+  never in the DB, a URL, the session cookie, browser storage, the flash, the audit log or the server log.
+- Audit: `REGISTERED_DEVICE` (target = new device id; refusals audited with target `new`) and
+  `UPDATED_DEVICE` (old → new values). Like every other Super Admin action, a missing reason and a
+  403 for a non-admin are refused without an audit row.
+- No migration: the two new audit action names are values of an existing string column.
+
+### Tests
+`tests/test_device_provisioning.py` (+33): admin opens the page; citizen/authority 403; anonymous →
+login; CSRF; valid registration (district, river, coordinates); key shown once, absent from
+reload/cookies/scripts/logs; plaintext not in the DB dump; audit row; 13 refusals (unknown/blank/
+non-numeric district, river of another district, unknown river, missing flood river, latitude
+without longitude and vice versa, out-of-range / NaN coordinates, bad device ID, blank name, unknown
+monitoring), each audited; duplicate device ID; "other" monitoring without river/coordinates; no mass
+assignment; telemetry cannot override the district and resolves to the registered river → flood event
+→ district notifications; edit allowed fields + audit; edit refusals; edit 403 for non-admins.
+Existing key-rotation tests unchanged and passing.
+- **Final:** **`python -m pytest tests/ -q` → 960 passed, 2 warnings, 0 failed** (927 + 33 new; same 2
+  third-party SWIG warnings). Migration: none; `flask db heads`/`current` = `a9c4e2f81d57 (head)`,
+  `flask db check` = "No new upgrade operations detected".
+
+### Chrome QA (throwaway copy of the dev DB, local server)
+Admin → IoT devices → Register device → Kathmandu → river list became exactly Bagmati (3.5 m),
+Bishnumati (3 m), Manohara (2.5 m) → Bagmati → registered ESP32-FLOOD-001 → key shown once (43 chars)
+→ reload: no key → listed with Kathmandu / Bagmati River → detail shows Kathmandu + Bagmati River +
+`REGISTERED_DEVICE` history → citizen gets 403 → no console errors. Key absent from URL,
+JS-readable cookies, localStorage, sessionStorage, server log and DB.
+
+### Known limitations
+- `POST /api/iot/devices` (JSON API) still works for admins/authorities and is not audited; it does not
+  know the "monitoring" choice, so it does not force a river.
+- "Monitoring" is a provisioning choice, not a stored column; legacy devices without a river still use
+  the telemetry fallback (first river in the district).
+- No authority is assigned from the UI (the authority device list shows only devices with its
+  `authority_id`); notifications target districts, so alerts are unaffected.
+- A district cannot be changed after registration (register a new device instead).
+- The one-time key store is per process (see the SA key-rotation note).
+
+### Next
+**H01 — physical hardware**: flash ESP32-FLOOD-001 with its key, send real `readings` and verify the path
+end to end. Not started.
+
+### 🏷️ Status
+**H01.5 — IoT DEVICE PROVISIONING COMPLETE (960 passed) · NEXT: H01 physical hardware (not started)**

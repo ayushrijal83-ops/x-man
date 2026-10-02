@@ -14,11 +14,13 @@ from flask import (Blueprint, abort, flash, jsonify, make_response, redirect, re
 from flask_login import current_user
 
 from app.extensions import db, login_manager
-from app.models import Authority, CitizenReport, District, Incident, IoTDevice, Notification, PushSubscription, User
+from app.models import (Authority, CitizenReport, District, Incident, IoTDevice, Notification, PushSubscription, River,
+                        User)
 from app.models.audit_log import AUDIT_ACTIONS, AUDIT_TARGETS, REASON_MAX
 from app.models.citizen_report import REPORT_REVIEW_STATUSES, REPORT_STATUS, VISUAL_HAZARD_TYPES
 from app.models.incident import HAZARD_SEVERITY, HAZARD_TYPES
 from app.models.user import EMERGENCY_ALERT_STATES
+from app.routes.iot import DEVICE_ID_RE, DEVICE_STATUSES, DEVICE_TEXT_LIMITS, _coords, _text
 from app.services import admin_service
 
 admin_bp = Blueprint('admin', __name__)
@@ -73,7 +75,8 @@ def _act(action, target_type, target_id, label, work, success_message, phrase=No
     """Validate reason (+ typed phrase), run `work(reason)`, audit the outcome, commit. Returns success.
 
     `work` mutates and returns a safe summary, or raises PermissionError/ValueError: the change is
-    rolled back and the refusal itself is audited."""
+    rolled back and the refusal itself is audited. `target_id` may be a callable, read after `work`
+    (for a target that `work` creates)."""
     reason = (request.form.get('reason') or '').strip()
     if not reason:
         flash('A reason is required. It is recorded in the audit log.', 'error')
@@ -88,11 +91,13 @@ def _act(action, target_type, target_id, label, work, success_message, phrase=No
         summary = work(reason)
     except (PermissionError, ValueError) as e:
         db.session.rollback()
-        admin_service.record(current_user, action, target_type, target_id, label, reason, str(e), success=False)
+        admin_service.record(current_user, action, target_type, target_id() if callable(target_id) else target_id,
+                             label, reason, str(e), success=False)
         db.session.commit()
         flash(str(e), 'error')
         return False
-    admin_service.record(current_user, action, target_type, target_id, label, reason, summary)
+    admin_service.record(current_user, action, target_type, target_id() if callable(target_id) else target_id,
+                         label, reason, summary)
     db.session.commit()
     flash(success_message, 'success')
     return True
@@ -261,11 +266,85 @@ def _device_page(device, new_key=None):
     f = {'device_id': device.id, 'sensor_type': sensor_type,
          'hours': hours if hours in admin_service.TELEMETRY_WINDOWS else None, 'page': _int_arg('page', 1, minimum=1)}
     return render_template('admin/device_detail.html', device=device, f=f, new_key=new_key,
-                           windows=admin_service.TELEMETRY_WINDOWS,
+                           windows=admin_service.TELEMETRY_WINDOWS, statuses=DEVICE_STATUSES,
+                           rivers=_rivers_by_district().get(device.district_id, []),
                            d=admin_service.device_detail(device, f['sensor_type'], f['hours'], f['page']))
 
 
 ONE_TIME_KEY_SESSION = 'one_time_key'  # '<device pk>:<lookup token>', never the key itself
+MONITORING = {'water_level': 'Flood / water level (river required)', 'other': 'Other sensors (no river required)'}
+
+
+def _form_int(form, key):
+    raw = (form.get(key) or '').strip()
+    if not raw:
+        return None
+    if not (raw.isascii() and raw.isdigit()):
+        raise ValueError(f'Invalid {key}.')
+    return int(raw)
+
+
+def _form_coords(form):
+    """(lat, lon), or (None, None) when both are blank; one without the other is refused."""
+    raw = [(form.get(k) or '').strip() for k in ('latitude', 'longitude')]
+    if not any(raw):
+        return None, None
+    try:
+        return _coords({'latitude': float(raw[0]), 'longitude': float(raw[1])})
+    except ValueError:  # also a blank half: float('')
+        raise ValueError('latitude and longitude must be given together as valid coordinates')
+
+
+def _registration_fields(form):
+    """Only these columns can be set: an explicit allow-list, never the raw form (no mass assignment)."""
+    device_id = (form.get('device_id') or '').strip()
+    if not DEVICE_ID_RE.match(device_id):
+        raise ValueError('Device ID must be 1-64 characters: letters, digits, ".", "_" or "-".')
+    texts = {key: _text(form, key) for key in DEVICE_TEXT_LIMITS}
+    if not texts['name']:
+        raise ValueError('Name is required.')
+    latitude, longitude = _form_coords(form)
+    return {'device_id': device_id, 'district_id': _form_int(form, 'district_id'),
+            'river_id': _form_int(form, 'river_id'), 'latitude': latitude, 'longitude': longitude, **texts}
+
+
+def _rivers_by_district():
+    """{district id: [(river id, label)]} for the district-filtered river selector."""
+    rivers = {}
+    for river in River.query.order_by(River.name, River.id):
+        level = f'danger level {river.danger_level:g} m' if river.danger_level is not None \
+            else 'no danger level set: readings are stored but not assessed'
+        rivers.setdefault(river.district_id, []).append((river.id, f'{river.name} ({level})'))
+    return rivers
+
+
+@admin_bp.route('/devices/new', methods=['GET', 'POST'])
+def device_register():
+    """Provision a device: its district (+ river) are server-owned from here on. On success the key is
+    shown once on the device page through the same one-time store as a rotation (Post/Redirect/Get)."""
+    if request.method == 'POST':
+        created = {}
+
+        def work(reason):
+            monitoring = request.form.get('monitoring')
+            if monitoring not in MONITORING:
+                raise ValueError('Choose what the device monitors.')
+            created['key'], created['device'], summary = admin_service.register_device(
+                current_user, _registration_fields(request.form), monitoring == 'water_level')
+            return summary
+
+        if _act('REGISTERED_DEVICE', 'device', lambda: created['device'].id if 'device' in created else 'new',
+                f"Device: {(request.form.get('device_id') or '').strip()[:64]}", work,
+                'Device registered. Copy its API key now: it is shown only once.'):
+            device = created['device']
+            token = admin_service.stash_one_time_key(current_user.id, device.id, created.pop('key'))
+            session[ONE_TIME_KEY_SESSION] = f'{device.id}:{token}'
+            return redirect(url_for('admin.device_detail', device_id=device.id))
+        status = 400
+    else:
+        status = 200
+    return render_template('admin/device_register.html', form=request.form, districts=_districts(),
+                           rivers=_rivers_by_district(), monitoring=MONITORING), status
 
 
 @admin_bp.route('/devices/<int:device_id>')
@@ -295,6 +374,27 @@ def device_enable(device_id):
          'Device connected: authenticated telemetry is accepted again.' if enabled == '1'
          else 'Device disabled by Super Admin: its telemetry is now refused.',
          phrase=PHRASES['device'] if enabled == '0' else None)
+    return redirect(url_for('admin.device_detail', device_id=device.id))
+
+
+@admin_bp.route('/devices/<int:device_id>/edit', methods=['POST'])
+def device_edit(device_id):
+    """The fields the PATCH API allows, minus `enabled` (its own audited action).
+    District, device id, key and authority stay fixed."""
+    device = _get(IoTDevice, device_id)
+
+    def work(reason):
+        status = request.form.get('status')
+        if status not in DEVICE_STATUSES:
+            raise ValueError(f'Status must be one of {", ".join(DEVICE_STATUSES)}.')
+        fields = {'status': status, 'river_id': _form_int(request.form, 'river_id'),
+                  **{key: _text(request.form, key) for key in ('firmware_version', 'location_description')}}
+        latitude, longitude = _form_coords(request.form)
+        if latitude is not None:  # both blank = keep the current coordinates
+            fields.update(latitude=latitude, longitude=longitude)
+        return admin_service.update_device(current_user, device, fields)
+
+    _act('UPDATED_DEVICE', 'device', device.id, device.device_id, work, 'Device settings updated.')
     return redirect(url_for('admin.device_detail', device_id=device.id))
 
 

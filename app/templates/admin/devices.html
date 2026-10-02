@@ -8,7 +8,9 @@
 {% include "components/navbar.html" %}
 
 <div class="container">
-    {{ aui.head('IoT Device Control Center'|t, 'Connect = accept authenticated telemetry. Disconnect = refuse it. Super Admin cannot power off or physically disconnect an ESP32.'|t, icon='cpu') }}
+    {% call aui.head('IoT Device Control Center'|t, 'Connect = accept authenticated telemetry. Disconnect = refuse it. Super Admin cannot power off or physically disconnect an ESP32.'|t, icon='cpu') %}
+    <a href="{{ url_for('admin.device_register') }}" class="btn btn-primary"><i data-lucide="circle-plus"></i> {{ 'Register device'|t }}</a>
+    {% endcall %}
     {{ aui.tabs('devices') }}
 
     <div class="grid grid-4" style="margin-bottom:16px;">

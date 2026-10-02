@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% import "components/admin_ui.html" as aui with context %}
+
+{% block title %}{{ 'Register device'|t }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+{% include "components/navbar.html" %}
+
+<div class="container">
+    {% call aui.head('Register device'|t, 'The district and river set here are server-owned: telemetry from the device can never choose or change them.'|t, icon='cpu', eyebrow='IoT device') %}
+    <a href="{{ url_for('admin.devices') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> {{ 'Back to devices'|t }}</a>
+    {% endcall %}
+    {{ aui.tabs('devices') }}
+
+    <section class="card" aria-labelledby="h-register">
+        <h2 class="card-title" id="h-register"><i data-lucide="circle-plus"></i> {{ 'New IoT device'|t }}</h2>
+        <form method="post" action="{{ url_for('admin.device_register') }}" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="grid grid-2">
+                <div class="form-group"><label for="device_id">{{ 'Device ID'|t }}</label>
+                    <input id="device_id" name="device_id" class="form-input" required maxlength="64" pattern="[A-Za-z0-9._\-]{1,64}"
+                           spellcheck="false" value="{{ form.get('device_id', '') }}" placeholder="ESP32-FLOOD-001" aria-describedby="device_id-hint">
+                    <p class="form-hint" id="device_id-hint">{{ 'Letters, digits, ".", "_" or "-". The ESP32 sends it with its API key.'|t }}</p></div>
+                <div class="form-group"><label for="name">{{ 'Name'|t }}</label>
+                    <input id="name" name="name" class="form-input" required maxlength="100" value="{{ form.get('name', '') }}"></div>
+
+                <div class="form-group"><label for="district_id">{{ 'District'|t }}</label>
+                    <select id="district_id" name="district_id" class="form-input" required>
+                        <option value="">{{ 'Select a district'|t }}</option>
+                        {% for d in districts %}<option value="{{ d.id }}" {% if form.get('district_id', '') == d.id|string %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+                    </select></div>
+                <fieldset class="form-group"><legend>{{ 'Monitoring'|t }}</legend>
+                    {% for value, label in monitoring.items() %}
+                    <label style="display:block;"><input type="radio" name="monitoring" value="{{ value }}" required
+                        {% if form.get('monitoring', '') == value %}checked{% endif %}> {{ label|t }}</label>
+                    {% endfor %}</fieldset>
+
+                <div class="form-group"><label for="river_id">{{ 'River'|t }}</label>
+                    <select id="river_id" name="river_id" class="form-input" aria-describedby="river-hint">
+                        <option value="">{{ 'No river'|t }}</option>
+                        {% for rid, label in rivers.get(form.get('district_id', '')|int(0), []) %}<option value="{{ rid }}" {% if form.get('river_id', '') == rid|string %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                    <p class="form-hint" id="river-hint">{{ 'Only rivers of the selected district. A flood / water-level device must name its river explicitly.'|t }}</p></div>
+                <div class="form-group"><label for="firmware_version">{{ 'Firmware version'|t }}</label>
+                    <input id="firmware_version" name="firmware_version" class="form-input" maxlength="50" value="{{ form.get('firmware_version', '') }}"></div>
+
+                <div class="form-group"><label for="latitude">{{ 'Latitude'|t }}</label>
+                    <input id="latitude" name="latitude" class="form-input" type="number" step="any" min="-90" max="90" value="{{ form.get('latitude', '') }}" aria-describedby="coords-hint"></div>
+                <div class="form-group"><label for="longitude">{{ 'Longitude'|t }}</label>
+                    <input id="longitude" name="longitude" class="form-input" type="number" step="any" min="-180" max="180" value="{{ form.get('longitude', '') }}" aria-describedby="coords-hint">
+                    <p class="form-hint" id="coords-hint">{{ 'Give both or neither.'|t }}</p></div>
+            </div>
+            <div class="form-group"><label for="location_description">{{ 'Location description'|t }}</label>
+                <input id="location_description" name="location_description" class="form-input" maxlength="200" value="{{ form.get('location_description', '') }}"></div>
+            <div class="form-group"><label for="description">{{ 'Description'|t }}</label>
+                <textarea id="description" name="description" class="form-input" rows="2" maxlength="1000">{{ form.get('description', '') }}</textarea></div>
+            <div class="form-group"><label for="reason">{{ 'Reason (recorded in the audit log)'|t }}</label>
+                <textarea id="reason" name="reason" class="form-input" rows="2" maxlength="500" required>{{ form.get('reason', '') }}</textarea></div>
+            <p class="meta">{{ 'An API key is generated on registration and shown once on the next page. Only its hash is stored.'|t }}</p>
+            <button class="btn btn-primary" type="submit"><i data-lucide="circle-plus"></i> {{ 'Register device'|t }}</button>
+        </form>
+    </section>
+</div>
+
+<script>
+(function () {
+    // Convenience only: the server re-checks that the river belongs to the district.
+    var RIVERS = {{ rivers|tojson }};
+    var district = document.getElementById('district_id'), river = document.getElementById('river_id');
+    var radios = document.querySelectorAll('input[name="monitoring"]');
+    function fillRivers() {
+        var keep = river.value;
+        while (river.options.length > 1) { river.remove(1); }
+        (RIVERS[district.value] || []).forEach(function (r) {
+            var opt = new Option(r[1], r[0]);
+            opt.selected = String(r[0]) === keep;
+            river.add(opt);
+        });
+    }
+    function requireRiver() {
+        var flood = document.querySelector('input[name="monitoring"]:checked');
+        river.required = !!flood && flood.value === 'water_level';
+    }
+    district.addEventListener('change', fillRivers);
+    radios.forEach(function (r) { r.addEventListener('change', requireRiver); });
+    requireRiver();
+})();
+</script>
+{% endblock %}
