@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">X-MAN Field Node</string>
+    <string name="manual_banner">Manual test uploader (M-LIVE-03). This app does NOT detect landslides: frames are captured by hand and sent only when you press Send Test Evidence.</string>
+    <string name="camera_rationale">Camera access is required to capture field evidence.</string>
+    <string name="location_rationale">Location is used to attach evidence to the registered field node location. Without it, evidence is sent without GPS and X-MAN uses the node\'s registered location.</string>
+    <string name="send_test_evidence">Send Test Evidence</string>
+    <string name="retry_upload">Retry upload</string>
+</resources>

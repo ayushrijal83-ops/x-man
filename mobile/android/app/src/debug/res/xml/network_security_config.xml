@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DEBUG BUILDS ONLY (development LAN test against a local X-MAN server).
+     The platform can't express IP ranges, so cleartext is allowed here and the app itself
+     (ServerUrlPolicy) accepts http:// only for localhost / private LAN addresses in debug builds.
+     Release builds use src/main/res/xml/network_security_config.xml: HTTPS only. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

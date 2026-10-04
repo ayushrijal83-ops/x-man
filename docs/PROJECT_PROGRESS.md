@@ -3494,3 +3494,179 @@ landslide detection. Not started.
 
 ### 🏷️ Status
 **M-LIVE-02 — SERVER-SIDE MOBILE EVIDENCE FOUNDATION COMPLETE (1117 passed) · NEXT: M-LIVE-03 Android skeleton (not started)**
+
+
+---
+
+## M-LIVE-03 — Native Android Field Node Skeleton
+
+**This milestone does not implement automatic landslide detection.** The app is a *manual* test-evidence
+uploader: a person captures 1–3 frames and presses **Send Test Evidence**. There is no MotionGate, no
+optical flow, no on-device model, no continuous or background camera, no foreground service and no
+automatic trigger. It proves the path:
+
+```
+Android phone (registered camera_node identity)
+  -> CameraX capture (manual) + platform GPS fix
+  -> authenticated multipart POST /api/iot/evidence (M-LIVE-02 contract, unchanged)
+  -> NodeEvidence -> existing landslide Incident (report_hazard) -> existing notifications
+```
+No server code changed in this milestone.
+
+### Project structure (`mobile/android/`, independent Gradle build; the Flask app is untouched)
+```
+settings.gradle.kts, build.gradle.kts, gradle.properties, gradlew(.bat), gradle/wrapper/  (Gradle 9.8.0, SHA-256 pinned)
+app/build.gradle.kts
+app/src/main/AndroidManifest.xml
+app/src/main/java/np/xman/fieldnode/
+  EvidencePackage.kt   local package model + states, client_event_id (UUID v4)
+  EvidenceStore.kt     app-private package storage (files/evidence/<client_event_id>/)
+  EvidenceMetadata.kt  the `metadata` JSON (allow-listed keys only)
+  Upload.kt            response -> state mapping, multipart body, HttpURLConnection transport, uploader
+  Credentials.kt       CredentialStore (Keystore ciphertext), NodeConfig, ServerUrlPolicy
+  Platform.kt          KeystoreCipher, SharedPreferences store, battery/network, GPS, JPEG encoder
+  MainActivity / ProvisionActivity / CaptureActivity / ResultActivity
+app/src/main/res/      layouts, strings, network_security_config (HTTPS only), data_extraction_rules (no backup)
+app/src/debug/res/xml/network_security_config.xml   debug-only cleartext (see Server URL)
+app/src/test/          JVM unit tests        app/src/androidTest/   on-device Keystore tests
+```
+Build: JDK 17 + Android SDK, `cd mobile/android && ./gradlew assembleDebug testDebugUnitTest`
+(`local.properties` with `sdk.dir` is machine-specific and git-ignored).
+
+### Versions (checked against the official release feeds on 2026-10-04)
+- compileSdk **37**, targetSdk **37** (Android 17; `platforms;android-37.0`), minSdk **26** (Android 8.0)
+- Android Gradle Plugin **9.4.1** (latest stable) with AGP's built-in Kotlin: Kotlin Gradle plugin **2.2.10**
+- Gradle **9.8.0**, JDK **17** (Eclipse Temurin 17.0.20), build-tools 36.0.0
+- Dependencies (all free, no Google Play Services): `androidx.activity:activity-ktx:1.13.0`,
+  `androidx.camera:camera-camera2/-lifecycle/-view:1.6.2`. Tests: JUnit 4.13.2, `org.json:json:20260814`
+  (JVM tests only), `androidx.test:runner:1.7.0`, `androidx.test.ext:junit:1.3.0`. No AppCompat, no
+  OkHttp, no WorkManager, no ML libraries.
+
+### Provisioning flow
+Super Admin registers the node (device kind **Camera node**, M-LIVE-02) → the one-time API key is shown
+once → on the phone, **Provisioning**: server URL, device ID, API key → **Save**. The phone is an
+infrastructure node, not a citizen account: no login/registration. "Clear credentials" deletes the
+stored values and the Keystore key (captured evidence is kept). **Test connection** only checks
+reachability through the public `/api/health` and sends no credentials: X-MAN has no authenticated
+device health endpoint and none was added, so credentials are proven by the first evidence upload.
+
+### Credential security
+- The API key is encrypted with an AES-256-GCM key generated inside the **Android Keystore** (not
+  exportable); only IV + ciphertext are stored in app-private SharedPreferences. Never in source,
+  Gradle files, URLs, query strings, logs, UI after saving, or plaintext prefs (verified on the phone).
+- The key field is never pre-filled; the provisioning screen sets `FLAG_SECURE` (no screenshots/recents).
+- `allowBackup=false` + data-extraction rules exclude everything from cloud backup and device transfer.
+- Only log line for uploads: `authenticated upload attempted` (never the header, key or device ID).
+- Normal system certificate validation; no trust-all, no hostname bypass, no pinning yet (to be
+  evaluated for production). Redirects are not followed, so the Authorization header can't be replayed elsewhere.
+
+### Server URL
+Release builds: HTTPS only (network security config + `ServerUrlPolicy`). Debug builds: `http://` is
+also accepted, **only** for localhost / 10.x / 172.16–31.x / 192.168.x (development against a local
+X-MAN). The platform config can't express IP ranges, so the debug config allows cleartext and the app
+enforces the private-address rule. URLs with credentials, query or fragment are refused. No Flask
+production setting was changed. **HTTP is development-only; production must use HTTPS.**
+
+### Camera
+CameraX `Preview` + `ImageCapture` bound to the capture screen's lifecycle (stops when the screen
+closes). Up to 3 frames; thumbnails; "Clear frames". Each frame is decoded, rotated upright, scaled to
+≤1600 px and re-encoded as a fresh JPEG (no EXIF written) into app-private storage, never the gallery.
+This is for bandwidth only: the server's `process_image()` remains the security boundary.
+Camera permission is requested on the capture screen with the rationale "Camera access is required to
+capture field evidence."; after a denial a button re-asks once or opens the app settings.
+
+### GPS
+Platform `LocationManager` GPS provider via `LocationManagerCompat.getCurrentLocation` (no Play
+Services), requested only when the user presses **Get GPS fix**, with the rationale shown. The screen
+shows latitude/longitude, accuracy and fix time. No fix → no coordinates are sent (never cached or
+invented); the user can retry. Permission denied → evidence can still be sent, with a warning; X-MAN
+uses the registered node location. The phone never sends a district.
+
+### Upload contract (M-LIVE-02, unchanged)
+`POST <server>/api/iot/evidence`, `Authorization: Bearer <device_id>:<api_key>`, multipart:
+`metadata` (JSON) + `frame_0..frame_2` (`frame_N.jpg`, `image/jpeg`). Metadata sent: `client_event_id`
+(UUID v4), `captured_at` (first frame, device clock, ISO 8601 UTC), `latitude`/`longitude`/
+`gps_accuracy_m`/`gps_fix_at` only with a real fix, `app_version`, `battery_pct`, `network_type`
+(`wifi`/`cellular`/`ethernet`/`unknown`/`none`; no SSID, MAC or IP). **Not sent:** `device_score`,
+`model`, `model_version` (no detector exists) and every server-owned field.
+
+### Local states, retry and storage
+`DRAFT → READY → UPLOADING → UPLOADED | FAILED_RETRYABLE | FAILED_PERMANENT`.
+"Send Test Evidence" freezes the metadata (READY); every attempt resends the same `client_event_id` and
+identical metadata. Frames stay in `files/evidence/<id>/` until X-MAN confirms (201, or 200 with
+`duplicate: true`); then only the small result record is kept. Responses: 201 → uploaded; 200 duplicate →
+uploaded ("already accepted"); 400/403/413 (other 4xx) → FAILED_PERMANENT, never retried (discard
+button); 401 → "Camera node credentials invalid or revoked. Re-provision this device." (retry allowed
+after re-provisioning; no automatic rotation); 429 → rate-limited, retry later; 5xx / network / timeout
+→ FAILED_RETRYABLE. A package interrupted mid-upload (app killed) reloads as FAILED_RETRYABLE.
+Retry is a manual "Retry upload" button. **No WorkManager**: automatic background upload isn't required
+yet and a manual foreground retry with persisted packages already guarantees that network loss can't
+destroy evidence.
+
+### Tests
+**AUTOMATED (JVM, `./gradlew testDebugUnitTest`) — 45 passed, 0 failed:** client_event_id generation,
+uniqueness and server-regex compatibility; persistence round trip; metadata required fields, allow-list,
+forbidden fields absent, no detector claims, GPS omitted without a fix, unknown accuracy not invented,
+invalid battery omitted; response mapping for 201, 200 duplicate, 200 non-duplicate, 400, 401, 403,
+404, 413, 429, 5xx, network failure, held evidence (no incident), long errors truncated; multipart part
+names/filenames/types, 1–3 frames, no local paths; store: frames survive restart, max 3 frames, READY
+needs a frame, interrupted upload → retryable, ids can't escape the evidence folder; uploader: success
+stores ids and drops frames, network failure keeps frames and retries reuse the same id + identical
+metadata, 400 never retried, uploaded never resent, drafts not uploaded, duplicate accepted, 401
+message, 429; no key/`Bearer` in logs or on disk, no key or forbidden field in the body; credentials:
+encrypted at rest, retrievable, clear removes everything + key, lost Keystore key → no key (no crash),
+validation messages never echo the key; server URL policy (HTTPS, LAN-HTTP debug only, public HTTP
+refused, no userinfo/query/fragment).
+Lint (`lintDebug`): 0 errors; 33 warnings, all accepted for this prototype: 21 HardcodedText + 6
+SetTextI18n (English-only UI), 2 ButtonStyle, 2 UseKtx, 1 MissingApplicationIcon, 1
+InsecureBaseConfiguration (the intended debug-only cleartext config).
+
+**MANUAL ANDROID TESTS (physical Redmi 12, model 23053RN02A, Android 15 / API 35, HyperOS; USB + `adb`):**
+- Instrumented `KeystoreCredentialTest` on the phone: **OK (2 tests)**: real Android Keystore round
+  trip, no plaintext key in `shared_prefs/camera_node.xml`, clear deletes the Keystore key.
+- Debug APK installed with `adb install` (HyperOS refuses Gradle's `-g` install flag); X-MAN reached
+  through `adb reverse tcp:5055` as `http://localhost:5055` (no LAN exposure, no firewall change).
+- Provisioned as `PHONE-LANDSLIDE-TEST-001`; on the phone only `server_url`, `device_id`, `api_key_iv`,
+  `api_key_ciphertext` were stored, and the plaintext key did not appear in the prefs file.
+- Captured 3 frames by hand → **Send Test Evidence** → **201**, app shows "UPLOADED – Accepted by
+  X-MAN", frames removed from the phone afterwards. Location permission had not been granted, so no
+  GPS was sent (server `gps_status = missing`); a GPS fix was **not** obtained in this session, so the
+  GPS fields were not exercised on the device (covered by unit tests only).
+- Network-loss test: server stopped → new package → **FAILED_RETRYABLE** "Network unavailable…",
+  3 frames + metadata kept in app-private storage → server restarted → **Retry upload** → **201** with
+  the **same** `client_event_id`.
+- Disabled-device test: node disabled in Super Admin → new package → HTTP **401** → app shows "Camera
+  node credentials invalid or revoked. Re-provision this device.", frame kept.
+- Logcat after the session (117,937 lines): no API key, no `Bearer`, no device ID; the app's only line
+  was `authenticated upload attempted` (7×).
+
+**SERVER SMOKE TESTS (local X-MAN on a throwaway, migrated copy of the dev DB; never the dev DB):**
+- Node registered through the real Super Admin route (`/admin/devices/new`, kind camera_node,
+  Kathmandu, no registered coordinates; `REGISTERED_DEVICE` audited); one-time key from the device page.
+- Phone upload → NodeEvidence #1 `attached`, 3 sanitized frames, battery 97, `wifi`, app
+  `0.1.0-mlive03`, no device_score/model, `gps_status missing` → `location_source district`;
+  Incident #1 **landslide / medium / iot / detected / Kathmandu**, `source_reference evidence_1`;
+  `hazard_detected` (medium) notifications to the Kathmandu citizen and the admins through the existing system.
+- Duplicate: the phone's own frozen metadata (read from app storage) replayed with the same key and
+  `client_event_id` → **200 `duplicate: true`**, same evidence_id 1 / incident_id 1; evidence, incident
+  and notification counts unchanged (1 / 1 / 3). (The app itself never resends an accepted package.)
+- Retried package → merged into Incident #1 (report_count 2), no new notifications.
+- Disabled device (`DISABLED_DEVICE` audited) → 401, nothing stored.
+- Cleanup: credentials cleared on the phone (prefs empty, Keystore key deleted), test packages
+  deleted, `adb reverse` removed, throwaway DB / frames / key / logs deleted. The dev DB contains no
+  test node and no evidence.
+- Full X-MAN Python suite: **`python -m pytest tests/ -q` → 1117 passed, 2 warnings, 0 failed, 0 errors** (unchanged: no server code changed).
+
+### Known limitations
+- No automatic detection, no continuous/background camera, no automatic background upload (manual retry).
+- GPS fix not exercised on the physical phone in this session; `stale_fix`/`accepted` paths are server-tested only.
+- Physical test used USB `adb reverse` to a local HTTP server, not HTTPS over a real network.
+- English-only UI, no launcher icon, one evidence package handled at a time in the UI ("Open last evidence").
+- No certificate pinning; device clock trusted for `captured_at` (server validates plausibility).
+- HyperOS needs "Install via USB" and "USB debugging (Security settings)" for adb install/input.
+
+### Next milestone
+**M-LIVE-04 — Native Android continuous camera pipeline + MotionGate + temporal state machine.** Not started.
+
+### 🏷️ Status
+**M-LIVE-03 — NATIVE ANDROID FIELD NODE SKELETON COMPLETE (manual uploader; phone → X-MAN proven on a Redmi 12) · NEXT: M-LIVE-04 (not started)**
