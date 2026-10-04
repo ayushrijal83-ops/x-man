@@ -4,8 +4,14 @@
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
         android:text="@string/monitor_banner" android:padding="8dp" android:background="#FFF3CD"
         android:textColor="#664D03" android:textSize="12sp" />
-    <androidx.camera.view.PreviewView android:id="@+id/preview"
-        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:background="#000000">
+        <androidx.camera.view.PreviewView android:id="@+id/preview"
+            android:layout_width="match_parent" android:layout_height="match_parent" />
+        <np.xman.fieldnode.RoiOverlayView android:id="@+id/roi_overlay"
+            android:layout_width="match_parent" android:layout_height="match_parent"
+            android:contentDescription="Monitoring area selector: drag to select the area to monitor" />
+    </FrameLayout>
     <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="vertical" android:padding="8dp">
@@ -15,6 +21,12 @@
                 android:text="Upload visual evidence candidates automatically (off: they wait on this phone)" />
             <Button android:id="@+id/toggle" android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:text="Start monitoring" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/preview_button" android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:text="Show preview" />
+                <Button android:id="@+id/full_frame" android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:text="Use full frame" />
+            </LinearLayout>
             <Button android:id="@+id/last" android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:text="Open last evidence" />
         </LinearLayout>

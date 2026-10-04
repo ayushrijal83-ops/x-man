@@ -33,6 +33,7 @@ class MonitorController(
     private val machine = MonitorStateMachine(config)
     private val keyframes = KeyframeCollector()
     private var previous: LumaGrid? = null
+    private var previousFrame: LumaGrid? = null  // whole-frame context grid (null when the ROI is the full frame)
     private var lastSampleAt = 0L
 
     /** Upload candidates automatically; off = the package waits on the phone for a manual upload. */
@@ -58,9 +59,13 @@ class MonitorController(
     /** Diagnostics are per monitoring session: the FPS estimate never spans a stop/start gap. */
     @Synchronized fun start() {
         previous = null
+        previousFrame = null
         keyframes.clear()
         framesAnalyzed = 0; framesSkipped = 0; recentCount = 0; lastSampleAt = 0
         for (k in counts.keys) counts[k] = 0L
+        // status lines are per session too (a previous session's package may already be uploaded or deleted)
+        lastEventAt = null; gpsPending = false; gpsDone = false; gpsFix = null; gpsNote = "not requested yet"
+        uploadStatus = "none"; lastPackageId = null
         machine.start(clock())
     }
 
@@ -76,6 +81,7 @@ class MonitorController(
         gpsPending = false
         keyframes.clear()
         previous = null
+        previousFrame = null
         machine.stop(now)
     }
 
@@ -87,16 +93,21 @@ class MonitorController(
         return true
     }
 
-    /** One sampled frame. [encodeKeyframe] is only invoked when a keyframe slot needs this frame. */
-    @Synchronized fun onSample(grid: LumaGrid, now: Long, encodeKeyframe: () -> ByteArray) {
+    /**
+     * One sampled frame: [grid] is the monitored region (ROI) and [frameGrid] the whole frame as context
+     * (null when the ROI is the full frame). [encodeKeyframe] is only invoked when a keyframe slot needs it.
+     */
+    @Synchronized fun onSample(grid: LumaGrid, now: Long, frameGrid: LumaGrid? = null, encodeKeyframe: () -> ByteArray) {
         if (machine.state == MonitorState.STOPPED || machine.state == MonitorState.DEGRADED) return
         framesAnalyzed++
         recent[(recentCount++ % recent.size)] = now
         val prev = previous
+        val prevFrame = previousFrame
         previous = grid
+        previousFrame = frameGrid
         if (prev == null) { machine.timeouts(now); return }
 
-        val result = gate.compare(prev, grid)
+        val result = gate.classify(prev, grid, prevFrame, frameGrid)
         counts[result.kind] = counts.getValue(result.kind) + 1
         val t = machine.onSample(result.kind, now)
 
@@ -132,11 +143,13 @@ class MonitorController(
         }
         keyframes.clear()
         previous = null
+        previousFrame = null
         machine.onCameraError(now)
     }
 
     @Synchronized fun onCameraRecovered() {
         previous = null
+        previousFrame = null
         machine.onCameraRecovered(clock())
     }
 

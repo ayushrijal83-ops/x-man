@@ -419,6 +419,10 @@ class MonitorControllerTest {
         feed(c, 12, motion = false)
         val s = c.snapshot()
         assertEquals(12L, s.framesAnalyzed)
+        assertNull(s.lastEventAtMs)                 // previous session's candidate is not shown as current
+        assertEquals("none", s.uploadStatus)
+        assertEquals("not requested yet", s.gpsStatus)
+        assertNull(s.lastPackageId)
         assertTrue("fps ${s.analysisFps}", s.analysisFps in 1.9f..2.1f)
         assertEquals(0, s.confirmedEvents)
     }

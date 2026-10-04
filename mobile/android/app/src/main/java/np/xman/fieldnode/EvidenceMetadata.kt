@@ -34,7 +34,7 @@ object EvidenceMetadata {
     }
 
     const val MODEL = "motion-gate"
-    const val MODEL_VERSION = "mlive04-1"
+    const val MODEL_VERSION = "mlive05-1"  // MotionGate on the selected area + whole-frame shake/global veto
 
     /** ISO 8601 UTC, whole seconds: "2026-10-04T12:00:00Z". */
     fun iso(epochMs: Long): String = Instant.ofEpochMilli(epochMs).truncatedTo(ChronoUnit.SECONDS).toString()

@@ -117,10 +117,18 @@ object Gps {
 object FrameEncoder {
     private const val MAX_SIDE = 1600
 
-    fun encode(bitmap: Bitmap, rotationDegrees: Int): ByteArray {
+    /** [roi] (upright coordinates), if given and not the full frame, is outlined so reviewers see the monitored area. */
+    fun encode(bitmap: Bitmap, rotationDegrees: Int, roi: NormRect? = null): ByteArray {
         val scale = minOf(1f, MAX_SIDE.toFloat() / maxOf(bitmap.width, bitmap.height))
         val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()); postScale(scale, scale) }
-        val upright = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        var upright = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        if (roi != null && !roi.isFull) {
+            if (!upright.isMutable) upright = upright.copy(Bitmap.Config.ARGB_8888, true).also { upright.recycle() }
+            val w = upright.width.toFloat()
+            val h = upright.height.toFloat()
+            android.graphics.Canvas(upright).drawRect(roi.left * w, roi.top * h, roi.right * w, roi.bottom * h,
+                android.graphics.Paint().apply { style = android.graphics.Paint.Style.STROKE; strokeWidth = maxOf(3f, w / 200); color = 0xFFFFC107.toInt() })
+        }
         return ByteArrayOutputStream().use { out ->
             upright.compress(Bitmap.CompressFormat.JPEG, 85, out)  // a fresh JPEG: no EXIF is written
             if (upright !== bitmap) upright.recycle()

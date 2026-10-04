@@ -73,6 +73,26 @@ class MotionGate(private val config: MonitorConfig = MonitorConfig()) {
         return result(MotionKind.LOCAL_MOTION, region)
     }
 
+    /**
+     * M-LIVE-05 ROI decision. The selected region (resampled to the same grid) is the primary signal;
+     * the whole frame is context only:
+     *   - ROI not LOCAL_MOTION                 -> the ROI result (motion outside the ROI can't create a hit)
+     *   - ROI LOCAL_MOTION, frame SHAKE        -> SHAKE: the camera moved, so the scene slid under the ROI
+     *   - ROI LOCAL_MOTION, frame GLOBAL_CHANGE-> GLOBAL_CHANGE: most of the view changed (lighting, a person
+     *                                              right in front of the lens), not a change of the area itself
+     *   - otherwise                            -> LOCAL_MOTION
+     * Without frame grids (ROI = full frame) this is exactly [compare], i.e. the M-LIVE-04 behaviour.
+     */
+    fun classify(roiPrevious: LumaGrid, roiCurrent: LumaGrid, framePrevious: LumaGrid?, frameCurrent: LumaGrid?): MotionResult {
+        val roi = compare(roiPrevious, roiCurrent)
+        if (roi.kind != MotionKind.LOCAL_MOTION || framePrevious == null || frameCurrent == null) return roi
+        return when (compare(framePrevious, frameCurrent).kind) {
+            MotionKind.SHAKE -> roi.copy(kind = MotionKind.SHAKE)
+            MotionKind.GLOBAL_CHANGE -> roi.copy(kind = MotionKind.GLOBAL_CHANGE)
+            else -> roi
+        }
+    }
+
     private fun normalize(v: FloatArray): FloatArray {
         val mean = v.average().toFloat()
         var variance = 0f

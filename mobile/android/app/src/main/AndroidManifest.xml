@@ -32,6 +32,7 @@
             android:windowSoftInputMode="adjustResize" />
         <activity android:name=".CaptureActivity" android:exported="false" />
         <activity android:name=".ResultActivity" android:exported="false" />
-        <activity android:name=".MonitorActivity" android:exported="false" />
+        <activity android:name=".MonitorActivity" android:exported="false"
+            android:screenOrientation="portrait" />
     </application>
 </manifest>

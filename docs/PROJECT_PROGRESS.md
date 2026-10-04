@@ -3784,3 +3784,92 @@ Auto-upload is an explicit checkbox, OFF by default.
 
 ### 🏷️ Status
 **M-LIVE-04 — CONTINUOUS CAMERA PIPELINE + MOTIONGATE + TEMPORAL STATE MACHINE COMPLETE (visual change only; not landslide detection)**
+
+
+---
+
+## M-LIVE-05 — ROI-Based Visual Monitoring (final mobile-node milestone)
+
+**Still deterministic visual-change monitoring — not landslide detection.** The user selects the area to
+monitor; only that area can produce "possible visual events" and "visual evidence candidates". No ML, no new
+dependency, no background camera, no new upload protocol, **no server change**. Commit:
+`feat(mlive): add ROI-based visual monitoring` (hash in `git log`). **Android/mobile feature development is now
+frozen** (critical bug fixes only); next: physical flood hardware.
+
+### ROI design
+- `NormRect` (`Roi.kt`): fractions of the frame (0..1), so it survives any camera resolution. Built only through
+  `of()` / `decode()`: corners in any order, clamped to the frame, refused if not finite or if a side is < 10 %
+  (zero-area and unusably tiny regions are impossible); `copy()` is private. Persisted in app-private prefs.
+- Drawn on the upright preview: `RoiOverlayView` over a FIT_CENTER `PreviewView` (whole 4:3 frame visible, the
+  overlay computes the same content rectangle) — yellow outline + "Selected area" / "Monitoring selected area".
+  Locked while monitoring; "Use full frame" resets it; the monitoring screen is portrait-locked so a drawn area
+  always means the same part of the scene.
+- `toSensor(rotationDegrees)` maps upright fractions into the camera buffer (0/90/180/270, unit-tested both ways).
+- Default = full frame → exactly the M-LIVE-04 pipeline.
+- Camera modes: screen visible → **preview only** (area selection, nothing analysed); Start → preview + analysis;
+  Stop or leaving the screen → camera **released**. Keyframes have the monitored area outlined for reviewers.
+
+### MotionGate integration (exact changes)
+- `FrameSampler.downsample(..., roi)`: samples ≤ 5x5 evenly spaced pixels per grid cell inside the ROI (never an
+  empty cell) into the same 64x48 grid — a small area gets more detail at the same cost.
+- `MotionGate.compare()` is unchanged (z-normalization, 0.5 cell threshold, ≥ 3 changed cells, shake by ±2-pixel
+  shift, > 50 % = global, ≥ 3-cell connected region). New `MotionGate.classify(roiPrev, roiCur, framePrev, frameCur)`:
+  the ROI result decides; when the ROI says LOCAL_MOTION the whole-frame result can veto it — frame SHAKE → SHAKE
+  (the camera moved, so the scene slid under the ROI), frame GLOBAL_CHANGE → GLOBAL_CHANGE (lighting, or something
+  covering most of the view). Motion outside the ROI can never create a hit. Without a frame grid (ROI = full
+  frame) `classify == compare`.
+- Same `MonitorStateMachine` (no second state machine), same `MonitorConfig` thresholds (persistence 3 samples,
+  4 s window ≥ 60 %, 60 s cooldown, timeouts); new config only `NormRect.MIN_SIDE = 0.1`.
+- Evidence: same `KeyframeCollector` (≤ 3), `EvidenceStore`, `EvidenceMetadata` (`model_version` now
+  `mlive05-1`), uploader and `/api/iot/evidence`. GPS once at confirmation, never invented. Auto-upload checkbox
+  kept, OFF by default, its state shown in the status. Diagnostics and status lines are per monitoring session.
+
+### Tests
+- Android JVM: **108 passed, 0 failed** (86 previous + 22 new): ROI accepted / any corner order, clamping, zero-area
+  and tiny rejected (incl. the 0.1 float boundary), default/decode fallback, rotation round trips, same scene region
+  at 320x240 and 1280x960, small ROI fills every cell; MotionGate on ROI: identical static, noise rejected, local
+  change inside → candidate, motion outside → static (while the full frame would fire), small change visible only
+  thanks to ROI detail, brightness offset/gain rejected, shake vetoed, large whole-view change vetoed, full-frame
+  ROI ≡ M-LIVE-04; controller: static area nothing, persistent outside motion nothing, transient inside no
+  confirmation, persistent inside one bounded 3-frame READY package (auto-upload off), stop/degraded/recovery,
+  auto-upload default off; per-session status reset.
+- Lint: 0 errors. Debug + release build OK. X-MAN Python suite: **`python -m pytest tests/ -q` → 1117 passed, 2 warnings, 0 failed**.
+
+### Redmi 12 physical test (Android 15/HyperOS, USB `adb reverse` → throwaway local X-MAN, disposable node `PHONE-LANDSLIDE-TEST-005`)
+- Preview-only mode on opening the screen; area drawn by drag → saved (0.524, 0.100)–(0.970, 0.965), exactly the
+  value computed from the FIT_CENTER geometry; yellow outline + label visible (the dimming outside the area is not
+  visible over the camera surface on this device).
+- **A – static** (area 44 % x 86 %, nobody in view, 2 min): 276 frames → static 275, **0 motion, 0 possible events,
+  0 candidates**. (A first attempt was invalid: a person walked through the room into the area — correctly detected;
+  those two packages were deleted from the phone without upload.)
+- **B – motion outside the area** (10 s, watched on screen): motion samples in area 33 → 33, possible events 1 → 1,
+  global 34 → 34: **no effect**. (An earlier attempt had fingers inside the box — keyframes showed it.)
+- **C – movement inside**: ~3 s wave → possible visual events 1 → 5, motion samples 33 → 50, back to monitoring,
+  **no candidate**; a sub-second pass fell between the 2/s samples and registered nothing.
+- **D – persistent movement inside**: status "confirming persistent change" → "visual evidence candidate" →
+  GPS fix ±8.7 m → auto-upload 201.
+- **E – Stop**: camera clients 1 → 0, CPU → 0.0 %, status "Camera: released", frames analysed frozen. Screen
+  timeout while stopped also released the preview camera (onStop).
+- **F – X-MAN (throwaway DB)**: NodeEvidence attached, 3 sanitized frames (area outlined), `motion-gate / mlive05-1`,
+  no device_score, `gps_status no_reference` (fix recorded, node has no registered coordinates) → district location;
+  Incident landslide / medium / iot / detected, Kathmandu; `hazard_detected` notifications via the existing system.
+- Performance: monitoring with an area 39–55 % of one core (M-LIVE-04 full frame 28–42 %; extra whole-frame context
+  grid + 4:3 binding), PSS 124–139 MB (unchanged), 0 % after Stop. ~28 camera frames/s delivered, 2/s analysed.
+- Cleanup: phone credentials + Keystore key cleared, packages and saved area deleted, adb reverse removed, throwaway
+  DB/frames/key deleted; logcat (117,888 lines) had no API key, no `Bearer`, no device ID. Dev DB untouched.
+- Found and fixed during the test: status lines (last event, GPS, upload) carried over from a previous session.
+
+### Known limitations
+- Change detection only: a person, animal or object moving inside the area produces candidates (seen in test).
+- Whole-frame veto: a large movement elsewhere (> 50 % of the view) can mask a simultaneous change inside the area;
+  only translation shake is recognized, no stabilization; a tilted/moved phone needs the area redrawn.
+- Sub-second events can fall between the 2/s samples; persistence by design needs ≈ 5.5 s of change.
+- Foreground only (screen on, app visible); portrait-locked monitoring screen; no night/IR handling.
+- CPU somewhat higher with an area selected; ~28 frames/s still delivered and dropped by CameraX.
+- Auto-upload creates real (medium) X-MAN incidents: keep it OFF outside tests.
+
+### Next milestone
+**Physical flood hardware** (ESP32 + JSN-SR04T flood node, H01). Mobile/Android development is frozen.
+
+### 🏷️ Status
+**M-LIVE-05 — ROI-BASED VISUAL MONITORING COMPLETE · MOBILE NODE FROZEN · NEXT: PHYSICAL FLOOD HARDWARE**
