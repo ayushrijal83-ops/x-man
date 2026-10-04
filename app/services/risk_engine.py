@@ -217,6 +217,8 @@ SENSOR_TYPES = {
     'rainfall': {'unit': 'mm', 'range': (0, 500), 'description': 'Rainfall'},
     'vibration': {'unit': 'mg', 'range': (0, 1000), 'description': 'Vibration'},
     'tilt': {'unit': '°', 'range': (-180, 180), 'description': 'Tilt angle'},
+    # M-LIVE-02: node health heartbeat (camera nodes). Stored only; no risk rule reads it.
+    'battery': {'unit': '%', 'range': (0, 100), 'description': 'Battery level'},
 }
 
 
@@ -411,7 +413,7 @@ def assess_motion(vibration_readings, tilt_readings, vibration_threshold_mg=None
                           evidence=evidence, sources=['iot'], district_id=district_id)
 
 
-def assess_visual(hazard_type, reports, authority_source=False, district_id=None):
+def assess_visual(hazard_type, reports, authority_source=False, district_id=None, node_evidence=()):
     """Evidence grade for a landslide/road_damage event from its linked citizen reports.
 
     Counted per distinct reporter (one person's repeated reports count once); rejected
@@ -421,6 +423,10 @@ def assess_visual(hazard_type, reports, authority_source=False, district_id=None
       single_report  one reporter, no AI agreement
       supported      one reporter + AI agreement, or >= 2 distinct reporters
       corroborated   >= 2 distinct reporters and >= 1 AI agreement
+      field_node_only  no usable citizen report, but attached camera-node evidence (M-LIVE-02)
+    Camera-node evidence (node_evidence) is a separate source: a node is never counted as a
+    reporter and its AI results never count as a citizen AI agreement, so the citizen grades above
+    are unchanged. Review-rejected and held evidence is excluded.
     Assessment only: never changes severity or status (action is always 'none').
     """
     usable = [r for r in reports if r.status != 'rejected']
@@ -436,8 +442,12 @@ def assess_visual(hazard_type, reports, authority_source=False, district_id=None
                 'ai_not_available': len(usable) - len(completed),
                 'max_ai_agree_confidence': max((r.ai_confidence for r in agree), default=None),
                 'authority_source': authority_source}
+    nodes = [e for e in node_evidence if e.status == 'attached' and e.review_status != 'rejected']
+    evidence.update(field_node_evidence=len(nodes), distinct_field_nodes=len({e.device_id for e in nodes}),
+                    field_node_ai_agree=sum(1 for e in nodes if e.ai_status == 'completed'
+                                            and e.ai_label == hazard_type))
     sources = (['citizen_report'] if usable else []) + (['vision_ai'] if agree else []) + \
-        (['authority'] if authority_source else [])
+        (['field_node'] if nodes else []) + (['authority'] if authority_source else [])
 
     if len(reporters) >= 2 and agree:
         level = 'corroborated'
@@ -445,9 +455,15 @@ def assess_visual(hazard_type, reports, authority_source=False, district_id=None
         level = 'supported'
     elif reporters:
         level = 'single_report'
+    elif nodes:
+        level = 'field_node_only'
     else:
         level = 'insufficient'
     reasons = [f'{len(reporters)} distinct reporter(s), {len(agree)} AI agreement(s)']
+    if nodes:
+        reasons.append(f"{len(nodes)} camera-node evidence item(s) from {evidence['distinct_field_nodes']} "
+                       f"field node(s), {evidence['field_node_ai_agree']} with server AI agreement "
+                       f"(not counted as reporters)")
     if conflict:
         reasons.append(f'{len(conflict)} AI result(s) suggest a different hazard type: needs human review')
     if evidence['rejected_reports']:

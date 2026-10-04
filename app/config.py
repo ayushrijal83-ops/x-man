@@ -38,6 +38,16 @@ class Config:
     MOTION_TILT_CHANGE_THRESHOLD_DEG = float(os.environ['MOTION_TILT_CHANGE_THRESHOLD_DEG']) \
         if os.getenv('MOTION_TILT_CHANGE_THRESHOLD_DEG') else None
 
+    # M-LIVE-02 camera-node field evidence (POST /api/iot/evidence). Engineering defaults, not validated
+    # field values: a mounted phone should sit within NODE_MAX_DISTANCE_KM of its registered location.
+    NODE_MAX_DISTANCE_KM = float(os.getenv('NODE_MAX_DISTANCE_KM', '1.0'))
+    NODE_MAX_GPS_ACCURACY_M = float(os.getenv('NODE_MAX_GPS_ACCURACY_M', '50'))
+    NODE_MAX_GPS_FIX_AGE_SECONDS = int(os.getenv('NODE_MAX_GPS_FIX_AGE_SECONDS', '300'))  # fix older than capture
+    NODE_MAX_EVIDENCE_AGE_HOURS = int(os.getenv('NODE_MAX_EVIDENCE_AGE_HOURS', '72'))  # older: held, no new event
+    NODE_MAX_EVIDENCE_PER_HOUR = int(os.getenv('NODE_MAX_EVIDENCE_PER_HOUR', '6'))  # confirmed events, not frames
+    NODE_HOLD_AFTER_REJECTION_HOURS = int(os.getenv('NODE_HOLD_AFTER_REJECTION_HOURS', '24'))
+    EVIDENCE_UPLOAD_DIR = os.getenv('EVIDENCE_UPLOAD_DIR')  # default: instance/uploads/evidence
+
     # M12 Web Push. Server credentials from the environment only (generate with `flask push-keys`);
     # unset = push disabled, in-app and in-website alerts still work. The private key never reaches a page.
     VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')

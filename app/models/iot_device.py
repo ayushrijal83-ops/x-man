@@ -1,7 +1,13 @@
 from app.extensions import db
 from datetime import datetime
-import secrets
 import hashlib
+import hmac
+import secrets
+
+# M-LIVE-02: what a device is allowed to do. Set once at provisioning; never a normal edit.
+#   sensor       ESP32 telemetry (water_level, vibration, tilt, ...)
+#   camera_node  mobile field node: field evidence uploads (+ battery heartbeat telemetry)
+DEVICE_KINDS = ('sensor', 'camera_node')
 
 
 class IoTDevice(db.Model):
@@ -15,6 +21,7 @@ class IoTDevice(db.Model):
     district_id = db.Column(db.Integer, db.ForeignKey('districts.id'), nullable=False)
     authority_id = db.Column(db.Integer, db.ForeignKey('authorities.id'), nullable=True)
     river_id = db.Column(db.Integer, db.ForeignKey('rivers.id'), nullable=True)
+    kind = db.Column(db.String(20), nullable=False, default='sensor', server_default='sensor')  # DEVICE_KINDS
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
     location_description = db.Column(db.String(200))
@@ -45,7 +52,7 @@ class IoTDevice(db.Model):
 
     def verify_api_key(self, api_key):
         """Verify an API key against the stored hash."""
-        return self.api_key_hash == self.hash_api_key(api_key)
+        return hmac.compare_digest(self.api_key_hash or '', self.hash_api_key(api_key))
 
     def to_dict(self, include_api_key=False):
         """Convert to dictionary."""
@@ -60,6 +67,7 @@ class IoTDevice(db.Model):
             'authority_name': self.authority.name if self.authority else None,
             'river_id': self.river_id,
             'river_name': self.river.name if self.river else None,
+            'kind': self.kind,
             'latitude': self.latitude,
             'longitude': self.longitude,
             'location_description': self.location_description,

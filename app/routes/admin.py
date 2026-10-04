@@ -17,6 +17,7 @@ from app.extensions import db, login_manager
 from app.models import (Authority, CitizenReport, District, Incident, IoTDevice, Notification, PushSubscription, River,
                         User)
 from app.models.audit_log import AUDIT_ACTIONS, AUDIT_TARGETS, REASON_MAX
+from app.models.iot_device import DEVICE_KINDS
 from app.models.citizen_report import REPORT_REVIEW_STATUSES, REPORT_STATUS, VISUAL_HAZARD_TYPES
 from app.models.incident import HAZARD_SEVERITY, HAZARD_TYPES
 from app.models.user import EMERGENCY_ALERT_STATES
@@ -265,7 +266,7 @@ def _device_page(device, new_key=None):
     sensor_type = (request.args.get('sensor_type') or '').strip()[:50] or None
     f = {'device_id': device.id, 'sensor_type': sensor_type,
          'hours': hours if hours in admin_service.TELEMETRY_WINDOWS else None, 'page': _int_arg('page', 1, minimum=1)}
-    return render_template('admin/device_detail.html', device=device, f=f, new_key=new_key,
+    return render_template('admin/device_detail.html', device=device, f=f, new_key=new_key, kinds=KIND_LABELS,
                            windows=admin_service.TELEMETRY_WINDOWS, statuses=DEVICE_STATUSES,
                            rivers=_rivers_by_district().get(device.district_id, []),
                            d=admin_service.device_detail(device, f['sensor_type'], f['hours'], f['page']))
@@ -273,6 +274,8 @@ def _device_page(device, new_key=None):
 
 ONE_TIME_KEY_SESSION = 'one_time_key'  # '<device pk>:<lookup token>', never the key itself
 MONITORING = {'water_level': 'Flood / water level (river required)', 'other': 'Other sensors (no river required)'}
+KIND_LABELS = {'sensor': 'Sensor (ESP32 telemetry)',
+               'camera_node': 'Camera node (mobile field node: trusted identity for field evidence uploads)'}
 
 
 def _form_int(form, key):
@@ -326,11 +329,15 @@ def device_register():
         created = {}
 
         def work(reason):
+            kind = request.form.get('kind')
+            if kind not in DEVICE_KINDS:
+                raise ValueError('Choose the device kind.')
             monitoring = request.form.get('monitoring')
-            if monitoring not in MONITORING:
+            if kind == 'sensor' and monitoring not in MONITORING:
                 raise ValueError('Choose what the device monitors.')
+            fields = {**_registration_fields(request.form), 'kind': kind}
             created['key'], created['device'], summary = admin_service.register_device(
-                current_user, _registration_fields(request.form), monitoring == 'water_level')
+                current_user, fields, kind == 'sensor' and monitoring == 'water_level')
             return summary
 
         if _act('REGISTERED_DEVICE', 'device', lambda: created['device'].id if 'device' in created else 'new',
@@ -344,7 +351,7 @@ def device_register():
     else:
         status = 200
     return render_template('admin/device_register.html', form=request.form, districts=_districts(),
-                           rivers=_rivers_by_district(), monitoring=MONITORING), status
+                           rivers=_rivers_by_district(), monitoring=MONITORING, kinds=KIND_LABELS), status
 
 
 @admin_bp.route('/devices/<int:device_id>')

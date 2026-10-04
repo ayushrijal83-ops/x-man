@@ -29,9 +29,15 @@
                         <option value="">{{ 'Select a district'|t }}</option>
                         {% for d in districts %}<option value="{{ d.id }}" {% if form.get('district_id', '') == d.id|string %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
                     </select></div>
-                <fieldset class="form-group"><legend>{{ 'Monitoring'|t }}</legend>
+                <fieldset class="form-group"><legend>{{ 'Device kind'|t }}</legend>
+                    {% for value, label in kinds.items() %}
+                    <label style="display:block;"><input type="radio" name="kind" value="{{ value }}" required
+                        {% if form.get('kind', '') == value %}checked{% endif %}> {{ label|t }}</label>
+                    {% endfor %}
+                    <p class="form-hint">{{ 'Set once at registration. Only a camera node may upload field evidence; it may send battery telemetry only, and has no river and no monitoring choice. To change the kind, register a new device.'|t }}</p></fieldset>
+                <fieldset class="form-group" id="monitoring-group"><legend>{{ 'Monitoring (sensors only)'|t }}</legend>
                     {% for value, label in monitoring.items() %}
-                    <label style="display:block;"><input type="radio" name="monitoring" value="{{ value }}" required
+                    <label style="display:block;"><input type="radio" name="monitoring" value="{{ value }}"
                         {% if form.get('monitoring', '') == value %}checked{% endif %}> {{ label|t }}</label>
                     {% endfor %}</fieldset>
 
@@ -68,6 +74,7 @@
     var RIVERS = {{ rivers|tojson }};
     var district = document.getElementById('district_id'), river = document.getElementById('river_id');
     var radios = document.querySelectorAll('input[name="monitoring"]');
+    var kinds = document.querySelectorAll('input[name="kind"]');
     function fillRivers() {
         var keep = river.value;
         while (river.options.length > 1) { river.remove(1); }
@@ -78,11 +85,17 @@
         });
     }
     function requireRiver() {
+        var kind = document.querySelector('input[name="kind"]:checked');
+        var camera = !!kind && kind.value === 'camera_node';
         var flood = document.querySelector('input[name="monitoring"]:checked');
-        river.required = !!flood && flood.value === 'water_level';
+        document.getElementById('monitoring-group').hidden = camera;
+        radios.forEach(function (r) { r.required = !camera; });
+        river.disabled = camera;
+        river.required = !camera && !!flood && flood.value === 'water_level';
     }
     district.addEventListener('change', fillRivers);
     radios.forEach(function (r) { r.addEventListener('change', requireRiver); });
+    kinds.forEach(function (r) { r.addEventListener('change', requireRiver); });
     requireRiver();
 })();
 </script>

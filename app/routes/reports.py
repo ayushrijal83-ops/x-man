@@ -17,7 +17,8 @@ from app.extensions import db
 from app.models import CitizenReport, District
 from app.models.citizen_report import REPORT_STATUS, VISUAL_HAZARD_TYPES
 from app.routes.hazard_events import api_login_required, manager_required
-from app.services import citizen_report_service as reports
+from app.models import NodeEvidence
+from app.services import citizen_report_service as reports, node_evidence_service
 
 reports_bp = Blueprint('reports', __name__)
 
@@ -62,7 +63,10 @@ def review_page():
     if not _is_manager():
         abort(403)
     items = reports.visible_reports_query(current_user)         .order_by(CitizenReport.created_at.desc(), CitizenReport.id.desc()).limit(100).all()
-    return render_template('pages/review_reports.html', reports=items,
+    # M-LIVE-02: camera-node field evidence of the same districts (admin: all), reviewed alongside
+    evidence = node_evidence_service.visible_query(current_user) \
+        .order_by(NodeEvidence.received_at.desc(), NodeEvidence.id.desc()).limit(50).all()
+    return render_template('pages/review_reports.html', reports=items, evidence=evidence,
                            can_review=lambda r: reports.can_review(current_user, r))
 
 

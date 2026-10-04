@@ -37,6 +37,7 @@
             <h2 class="card-title" id="h-device"><i data-lucide="info"></i> {{ 'Device'|t }}</h2>
             <dl class="kv">
                 <dt>{{ 'Device ID'|t }}</dt><dd><code>{{ device.device_id }}</code></dd>
+                <dt>{{ 'Device kind'|t }}</dt><dd>{{ kinds.get(device.kind, device.kind)|t }}</dd>
                 <dt>{{ 'Status'|t }}</dt><dd>{{ aui.device_state(d.state) }}</dd>
                 <dt>{{ 'Communication'|t }}</dt><dd>{{ 'Enabled (telemetry accepted)'|t if device.enabled else 'Disabled (telemetry refused)'|t }}</dd>
                 <dt>{{ 'Operator status'|t }}</dt><dd>{{ device.status|t }}</dd>
@@ -72,7 +73,7 @@
                                                   'The current key stops working immediately: the device must be re-flashed with the new key.']) }}
                 {% call aui.confirm_form(url_for('admin.device_edit', device_id=device.id), 'Edit device settings', 'pencil', 'edit',
                                          kind='btn-secondary', submit='Save settings',
-                                         consequences=['District, device ID, API key and authority cannot be changed here.']) %}
+                                         consequences=['District, device ID, device kind, API key and authority cannot be changed here.']) %}
                 <div class="form-group"><label for="edit-status">{{ 'Operator status'|t }}</label>
                     <select id="edit-status" name="status" class="form-input">{% for s in statuses %}<option value="{{ s }}" {% if device.status == s %}selected{% endif %}>{{ s|t }}</option>{% endfor %}</select></div>
                 <div class="form-group"><label for="edit-river">{{ 'River'|t }} ({{ device.district.name if device.district else '—' }})</label>
@@ -91,6 +92,28 @@
                 {% endcall %}
             </div>
         </section>
+
+        {% if device.kind == 'camera_node' or d.evidence.total %}
+        <section class="card span-12" aria-labelledby="h-evidence">
+            <h2 class="card-title" id="h-evidence"><i data-lucide="camera"></i> {{ 'Field evidence'|t }} · {{ d.evidence.total }}</h2>
+            <p class="meta">{{ 'Last evidence'|t }}: {{ aui.when(d.evidence.latest) }}{% for s, n in d.evidence.by_status.items() %} · {{ s|t }} {{ n }}{% endfor %}.
+                {{ 'Evidence never sets severity or confirms a hazard; use the hazard lifecycle for decisions.'|t }}</p>
+            {% if d.evidence.recent %}
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">#</th><th scope="col">{{ 'Captured'|t }}</th><th scope="col">{{ 'Received'|t }}</th><th scope="col">{{ 'Status'|t }}</th><th scope="col">{{ 'GPS'|t }}</th><th scope="col">{{ 'AI'|t }}</th><th scope="col">{{ 'Review'|t }}</th><th scope="col">{{ 'Hazard'|t }}</th><th scope="col">{{ 'Frames'|t }}</th></tr></thead>
+                <tbody>{% for e in d.evidence.recent %}
+                <tr><td>{{ e.id }}</td><td>{{ aui.when(e.captured_at) }}</td><td>{{ aui.when(e.received_at) }}</td>
+                    <td>{{ e.status|t }}{% if e.hold_reason %} <span class="meta">({{ e.hold_reason|replace('_', ' ') }})</span>{% endif %}</td>
+                    <td>{{ e.gps_status|replace('_', ' ') }}{% if e.gps_accuracy_m is not none %} <span class="meta">±{{ e.gps_accuracy_m|round|int }} m</span>{% endif %}</td>
+                    <td>{{ e.ai_status|replace('_', ' ') }}{% if e.ai_label %} · {{ e.ai_label }}{% endif %}</td>
+                    <td>{{ e.review_status|t }}</td>
+                    <td>{% if e.incident_id %}<a href="{{ url_for('admin.hazard_detail', incident_id=e.incident_id) }}">#{{ e.incident_id }}</a>{% else %}—{% endif %}</td>
+                    <td>{% for i in range(e.frames|length) %}<a href="/api/iot/evidence/{{ e.id }}/frames/{{ i }}" target="_blank" rel="noopener">{{ i + 1 }}</a> {% endfor %}</td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+            {% else %}{{ ui.empty('camera', 'No field evidence received.') }}{% endif %}
+        </section>
+        {% endif %}
 
         <section class="card span-12" aria-labelledby="h-latest">
             <h2 class="card-title" id="h-latest"><i data-lucide="gauge"></i> {{ 'Latest reading per sensor'|t }}</h2>

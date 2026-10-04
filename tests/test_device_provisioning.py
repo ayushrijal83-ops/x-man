@@ -71,7 +71,7 @@ def shown_key(page):
 
 
 def form(world, **over):
-    data = {'device_id': 'ESP32-FLOOD-001', 'name': 'Bagmati bridge node', 'district_id': world['ktm'],
+    data = {'device_id': 'ESP32-FLOOD-001', 'name': 'Bagmati bridge node', 'district_id': world['ktm'], 'kind': 'sensor',
             'river_id': world['bagmati'], 'monitoring': 'water_level', 'latitude': '27.7', 'longitude': '85.3',
             'location_description': 'Thapathali bridge', 'firmware_version': '1.0.0', 'description': 'JSN-SR04T',
             'reason': 'H01.5 provisioning'}

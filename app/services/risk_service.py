@@ -122,4 +122,5 @@ def assess_incident(incident):
                 sources=['authority'] if authority else [], district_id=incident.district_id))
         return results
     return [risk_engine.assess_visual(incident.event_type, list(incident.citizen_reports),
-                                      authority_source=authority, district_id=incident.district_id)]
+                                      authority_source=authority, district_id=incident.district_id,
+                                      node_evidence=list(incident.node_evidence))]

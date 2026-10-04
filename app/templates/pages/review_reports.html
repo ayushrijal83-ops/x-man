@@ -87,11 +87,80 @@
         <p>{{ 'No photo reports to review.'|t }}</p>
     </div>
     {% endif %}
+
+    <h2 style="margin-top: 2rem;"><i data-lucide="cctv"></i> {{ 'Field-node evidence'|t }}</h2>
+    <p style="color: var(--text-muted);">{{ 'Uploaded by registered camera nodes. The device score and GPS are unverified device data; the district comes from the node registration. Use the hazard lifecycle for severity and confirmation.'|t }}</p>
+    {% if evidence %}
+    <div class="review-list">
+        {% for e in evidence %}
+        <div class="card review-item" id="evidence-{{ e.id }}">
+            <div>{% for i in range(e.frames|length) %}<img src="/api/iot/evidence/{{ e.id }}/frames/{{ i }}" alt="{{ 'Evidence frame'|t }} {{ i + 1 }}" loading="lazy" style="margin-bottom: var(--space-2);">{% endfor %}</div>
+            <div>
+                <div class="review-panels">
+                    <section class="review-panel">
+                        <h3>{{ 'Source: field node'|t }}</h3>
+                        <p><strong>{{ e.device.name if e.device else '' }}</strong> · {{ e.district.name if e.district else '' }}</p>
+                        <p>{{ 'Captured'|t }}: <time datetime="{{ e.captured_at.isoformat() }}Z">{{ e.captured_at.strftime('%Y-%m-%d %H:%M') }} UTC</time></p>
+                        <p>{{ 'Received'|t }}: {{ e.received_at.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+                        <p>{{ 'Location check'|t }}: {{ e.gps_status|replace('_', ' ') }} → {{ e.location_source }}{% if e.gps_accuracy_m is not none %} (±{{ e.gps_accuracy_m|round|int }} m){% endif %}</p>
+                        {% if e.battery_pct is not none %}<p>{{ 'Battery'|t }}: {{ e.battery_pct|round|int }}%</p>{% endif %}
+                        {% if e.device_model or e.app_version %}<p class="ai-note">{{ e.device_model or '' }} {{ e.device_model_version or '' }} · app {{ e.app_version or '—' }}</p>{% endif %}
+                        {% if e.device_score is not none %}<p class="ai-note">{{ 'Device score (unverified)'|t }}: {{ '%.2f'|format(e.device_score) }}</p>{% endif %}
+                        <p><span class="status-badge status-{{ e.review_status }}">{{ e.review_status|t }}</span>{% if e.status == 'held' %} · {{ 'held'|t }} ({{ e.hold_reason|replace('_', ' ') }}){% endif %}</p>
+                    </section>
+                    <section class="review-panel">
+                        <h3>{{ 'AI analysis'|t }}</h3>
+                        {% if e.ai_status == 'completed' %}
+                            <p><strong>{{ ui.ai_result(e.ai_label, e.ai_confidence) }}</strong></p>
+                            <p class="ai-note">{{ e.ai_model }} @ {{ e.ai_model_version }}</p>
+                        {% elif e.ai_status == 'failed' %}<p>{{ 'Analysis failed. Review the frames manually.'|t }}</p>
+                        {% else %}<p>{{ 'Not analyzed'|t }}</p>{% endif %}
+                    </section>
+                    <section class="review-panel">
+                        <h3>{{ 'Hazard event'|t }}</h3>
+                        {% if e.incident %}<p>{{ 'Hazard'|t }} #{{ e.incident.id }}</p><p>{{ e.incident.status|t }} · {{ e.incident.severity|t }}</p>
+                        {% else %}<p>—</p>{% endif %}
+                    </section>
+                </div>
+                {% if e.review_status == 'submitted' %}
+                <div class="review-actions">
+                    <button class="btn btn-primary" data-evidence="{{ e.id }}" data-status="accepted">{{ 'Accept'|t }}</button>
+                    <button class="btn btn-secondary" data-evidence="{{ e.id }}" data-status="rejected">{{ 'Reject'|t }}</button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card empty-state" style="margin-top: 1rem;"><i data-lucide="cctv"></i><p>{{ 'No field-node evidence.'|t }}</p></div>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+document.querySelectorAll('[data-evidence]').forEach(function (button) {
+    button.addEventListener('click', function () {
+        var errorBox = document.getElementById('review-error');
+        button.disabled = true;
+        fetch('/api/iot/evidence/' + button.dataset.evidence + '/review', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json',
+                      'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content},
+            body: JSON.stringify({status: button.dataset.status})
+        }).then(function (response) {
+            return response.json().then(function (data) {
+                if (!response.ok) { throw new Error(data.error || response.statusText); }
+                window.location.reload();
+            });
+        }).catch(function (err) {
+            errorBox.textContent = err.message;
+            errorBox.hidden = false;
+            button.disabled = false;
+        });
+    });
+});
 document.querySelectorAll('[data-action]').forEach(function (button) {
     button.addEventListener('click', function () {
         var id = button.dataset.id;

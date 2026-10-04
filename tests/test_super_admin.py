@@ -866,13 +866,13 @@ def test_migration_upgrade_downgrade_and_fresh_install(tmp_path):
         return result.stdout + result.stderr
 
     assert run('init_db.py').returncode == 0
-    assert 'a9c4e2f81d57 (head)' in current()
+    assert 'e7413efdd252 (head)' in current()  # M-LIVE-02 is the head now; the SA revision is one below
     assert run('-m', 'flask', 'db', 'check').returncode == 0
     tables, users, audit_columns = schema()
     assert 'session_version' in users and {'actor_username', 'action', 'target_type', 'target_id', 'reason',
                                            'summary', 'success'} <= audit_columns
 
-    result = run('-m', 'flask', 'db', 'downgrade')
+    result = run('-m', 'flask', 'db', 'downgrade', 'f3b8d2e6a417')
     assert result.returncode == 0, result.stderr[-800:]
     assert 'f3b8d2e6a417' in current()
     tables, users, _ = schema()
@@ -881,6 +881,6 @@ def test_migration_upgrade_downgrade_and_fresh_install(tmp_path):
     for step in (('upgrade',), ('check',)):
         result = run('-m', 'flask', 'db', *step)
         assert result.returncode == 0, (step, result.stderr[-800:])
-    assert 'a9c4e2f81d57 (head)' in current()
+    assert 'e7413efdd252 (head)' in current()
     tables, users, _ = schema()
     assert 'audit_logs' in tables and 'session_version' in users

@@ -1,10 +1,11 @@
 """IoT API blueprint for hardware device telemetry ingestion."""
-from flask import Blueprint, jsonify, request, g
+from flask import Blueprint, jsonify, request, g, send_file
 from flask_login import current_user
+from werkzeug.exceptions import RequestEntityTooLarge
 from app.extensions import RUNTIME, csrf, db
-from app.models import IoTDevice, SensorReading, District, Authority, River
+from app.models import IoTDevice, NodeEvidence, SensorReading, District, Authority, River
 from app.services.risk_engine import validate_sensor_reading, compute_river_status
-from app.services import risk_service
+from app.services import node_evidence_service as evidence_service, risk_service
 from datetime import datetime, timezone
 import json
 import math
@@ -16,6 +17,7 @@ iot_bp = Blueprint('iot', __name__, url_prefix='/api/iot')
 DEVICE_ID_RE = re.compile(r'^[A-Za-z0-9._-]{1,64}$')
 DEVICE_STATUSES = ['active', 'inactive', 'maintenance', 'decommissioned']
 DEVICE_TEXT_LIMITS = {'name': 100, 'description': 1000, 'location_description': 200, 'firmware_version': 50}
+CAMERA_NODE_SENSOR_TYPES = ('battery',)  # node health only
 DEVICE_UPDATE_FIELDS = {'enabled', 'status', 'firmware_version', 'location_description', 'latitude', 'longitude',
                         'river_id'}
 
@@ -110,8 +112,8 @@ def authenticate_device():
     if not device:
         return None
 
-    if not device.enabled:
-        return None
+    if not device.enabled or device.status == 'decommissioned':
+        return None  # M-LIVE-02: decommissioned refuses even if `enabled` was left on
 
     if not device.verify_api_key(api_key):
         return None
@@ -215,6 +217,10 @@ def ingest_telemetry():
         valid, error = validate_sensor_reading(sensor_type, value, unit)
         if not valid:
             errors.append(f'Reading {i}: {error}')
+            continue
+        if device.kind == 'camera_node' and sensor_type not in CAMERA_NODE_SENSOR_TYPES:
+            # a phone key must not be able to drive flood/motion rules (e.g. the river fallback)
+            errors.append(f'Reading {i}: camera nodes may only send {", ".join(CAMERA_NODE_SENSOR_TYPES)}')
             continue
 
         quality = 'good'
@@ -547,3 +553,89 @@ def rotate_device_key(device_id):
         'api_key': new_api_key,
         'warning': 'Save the new API key now. It will not be shown again.'
     })
+
+
+# --- M-LIVE-02: camera-node field evidence ------------------------------------------------------
+
+@iot_bp.route('/evidence', methods=['POST'])
+@csrf.exempt  # device API: authenticated by its own API key header, no browser session/cookie involved
+def ingest_evidence():
+    """Field evidence from a camera_node device (future Android field node).
+
+    Auth: same as telemetry (Bearer <device_id>:<api_key> or X-Device-ID + X-API-Key), kind camera_node.
+    multipart/form-data:
+      metadata  JSON object: client_event_id (required, 8-64 [A-Za-z0-9_-], reused on retries),
+                captured_at (required, ISO 8601), latitude+longitude, gps_accuracy_m, gps_fix_at,
+                device_score (0-1), model, model_version, app_version, battery_pct (0-100), network_type.
+                Any other key -> 400; server-owned keys (severity, district_id, status, ...) -> 400.
+      frame_0   required JPG/PNG/WEBP; frame_1, frame_2 optional (pre-event, peak, post-event).
+    201 new evidence, 200 duplicate (same device + client_event_id), 400/413 invalid, 401 bad
+    credentials, 403 not a camera node, 429 hourly limit.
+    """
+    device = authenticate_device()
+    if not device:
+        return jsonify({'error': 'Invalid or missing device credentials'}), 401
+    if device.kind != 'camera_node':
+        return jsonify({'error': 'This device is not a camera node'}), 403
+    if not (request.mimetype or '').startswith('multipart/form-data'):
+        return jsonify({'error': 'Content-Type must be multipart/form-data'}), 400
+
+    try:
+        unknown = sorted(set(request.form.keys()) - {'metadata'})
+        if unknown:
+            return jsonify({'error': f"Unknown form field(s): {', '.join(unknown)}"}), 400
+        evidence, created = evidence_service.submit(device, request.form.get('metadata'), request.files)
+    except RequestEntityTooLarge:
+        return jsonify({'error': 'Upload is too large'}), 413
+    except evidence_service.EvidenceError as e:
+        return jsonify({'error': str(e)}), e.status
+    except evidence_service.RateLimited:
+        return jsonify({'error': 'Too many evidence uploads for this device; retry later'}), 429
+    return jsonify({'success': True, 'duplicate': not created, 'evidence_id': evidence.id,
+                    'incident_id': evidence.incident_id, 'status': evidence.status}), 201 if created else 200
+
+
+def _visible_evidence(evidence_id):
+    """(evidence, None) for an admin or the authority of its district; otherwise a 401/404 response
+    (404 also for evidence that exists elsewhere, so ids don't leak)."""
+    if not current_user.is_authenticated:
+        return None, (jsonify({'error': 'Authentication required'}), 401)
+    evidence = db.session.get(NodeEvidence, evidence_id)
+    if evidence is None or not evidence_service.can_view(current_user, evidence):
+        return None, (jsonify({'error': 'Not found'}), 404)
+    return evidence, None
+
+
+@iot_bp.route('/evidence/<int:evidence_id>/frames/<int:index>', methods=['GET'])
+def evidence_frame(evidence_id, index):
+    evidence, error = _visible_evidence(evidence_id)
+    if error:
+        return error
+    path = evidence_service.frame_path(evidence, index)
+    try:
+        response = send_file(path, mimetype='image/jpeg', max_age=0) if path else None
+    except FileNotFoundError:
+        response = None
+    if response is None:
+        return jsonify({'error': 'Frame not available'}), 404
+    response.headers['Cache-Control'] = 'private, no-store'
+    response.headers['Content-Disposition'] = 'inline'
+    return response
+
+
+@iot_bp.route('/evidence/<int:evidence_id>/review', methods=['POST'])
+def review_evidence(evidence_id):
+    """Body: {"status": "accepted" | "rejected"}. Reviews the evidence item only; the Incident
+    lifecycle is still managed through /api/hazards. Session + CSRF (browser route)."""
+    evidence, error = _visible_evidence(evidence_id)
+    if error:
+        return error
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'A JSON object body is required'}), 400
+    try:
+        evidence_service.review(current_user, evidence, data.get('status'))
+    except evidence_service.EvidenceError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), e.status
+    return jsonify({'evidence': evidence_service.to_dict(evidence)})

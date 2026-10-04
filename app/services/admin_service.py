@@ -18,8 +18,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.extensions import RUNTIME, db
 from app.models import (AuditLog, Authority, CitizenReport, District, Incident, IncidentAffectedDistrict,
-                        IncidentResponseAction, IncidentStatusHistory, IoTDevice, Notification, PushSubscription,
-                        River, SensorReading, User)
+                        IncidentResponseAction, IncidentStatusHistory, IoTDevice, NodeEvidence, Notification,
+                        PushSubscription, River, SensorReading, User)
 from app.models.audit_log import AUDIT_ACTIONS, AUDIT_TARGETS, REASON_MAX
 from app.models.citizen_report import AI_STATUS, REPORT_STATUS, VISUAL_HAZARD_TYPES
 from app.models.incident import ACTIVE_STATUSES, HAZARD_SEVERITY, HAZARD_STATUS, HAZARD_TYPES, VALID_STATUS_TRANSITIONS
@@ -409,7 +409,19 @@ def device_detail(device, sensor_type=None, hours=None, page=1):
         'disabled_by_admin': last_toggle if state == 'disabled' and last_toggle
         and last_toggle.action == 'DISABLED_DEVICE' else None,
         'audit': audit_for('device', [device.id]),
+        'evidence': evidence_summary(device),
     }
+
+
+def evidence_summary(device):
+    """M-LIVE-02: field evidence of a device (counts + the 10 newest). Frames are linked through the
+    authorized frame route, never by filename."""
+    by_status = dict(db.session.query(NodeEvidence.status, db.func.count(NodeEvidence.id))
+                     .filter(NodeEvidence.device_id == device.id).group_by(NodeEvidence.status).all())
+    recent = NodeEvidence.query.filter(NodeEvidence.device_id == device.id) \
+        .order_by(NodeEvidence.received_at.desc(), NodeEvidence.id.desc()).limit(10).all()
+    return {'total': sum(by_status.values()), 'by_status': by_status,
+            'latest': recent[0].received_at if recent else None, 'recent': recent}
 
 
 # --- hazards ------------------------------------------------------------------
@@ -649,6 +661,8 @@ def register_device(admin, fields, water_level):
         raise ValueError('Select a valid district.')
     if water_level and fields['river_id'] is None:
         raise ValueError('A flood / water-level device needs an explicit river.')
+    if fields.get('kind') == 'camera_node' and fields['river_id'] is not None:
+        raise ValueError('A camera node does not monitor a river.')
     river = _river_in(district.id, fields['river_id'])
     if IoTDevice.query.filter_by(device_id=fields['device_id']).first():
         raise ValueError(f"Device ID {fields['device_id']} already exists.")
@@ -661,7 +675,7 @@ def register_device(admin, fields, water_level):
         raise ValueError(f"Device ID {fields['device_id']} already exists.")
     return api_key, device, (f"{device.device_id} registered: district {district.name}, "
                              f"river {river.name if river else 'none'}, "
-                             f"monitoring {'water level' if water_level else 'other'}")
+                             f"kind {device.kind}, monitoring {'water level' if water_level else 'other'}")
 
 
 def update_device(admin, device, fields):

@@ -199,12 +199,18 @@ def analyze_report(report):
     """Run vision analysis on the report's stored, re-encoded image (never the raw upload or a
     client path). Writes only the report's ai_* fields. Failures are recorded, never raised.
     Returns False when analysis is disabled."""
+    return record_vision_analysis(report, image_path(report), f'report {report.id}')
+
+
+def record_vision_analysis(record, path, label):
+    """Classify the stored image at `path` and write `record`'s ai_* fields, then commit.
+    Shared by citizen reports and M-LIVE-02 node evidence (same columns). VisionError is recorded
+    as 'failed', never raised; `label` names the record in logs (never a path)."""
     if not current_app.config.get('VISION_ENABLED'):
         return False
-    path = image_path(report)
     try:
         if path is None:
-            raise vision_service.VisionError('Report has no stored image')
+            raise vision_service.VisionError('Record has no stored image')
         try:
             with open(path, 'rb') as f:
                 image_bytes = f.read()
@@ -212,13 +218,13 @@ def analyze_report(report):
             raise vision_service.VisionError('Stored image could not be read')  # no path in the message
         result = vision_service.classify(image_bytes)
     except vision_service.VisionError as e:
-        current_app.logger.warning('Vision analysis failed for report %s: %s', report.id, e)
-        report.ai_status, report.ai_label, report.ai_confidence = 'failed', None, None
-        report.ai_model = report.ai_model_version = None
+        current_app.logger.warning('Vision analysis failed for %s: %s', label, e)
+        record.ai_status, record.ai_label, record.ai_confidence = 'failed', None, None
+        record.ai_model = record.ai_model_version = None
     else:
-        report.ai_status, report.ai_label, report.ai_confidence = 'completed', result.label, result.confidence
-        report.ai_model, report.ai_model_version = result.model, result.model_version
-    report.ai_analyzed_at = datetime.utcnow()
+        record.ai_status, record.ai_label, record.ai_confidence = 'completed', result.label, result.confidence
+        record.ai_model, record.ai_model_version = result.model, result.model_version
+    record.ai_analyzed_at = datetime.utcnow()
     db.session.commit()
     return True
 

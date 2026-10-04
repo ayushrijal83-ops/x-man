@@ -3321,3 +3321,176 @@ end to end. Not started.
 
 ### 🏷️ Status
 **H01.5 — IoT DEVICE PROVISIONING COMPLETE (960 passed) · NEXT: H01 physical hardware (not started)**
+
+
+---
+
+## M-LIVE-02 — Server-Side Mobile Evidence Foundation
+
+### Purpose
+The server-side contract for the future **Android mobile field node** (camera + GPS + local
+active-landslide detector). The phone itself is **not built**: there is no Android code, no live
+camera detection and no real-world landslide detection in this milestone. A camera node is a third
+evidence source next to the ESP32 flood node and the MPU6050 seismic prototype, which are unchanged.
+The phone produces evidence; X-MAN stays the authority for hazard events, severity, districts and
+notifications.
+
+### Architecture
+```
+camera_node device (IoTDevice.kind, provisioned by Super Admin, own key)
+  -> POST /api/iot/evidence (same Bearer device auth as telemetry; sensors get 403)
+  -> node_evidence_service: metadata allow-list, frames through citizen_report_service.process_image,
+     idempotency, device-row lock + hourly limit, capture-time and GPS plausibility, hold policy
+  -> NodeEvidence row
+  -> hazard_event_service.report_hazard('landslide', 'medium', 'iot', escalate=False,
+                                        district_id = device.district_id, detected_at = captured_at)
+     (existing M02 create/merge, M03/M04 targeting + dedup, M12 Web Push — nothing new)
+  -> after commit: vision_service.classify on the last frame (ai_* fields only, best-effort)
+```
+No second event, dedup, notification, image-sanitizing or authentication system was added.
+
+### Migration
+`e7413efdd252` (parent `a9c4e2f81d57`), additive only: `iot_devices.kind` (String(20), NOT NULL,
+server default `'sensor'`, so every existing device is a sensor) and the `node_evidence` table
+(unique `(device_id, client_event_id)` = `uq_node_evidence_device_event`, indexes on device_id,
+district_id, incident_id, received_at). Verified on a copy of the dev DB: upgrade → `flask db check`
+("No new upgrade operations detected") → downgrade → upgrade; one head. The dev DB was backed up
+before `flask db upgrade`.
+
+### Endpoint contract — `POST /api/iot/evidence`
+- Auth: `Authorization: Bearer <device_id>:<api_key>` (or `X-Device-ID` + `X-API-Key`); the device
+  must be `kind = camera_node`. CSRF-exempt like telemetry (no cookie involved); browser routes keep CSRF.
+- `multipart/form-data`:
+  - `metadata` (JSON object). Allowed: `client_event_id` (required, `^[A-Za-z0-9_-]{8,64}$`, generated
+    once on the phone and reused on every retry), `captured_at` (required, ISO 8601), `latitude` +
+    `longitude` (together), `gps_accuracy_m` (0–100000), `gps_fix_at`, `device_score` (0–1),
+    `model`, `model_version`, `app_version`, `battery_pct` (0–100), `network_type`.
+    Server-owned keys (`severity, district, district_id, status, confirmed, authority, authority_id,
+    recipients, incident_id, event_type, hazard_type, source, received_at, affected_districts,
+    device_id, review_status`) → **400**, not ignored. Any other unknown key or form field → 400.
+  - `frame_0` (required), `frame_1`, `frame_2` (optional; pre-event, peak, post-event). JPG/PNG/WEBP
+    with a matching extension and `image/*` type. More than 3, gaps, repeats → 400.
+- Responses: **201** `{"success": true, "duplicate": false, "evidence_id", "incident_id", "status"}`;
+  **200** same shape with `"duplicate": true` for a repeated `(device, client_event_id)`; 400 invalid;
+  401 bad/disabled/decommissioned credentials; 403 not a camera node; 413 too large; 429 hourly limit.
+  Never returns keys, hashes, filenames or paths.
+- Other routes: `GET /api/iot/evidence/<id>/frames/<n>` (admin, or the authority of the evidence's
+  district; others 404, logged out 401; `private, no-store`); `POST /api/iot/evidence/<id>/review`
+  (`accepted|rejected`, same visibility, session + CSRF; changes the evidence only, never the hazard).
+
+### Server-owned context
+Hazard type `landslide`, severity `medium`, source `iot`, status `detected`, `escalate=False`,
+district = the device's provisioned district. `device_score` is stored and shown to reviewers only.
+Repeated evidence merges through the existing `find_active_related_event` (district + 5 km / 24 h);
+an authority escalates/confirms through the existing hazard lifecycle. `detected_at` of a **new**
+incident is the accepted `captured_at` (when the node observed it); `received_at` is always server time.
+
+### Idempotency design
+`(device_id, client_event_id)` is unique. A duplicate is detected before any work and re-checked after
+the device row lock; it returns the stored evidence (200) and writes nothing: no row, no file, no
+incident, no notification. Retries of a stored event succeed even when the hourly limit is reached, so
+the phone can clear its queue. A retry with different frames is not merged (the first upload wins).
+
+### Capture-time and hold policy (stored, never silently deleted)
+- `captured_at` more than 5 min in the future → `held` (`future_capture`); older than
+  `NODE_MAX_EVIDENCE_AGE_HOURS` (72) → `held` (`stale_capture`). No incident is opened.
+- The node's own evidence led to an incident that was **rejected** within
+  `NODE_HOLD_AFTER_REJECTION_HOURS` (24, from the rejection history row) → `held` (`after_rejection`),
+  unless an active related landslide already exists (attaching opens nothing new). After the window
+  normal processing resumes; a rejection never silences a node permanently.
+
+### GPS validation policy (`gps_status`, `location_source` recorded on every row)
+- `accepted` → the phone fix is used for the incident: present, `gps_accuracy_m ≤ NODE_MAX_GPS_ACCURACY_M`
+  (50), `|captured_at − gps_fix_at| ≤ NODE_MAX_GPS_FIX_AGE_SECONDS` (300) and within
+  `NODE_MAX_DISTANCE_KM` (1.0, haversine) of the registered node location.
+- `missing` / `inaccurate` (incl. unknown accuracy) / `stale_fix` / `outside_radius` → the phone's
+  coordinates are stored as reported; the **registered** location is used for the incident.
+- Node without registered coordinates → `no_reference`: GPS recorded, never trusted; the incident is
+  district-level (no coordinates).
+- The district never comes from GPS: no reverse geocoding, no automatic reassignment.
+
+### Rate-limit policy
+`NODE_MAX_EVIDENCE_PER_HOUR` (6) stored evidence items per device per rolling hour (held items count),
+429 above it. Transaction-safe without new services: the request first `UPDATE`s its own device row
+(`last_seen`), which takes SQLite's write lock (PostgreSQL: a row lock) until commit, then counts and
+inserts. Tested with 6 real threads on a file-backed SQLite DB (limit 2 → exactly 2×201 + 4×429, one
+incident); with the lock removed the same test fails (3/3 runs).
+
+### Security decisions
+- `authenticate_device()` (shared with telemetry): refuses `status == 'decommissioned'` even when
+  `enabled` is still true; the key check is `hmac.compare_digest` over the stored SHA-256 hash (storage
+  and key rotation unchanged).
+- A camera node's telemetry accepts **only** `battery` (new sensor type, `%`, 0–100, no risk rule):
+  a phone key can't send `water_level`/`vibration`/`tilt` and drive flood (river fallback) or motion rules.
+  ESP32s are not required to send battery.
+- `kind` is chosen once at Super Admin registration (explicit radio, audited in `REGISTERED_DEVICE`);
+  the edit form and `PATCH /api/iot/devices/<id>` cannot change it (PATCH → 400); the JSON
+  registration API always creates sensors. Conversion = register a new device (documented limitation).
+  A camera node cannot have a river.
+- Frames: M05 sanitizer (format check, decompression-bomb guard, orientation, ≤2560 px, JPEG
+  re-encode, EXIF/GPS dropped), `<uuid4hex>.jpg` names, stored in `instance/uploads/evidence/`
+  (gitignored), served only by id + index after a visibility check; tampered stored names are not read.
+- Evidence and frames are visible to admins and the evidence district's authority only (citizens and
+  other districts 404). Reviewer pages escape all device metadata (tested with script payloads).
+- AI failure (missing model, inference error, even a crash in the AI step) never loses evidence and
+  never turns a committed upload into a 500.
+- Risk: `assess_visual` gains a separate `field_node` source and a `field_node_only` grade when there
+  is no citizen report. A node is never counted as a reporter, so citizen grades are unchanged.
+
+### Admin / reviewer UI
+`/admin/devices/new`: required **Device kind** (Sensor / Camera node — "trusted identity for field
+evidence uploads"); monitoring/river only for sensors. Device page: kind, evidence total, last
+evidence time, per-status counts, 10 newest items (status/hold reason, GPS state, AI, review, hazard
+link, frame links). `/reports/review`: a "Field-node evidence" section (source = field node, node,
+capture/received time, GPS check + accuracy, battery, model/app version, device score marked
+unverified, frames, AI, review buttons).
+
+### Files changed
+`app/models/iot_device.py`, `app/models/node_evidence.py` (new), `app/models/__init__.py`,
+`app/routes/iot.py`, `app/routes/admin.py`, `app/routes/reports.py`,
+`app/services/node_evidence_service.py` (new), `app/services/citizen_report_service.py`
+(vision-field writing extracted into `record_vision_analysis`, behaviour unchanged),
+`app/services/admin_service.py`, `app/services/risk_engine.py`, `app/services/risk_service.py`,
+`app/config.py`, `app/templates/admin/device_register.html`, `app/templates/admin/device_detail.html`,
+`app/templates/pages/review_reports.html`, `migrations/versions/e7413efdd252_mlive02_camera_node_evidence.py`
+(new), `tests/test_node_evidence.py` (new), `tests/test_device_provisioning.py` (its form now sends the
+required `kind=sensor`), `tests/test_iot_water_level.py` (expected sensor-type set + `battery`),
+`tests/test_super_admin.py` (migration test: head is now `e7413efdd252`; it downgrades explicitly to
+`f3b8d2e6a417` and back, `flask db check` clean), `docs/PROJECT_PROGRESS.md`.
+
+### Tests
+`tests/test_node_evidence.py`: 157 tests (auth incl. decommissioned/rotation/constant-time, sensor 403,
+each forbidden field, metadata validation, frames 1/3/4/gaps/invalid/bomb/oversize/EXIF, idempotency,
+dedup into node and citizen incidents, timestamps, GPS states, hold window, rate limit incl. threads,
+AI success/failure/crash, risk sources, notification targeting + no push at medium + push after
+authority escalation, frame/review authorization and traversal, battery telemetry, secrets in
+response/DB/logs/pages, XSS, provisioning). Full suite: **`python -m pytest tests/ -q` → 1117 passed, 2 warnings, 0 failed** (960 + 157; same 2 third-party SWIG warnings).
+
+### Manual smoke test (local server on a throwaway, migrated copy of the dev DB; port 5055; curl)
+Throwaway camera node `SMOKE-CAM-01` (Kathmandu) → multipart upload → **201**
+`{"duplicate":false,"evidence_id":1,"incident_id":1,"status":"attached"}` → DB: evidence `attached`,
+GPS `accepted`, one sanitized `<uuid>.jpg` on disk; incident `landslide/medium/iot/detected`, district
+Kathmandu, `source_reference evidence_1`; `hazard_detected` notifications for the Kathmandu citizen and
+the admin. Same `client_event_id` again → **200** `"duplicate":true`, same ids. `severity` in metadata →
+**400**. Device disabled via `admin_service.set_device_enabled` → same key → **401**. The key does not
+appear in the server log. Vision was disabled for the smoke test (no model download); AI is covered by
+stub-classifier tests only.
+
+### Known limitations
+- No Android app, no live detection, no field validation: every threshold is an engineering default.
+- `kind` can't be converted; register a new device. The admin "disable" message still says "ESP32".
+- The incident ↔ evidence link uses two commits, like M05 reports: if the second fails the evidence stays
+  `received` without `incident_id` (the incident's `source_reference` still names it).
+- Existing dedup excludes events without coordinates from a GPS-located match (and vice versa), so a
+  node event and a coordinate-less event in the same district stay separate (unchanged M02 behaviour).
+- Frames of rejected evidence are kept (no retention job yet). No server-side "re-run analysis" for
+  evidence. Bearer keys need TLS outside a LAN demo (same as the ESP32s).
+- The rate limit counts stored items only; invalid requests are not limited.
+
+### Next milestone
+**M-LIVE-03 — Native Android Field Node Skeleton**: provisioned camera node → manual test evidence →
+authenticated upload → X-MAN → existing incident → existing notification, without automatic
+landslide detection. Not started.
+
+### 🏷️ Status
+**M-LIVE-02 — SERVER-SIDE MOBILE EVIDENCE FOUNDATION COMPLETE (1117 passed) · NEXT: M-LIVE-03 Android skeleton (not started)**

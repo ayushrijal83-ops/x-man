@@ -182,7 +182,7 @@ class TestSensorValidation:
 
     def test_sensor_types_constant(self):
         """Test SENSOR_TYPES constant has all expected types."""
-        expected = {'water_level', 'temperature', 'humidity', 'rainfall', 'vibration', 'tilt'}
+        expected = {'water_level', 'temperature', 'humidity', 'rainfall', 'vibration', 'tilt', 'battery'}  # battery: M-LIVE-02
         assert set(SENSOR_TYPES.keys()) == expected
         for stype, info in SENSOR_TYPES.items():
             assert 'unit' in info
