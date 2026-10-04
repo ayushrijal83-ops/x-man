@@ -3670,3 +3670,117 @@ InsecureBaseConfiguration (the intended debug-only cleartext config).
 
 ### 🏷️ Status
 **M-LIVE-03 — NATIVE ANDROID FIELD NODE SKELETON COMPLETE (manual uploader; phone → X-MAN proven on a Redmi 12) · NEXT: M-LIVE-04 (not started)**
+
+
+---
+
+## M-LIVE-04 — Continuous Camera Pipeline + MotionGate + Temporal State Machine
+
+**Not landslide detection.** The phone detects *persistent local visual change* and turns it into a
+"visual evidence candidate". No prediction, no calibrated probability, no severity, no emergency: X-MAN
+stays authoritative (server code unchanged; same `/api/iot/evidence` contract). No ML model or ML
+dependency was added. Commit: `feat(mlive): add continuous camera monitoring pipeline` (hash in `git log`).
+
+### Architecture (`mobile/android/app/src/main/java/np/xman/fieldnode/`)
+```
+MonitorActivity  CameraX Preview + ImageAnalysis (YUV, STRATEGY_KEEP_ONLY_LATEST, own single thread),
+                 bound only between Start/Stop; screen kept on; leaving the screen stops monitoring
+  -> FrameSampler      (MonitorConfig.kt) rate limit 1 frame / 500 ms; Y plane block-averaged to 64x48
+  -> MotionGate        (MotionGate.kt) deterministic local-change test between consecutive samples
+  -> MonitorStateMachine (MonitorStateMachine.kt) pure temporal confirmation, timestamps as inputs
+  -> MonitorController (MonitorController.kt) glue: keyframes, GPS at confirmation, store, upload, diagnostics
+  -> KeyframeCollector / EvidenceAssembler (KeyframeCollector.kt) -> M-LIVE-03 EvidenceStore / EvidenceMetadata
+     / EvidenceUploader (unchanged upload protocol, same client_event_id on every retry)
+```
+No foreground service, no background camera, no WorkManager, no video, no unbounded buffer: the controller
+holds one previous 64x48 grid and at most three JPEG keyframes; a Bitmap is created only for a keyframe.
+
+### MotionGate (exact algorithm)
+1. z-normalize each 64x48 grid: (v − mean) / max(std, 4) — removes uniform brightness offset and exposure gain.
+2. 16x12 cells of 4x4 grid pixels; a cell changed if mean |Δz| > 0.5 (averaging rejects pixel/JPEG noise).
+3. 0 changed cells → STATIC; < 3 → NOISE.
+4. SHAKE if some whole-frame shift of ±2 grid pixels (≈±20 camera pixels at 640 px) brings the mean residual
+   to ≤ 0.6 × the unshifted residual (the frames are a translation of each other).
+5. > 50 % of cells changed → GLOBAL_CHANGE (lighting, pan, reflections).
+6. Largest 4-connected group of changed cells < 3 → NOISE (scattered); else LOCAL_MOTION.
+Assumes a mounted phone, ~500 ms between samples and a textured scene. It cannot tell a slope movement from
+a person, vehicle, animal, branch or rain streak.
+
+### State machine
+`STOPPED → MONITORING → POSSIBLE_EVENT → CONFIRMING → CONFIRMED_EVIDENCE → UPLOAD_PENDING → UPLOADED → COOLDOWN → MONITORING`, plus `DEGRADED`.
+- MONITORING: LOCAL_MOTION → POSSIBLE_EVENT (keyframe 1, "around detection").
+- POSSIBLE_EVENT: 3 local-motion samples → CONFIRMING; 2 consecutive non-motion samples → MONITORING (keyframes dropped).
+- CONFIRMING: 4 s window; ≥ 60 % of samples local motion → CONFIRMED_EVIDENCE (keyframe 2), otherwise or after
+  3 consecutive misses → MONITORING. A single transient sample can never produce evidence (minimum ≈ 5.5 s of change).
+- CONFIRMED_EVIDENCE: one GPS request (platform layer); next sample = keyframe 3 ("after"); package stored when
+  GPS answered (or 35 s) and the after-frame arrived (or 3 s) → UPLOAD_PENDING.
+- UPLOAD_PENDING: auto-upload ON → upload → UPLOADED → COOLDOWN; failed/offline or auto-upload OFF → COOLDOWN with
+  the package kept on the phone (READY / FAILED_RETRYABLE, same client_event_id, manual retry as in M-LIVE-03).
+- COOLDOWN: 60 s, motion ignored. DEGRADED: camera error (nothing analysed) → camera OPEN again → MONITORING.
+- Safety timeouts: CONFIRMED_EVIDENCE 45 s, UPLOAD_PENDING 120 s. Stop/camera error during collection still
+  saves the confirmed candidate (GPS marked unavailable). Stop from any state → STOPPED, counters reset per session.
+
+### Configuration (`MonitorConfig`, single place)
+analysisIntervalMs 500 · grid 64x48 · cellSize 4 · cellThreshold 0.5 · minChangedCells 3 · minRegionCells 3 ·
+maxLocalFraction 0.5 · maxShakeShift 2 · shakeResidualRatio 0.6 · minStd 4 · possibleHitsToConfirm 3 ·
+possibleMaxMisses 2 · confirmWindowMs 4000 · confirmMinMotionRatio 0.6 · confirmMaxConsecutiveMisses 3 ·
+cooldownMs 60000 · evidenceTimeoutMs 45000 · uploadTimeoutMs 120000 · afterFrameTimeoutMs 3000 · gpsTimeoutMs 35000.
+Engineering defaults, not validated against real slope failures.
+
+### Evidence, GPS, metadata
+≤ 3 keyframes (detection, confirmed, after), upright JPEG ≤ 1600 px, no EXIF, app-private storage. `captured_at`
+= detection time. GPS requested once at confirmation; package records `gpsNote` ("fix", "unavailable: no location
+permission / GPS switched off / no fix obtained / no fix in time / monitoring stopped before a fix"); no fix → no
+coordinates (registered coordinates are never sent as GPS). Motion-gate packages send `model: motion-gate`,
+`model_version: mlive04-1` (names the deterministic trigger); never `device_score`. Manual packages unchanged.
+Auto-upload is an explicit checkbox, OFF by default.
+
+### Tests
+- Android JVM: **86 passed, 0 failed** (45 M-LIVE-03 + 41 new): MotionGate (identical, sensor noise, local change,
+  brightness offset/gain, lighting + local change, shake shifts, totally different frame, scattered noise, threshold
+  boundaries, flat scene), FrameSampler (stride, unsigned bytes), state machine (possible event, transient → back,
+  persistence → evidence, intermittent window, early reset, full flow + cooldown, failed upload, timeouts, degraded +
+  recovery, stop resets, minimum time to evidence), controller (static creates nothing, one bounded 3-frame package +
+  one GPS request + upload, cooldown, transient keeps nothing, no-GPS note, GPS timeout + late answer ignored,
+  offline keeps frames + id, manual mode READY, stop during collection saves, rate limit, camera error, per-session
+  diagnostics), assembler (bounded frames, stable id, slot never re-encoded, old packages load as manual).
+- Lint: 0 errors (warnings: hard-coded UI text, no launcher icon, button style, debug-only cleartext config).
+- Build: debug + release OK. X-MAN Python suite: **`python -m pytest tests/ -q` → 1117 passed, 2 warnings, 0 failed**. Server code: unchanged.
+
+### Physical test (Redmi 12, Android 15 / HyperOS, USB `adb reverse` to a throwaway local X-MAN; disposable node `PHONE-LANDSLIDE-TEST-004`)
+- Start monitoring: live preview, Android camera service shows the app as camera client; **Stop**: client gone,
+  app CPU 30–40 % → 0–3 %, status OFF.
+- Static scene, phone propped, 2 min: 235 frames at 2.0 frames/s → static 223, noise 7, global_change 4, shake 0;
+  **0 local motion, 0 possible events, 0 candidates**.
+- One quick hand pass: possible visual events, no candidate from the pass itself. In the following seconds movement
+  in the background of the scene (fabric / something moving at the frame edge, visible in the uploaded keyframes)
+  lasted ~5 s and **was confirmed as a candidate** — correct for "persistent local visual change", and a clear
+  example of why the gate must not be called landslide detection (region-of-interest masking needed later).
+- Deliberate ~10 s hand movement: possible event → confirming → candidate → GPS requested → upload 201 → cooldown.
+- Server (throwaway DB): 4 automatic candidates during the session, each 3 sanitized frames, `device_model
+  motion-gate / mlive04-1`, no device_score, app `0.2.0-mlive04`; GPS states `missing` (no fix indoors),
+  `inaccurate` (indoor fix > 50 m), `no_reference` (fix received, node has no registered coordinates → not
+  trusted); all merged into one landslide / medium / iot / detected Kathmandu incident (report_count 4), notifications
+  sent once (3), never escalated.
+- Not physically exercised: camera shake rejection (unit-tested only), DEGRADED/recovery (unit-tested only), offline
+  candidate on the phone (unit-tested; the manual-retry path was proven on the phone in M-LIVE-03), long-duration
+  battery drain.
+- Performance: ~28 camera frames/s delivered, ~2/s analysed (the rest closed immediately); app CPU 28–42 % of one core
+  while monitoring (preview + analysis), total PSS ~139 MB; 0–3 % after Stop.
+- Cleanup: phone credentials + Keystore key cleared, test packages deleted, adb reverse removed, throwaway DB/frames/key
+  deleted; logcat (116,147 lines) contained no API key, no `Bearer`, no device ID. Dev DB untouched.
+- Found and fixed during the test: the FPS figure spanned stop/start gaps (diagnostics are now per session; 0 when stopped).
+
+### Known limitations
+- Change detector only: people, animals, vehicles, vegetation, rain and background movement produce candidates; no
+  region-of-interest mask yet; night/IR not handled; thresholds untuned on real slopes.
+- Foreground only (screen on, app visible); no unattended background operation, no automatic background retry.
+- CameraX still delivers ~28 frames/s that are dropped; a lower camera frame rate could save power (not done).
+- Shake test assumes small translations; rotation/zoom-like shake may pass as GLOBAL_CHANGE or NOISE, not SHAKE.
+- Auto-upload of untuned candidates creates real (medium) X-MAN incidents: keep it OFF outside tests.
+
+### Next milestone
+**M-LIVE-05** (not started): region-of-interest masking + on-device lightweight classifier evaluation on recorded slope footage.
+
+### 🏷️ Status
+**M-LIVE-04 — CONTINUOUS CAMERA PIPELINE + MOTIONGATE + TEMPORAL STATE MACHINE COMPLETE (visual change only; not landslide detection)**

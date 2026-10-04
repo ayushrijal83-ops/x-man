@@ -29,6 +29,10 @@ data class EvidencePackage(
     var incidentId: Long? = null,
     var serverStatus: String? = null,
     var duplicate: Boolean = false,
+    /** What created the package: a person ("manual", M-LIVE-03) or the visual monitor ("motion_gate", M-LIVE-04). */
+    var trigger: String = TRIGGER_MANUAL,
+    /** GPS outcome in words (e.g. "fix", "unavailable: no permission"); coordinates are never invented. */
+    var gpsNote: String? = null,
 ) {
     val canRetry get() = state == EvidenceState.FAILED_RETRYABLE
 
@@ -38,9 +42,12 @@ data class EvidencePackage(
         .put("last_http_code", lastHttpCode ?: JSONObject.NULL).put("last_message", lastMessage ?: JSONObject.NULL)
         .put("evidence_id", evidenceId ?: JSONObject.NULL).put("incident_id", incidentId ?: JSONObject.NULL)
         .put("server_status", serverStatus ?: JSONObject.NULL).put("duplicate", duplicate)
+        .put("trigger", trigger).put("gps_note", gpsNote ?: JSONObject.NULL)
 
     companion object {
         const val MAX_FRAMES = 3
+        const val TRIGGER_MANUAL = "manual"
+        const val TRIGGER_MOTION_GATE = "motion_gate"
 
         /** UUID v4: matches the server's ^[A-Za-z0-9_-]{8,64}$. */
         fun newClientEventId(): String = UUID.randomUUID().toString()
@@ -60,6 +67,8 @@ data class EvidencePackage(
                 incidentId = long("incident_id"),
                 serverStatus = str("server_status"),
                 duplicate = json.optBoolean("duplicate", false),
+                trigger = json.optString("trigger", TRIGGER_MANUAL),  // M-LIVE-03 packages have no trigger
+                gpsNote = if (json.has("gps_note")) str("gps_note") else null,
             )
         }
     }

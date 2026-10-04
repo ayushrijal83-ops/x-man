@@ -16,6 +16,7 @@ class MainActivity : ComponentActivity() {
         setContentView(R.layout.activity_main)
         findViewById<Button>(R.id.provision).setOnClickListener { startActivity(Intent(this, ProvisionActivity::class.java)) }
         findViewById<Button>(R.id.capture).setOnClickListener { startActivity(Intent(this, CaptureActivity::class.java)) }
+        findViewById<Button>(R.id.monitor).setOnClickListener { startActivity(Intent(this, MonitorActivity::class.java)) }
         findViewById<Button>(R.id.last).setOnClickListener {
             Node.store(this).all().firstOrNull { it.state != EvidenceState.DRAFT }?.let {
                 startActivity(Intent(this, ResultActivity::class.java).putExtra(ResultActivity.EXTRA_ID, it.clientEventId))
@@ -46,6 +47,7 @@ class MainActivity : ComponentActivity() {
             append(last?.let { "${it.state} - ${it.lastMessage ?: ""}" } ?: "none")
         }
         findViewById<Button>(R.id.capture).isEnabled = provisioned
+        findViewById<Button>(R.id.monitor).isEnabled = provisioned
         findViewById<Button>(R.id.last).isEnabled = last != null
         findViewById<Button>(R.id.test_connection).isEnabled = config != null
     }

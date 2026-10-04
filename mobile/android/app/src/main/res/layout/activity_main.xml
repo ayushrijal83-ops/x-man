@@ -10,6 +10,8 @@
             android:paddingTop="16dp" android:paddingBottom="8dp" android:textIsSelectable="true" android:textSize="15sp" />
         <Button android:id="@+id/capture" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="Capture test evidence" />
+        <Button android:id="@+id/monitor" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Visual monitoring (camera, foreground only)" />
         <Button android:id="@+id/last" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="Open last evidence" />
         <Button android:id="@+id/test_connection" android:layout_width="match_parent" android:layout_height="wrap_content"
