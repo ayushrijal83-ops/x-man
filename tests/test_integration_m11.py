@@ -302,12 +302,13 @@ def test_seismic_software_simulation_of_mpu6050_input(app, client, world):
 
     for _ in range(3):  # sustained abnormal motion -> one event
         telemetry(client, 'MOTION-A', strong)
-    for _ in range(3):  # more of the same merges, never escalates
+    for _ in range(3):  # same Device Event continues: no new Incident, never escalates
         telemetry(client, 'MOTION-A', strong)
     with app.app_context():
         event = Incident.query.one()
         assert (event.event_type, event.severity, event.source, event.status) == ('earthquake', 'medium', 'iot', 'detected')
-        assert event.district_id == world['d']['a'] and event.report_count >= 2
+        # INTENTIONAL ARCHITECTURE CHANGE (Phase 4A): one Device Event = one piece of evidence
+        assert event.district_id == world['d']['a'] and event.report_count == 1
         assert event.title == 'Abnormal ground motion signal: Motion-A'
         text = f'{event.title} {event.description}'.lower()
         assert 'not a prediction' in text and 'no magnitude' in text and 'certified' in text

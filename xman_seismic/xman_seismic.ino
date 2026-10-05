@@ -43,7 +43,7 @@
 
 // ---------------- H03.8 telemetry ----------------
 #define TELEMETRY_INTERVAL_MS      2000
-#define WIFI_RETRY_INTERVAL_MS     10000
+#define WIFI_RETRY_INTERVAL_MS     30000   // > one full scan+auth+DHCP cycle; never interrupts an attempt
 #define WIFI_SETUP_WAIT_MS         10000
 #define HTTP_TIMEOUT_MS            3000
 #define SENSOR_RECOVERY_INTERVAL_MS 2000
@@ -249,23 +249,81 @@ const char *stateName() {
 // WI-FI (non-blocking after setup: the sensor keeps being read)
 // ============================================================
 
-void startWifi() {
-  lastWifiAttempt = millis();
-  WiFi.disconnect();
-  WiFi.begin(XMAN_WIFI_SSID, XMAN_WIFI_PASSWORD);   // values never printed
+const char *wifiStatusName(wl_status_t s) {
+  switch (s) {
+    case WL_IDLE_STATUS:     return "IDLE";
+    case WL_NO_SSID_AVAIL:   return "NO_SSID_AVAIL";
+    case WL_SCAN_COMPLETED:  return "SCAN_COMPLETED";
+    case WL_CONNECTED:       return "CONNECTED";
+    case WL_CONNECT_FAILED:  return "CONNECT_FAILED";
+    case WL_CONNECTION_LOST: return "CONNECTION_LOST";
+    case WL_DISCONNECTED:    return "DISCONNECTED";
+    case WL_STOPPED:         return "STOPPED";
+    default:                 return "UNKNOWN";
+  }
 }
 
+void printWifiStatus() {
+  wl_status_t s = WiFi.status();
+  Serial.print("Wi-Fi status: ");
+  Serial.print((int)s);
+  Serial.print(" ");
+  Serial.print(wifiStatusName(s));
+  // Core 3.x: IDLE after begin() means associated with the AP but no DHCP lease yet.
+  Serial.println(s == WL_IDLE_STATUS ? " (associated, waiting for DHCP IP)" : "");
+}
+
+// Runs on the Wi-Fi event task. Prints the driver's reason for a failed/dropped association
+// (AUTH_FAIL, NO_AP_FOUND, 4WAY_HANDSHAKE_TIMEOUT, ...). A repeat of the same reason is not
+// printed again while the core keeps retrying, so the log does not flood.
+volatile uint8_t lastDisconnectReason = 0;
+void onWifiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
+  uint8_t reason = info.wifi_sta_disconnected.reason;
+  if (reason == lastDisconnectReason) return;
+  lastDisconnectReason = reason;
+  Serial.print("Wi-Fi disconnect reason: ");
+  Serial.print(reason);
+  Serial.print(" ");
+  Serial.println(WiFi.disconnectReasonName((wifi_err_reason_t)reason));
+}
+
+// Starts (or nudges) an association. Deliberately NO WiFi.disconnect() first: on core 3.x it
+// aborts any association in progress and its ASSOC_LEAVE (reason 8) tells the core's
+// auto-reconnect to stop (STA.cpp _onStaArduinoEvent). If the driver is already mid-attempt,
+// begin() is simply rejected and the active attempt continues untouched.
+void startWifi() {
+  lastWifiAttempt = millis();
+  Serial.print("Wi-Fi SSID: ");
+  Serial.println(XMAN_WIFI_SSID);   // SSID only; password never printed
+  wl_status_t r = WiFi.begin(XMAN_WIFI_SSID, XMAN_WIFI_PASSWORD);
+  Serial.println(r == WL_CONNECT_FAILED ? "Wi-Fi begin: not started (driver busy with an attempt or rejected config)"
+                                        : "Wi-Fi begin: attempt started");
+}
+
+void printNetworkInfo() {
+  Serial.println("Wi-Fi connected.");
+  Serial.print("IP address: "); Serial.println(WiFi.localIP());
+  Serial.print("Gateway: ");    Serial.println(WiFi.gatewayIP());
+  Serial.print("Subnet: ");     Serial.println(WiFi.subnetMask());
+  Serial.print("DNS: ");        Serial.println(WiFi.dnsIP());
+  Serial.print("RSSI: ");       Serial.print(WiFi.RSSI()); Serial.println(" dBm");
+}
+
+// Reconnect policy: the core's auto-reconnect handles most drops/failures on its own. The firmware
+// only nudges with begin() if still offline after WIFI_RETRY_INTERVAL_MS (covers reasons the core
+// does not retry, e.g. AUTH_FAIL after the first attempt). Never blocks: the sensor keeps running.
 void maintainWifi() {
   bool connected = WiFi.status() == WL_CONNECTED;
   if (connected && !wifiWasConnected) {
-    Serial.println("Wi-Fi connected.");
-    Serial.print("ESP32 IP: ");
-    Serial.println(WiFi.localIP());
+    printNetworkInfo();
+    lastDisconnectReason = 0;   // next drop's reason is printed even if it repeats an old one
   } else if (!connected && wifiWasConnected) {
     Serial.println("Wi-Fi disconnected. Reconnecting in the background; sensor reading continues.");
+    lastWifiAttempt = millis();   // give the core's auto-reconnect a full interval first
   }
   wifiWasConnected = connected;
   if (!connected && millis() - lastWifiAttempt >= WIFI_RETRY_INTERVAL_MS) {
+    printWifiStatus();
     Serial.println("Wi-Fi unavailable: retrying...");
     startWifi();
   }
@@ -299,14 +357,29 @@ bool sendTelemetry(float vibrationMg) {
 
   Serial.print("Sending telemetry... POST ");
   Serial.println(TELEMETRY_PATH);
+  unsigned long postStart = millis();
   int code = http.POST(payload);
+  unsigned long postMs = millis() - postStart;
   http.end();
   authorization = "";
 
   if (code <= 0) {
-    Serial.print("X-MAN telemetry: FAILED (connection error: ");
-    Serial.print(HTTPClient::errorToString(code));
-    Serial.println(")");
+    // HTTPClient reports every failed TCP connect as -1 "connection refused"; the elapsed time
+    // separates "nothing answered" (LAN: wrong IP, host down, filtered) from "port answered with RST".
+    Serial.print("X-MAN telemetry: FAILED (");
+    if (code == HTTPC_ERROR_CONNECTION_REFUSED && postMs >= HTTP_TIMEOUT_MS - 100) {
+      Serial.print("TCP connect timeout: no answer from server host; check XMAN_SERVER_URL IP / PC on LAN / firewall");
+    } else if (code == HTTPC_ERROR_CONNECTION_REFUSED) {
+      Serial.print("TCP connection refused: host reached but nothing accepting on that port; is Flask running on 0.0.0.0?");
+    } else if (code == HTTPC_ERROR_READ_TIMEOUT) {
+      Serial.print("connected, but server sent no HTTP response in time");
+    } else {
+      Serial.print("connection error: ");
+      Serial.print(HTTPClient::errorToString(code));
+    }
+    Serial.print(", ");
+    Serial.print(postMs);
+    Serial.println(" ms)");
     return false;
   }
   Serial.print("HTTP status: ");
@@ -315,7 +388,13 @@ bool sendTelemetry(float vibrationMg) {
     Serial.println("X-MAN telemetry: SUCCESS");
     return true;
   }
-  Serial.println("X-MAN telemetry: FAILED");
+  Serial.print("X-MAN telemetry: FAILED (HTTP ");
+  Serial.print(code);
+  if (code == 401 || code == 403) Serial.print(": authentication rejected; check XMAN_DEVICE_ID / XMAN_API_KEY registration");
+  else if (code == 404)           Serial.print(": endpoint not found; check XMAN_SERVER_URL has no extra path");
+  else if (code == 400)           Serial.print(": payload rejected by validation");
+  else if (code >= 500)           Serial.print(": server error; see Flask log");
+  Serial.println(")");
   return false;
 }
 
@@ -349,11 +428,15 @@ void setup() {
   Serial.println("Connecting to Wi-Fi...");
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+  WiFi.onEvent(onWifiDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   startWifi();
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_SETUP_WAIT_MS) delay(250);
   maintainWifi();
-  if (WiFi.status() != WL_CONNECTED) Serial.println("Wi-Fi not connected yet: continuing; will retry.");
+  if (WiFi.status() != WL_CONNECTED) {
+    printWifiStatus();
+    Serial.println("Wi-Fi not connected yet: continuing; will retry.");
+  }
 
   windowStart = millis();
 }

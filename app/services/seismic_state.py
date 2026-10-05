@@ -67,6 +67,7 @@ class SeismicDeviceEvent:
     recovery_window_count: int = 0
     recovery_started_at: Optional[datetime] = None
     gap_entered_at: Optional[datetime] = None
+    active_incident_id: Optional[int] = None
 
     def is_event_active(self) -> bool:
         return self.state in (SeismicState.ACTIVE, SeismicState.RECOVERY, SeismicState.TELEMETRY_GAP)

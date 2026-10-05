@@ -40,6 +40,15 @@ class SeismicEventState(db.Model):
 
     gap_entered_at = db.Column(db.DateTime, nullable=True)
 
+    # Phase 4A: Active Incident association for the current Device Event
+    active_incident_id = db.Column(
+        db.Integer,
+        db.ForeignKey('incidents.id', ondelete='SET NULL',
+                      name='fk_seismic_event_states_active_incident_id_incidents'),
+        nullable=True,
+        index=True
+    )
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime,
@@ -49,6 +58,7 @@ class SeismicEventState(db.Model):
     )
 
     device = db.relationship('IoTDevice', backref=db.backref('seismic_state', uselist=False))
+    active_incident = db.relationship('Incident', foreign_keys=[active_incident_id])
 
     def __repr__(self):
         return f'<SeismicEventState device={self.device_id} state={self.state}>'
@@ -70,6 +80,7 @@ class SeismicEventState(db.Model):
             'recovery_started_at': self.recovery_started_at.isoformat() if self.recovery_started_at else None,
             'recovery_confirmed_at': self.recovery_confirmed_at.isoformat() if self.recovery_confirmed_at else None,
             'gap_entered_at': self.gap_entered_at.isoformat() if self.gap_entered_at else None,
+            'active_incident_id': self.active_incident_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

@@ -6,6 +6,9 @@ database model. No transition logic — only serialization/deserialization.
 
 from datetime import datetime
 from typing import Optional
+import threading
+
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.extensions import db
 from app.models.seismic_event_state import SeismicEventState
@@ -20,6 +23,28 @@ from app.services.seismic_state import (
 class SeismicStatePersistenceError(Exception):
     """Raised when persistence operations fail."""
     pass
+
+
+# Thread-local mutex per device_id for SQLite concurrency control
+# This is a fallback for databases that don't support SELECT FOR UPDATE
+_seismic_state_mutex = threading.Lock()
+_seismic_state_device_locks = {}
+
+
+def _get_device_lock(device_id: int) -> threading.Lock:
+    """Get or create a per-device lock for SQLite concurrency control."""
+    with _seismic_state_mutex:
+        if device_id not in _seismic_state_device_locks:
+            _seismic_state_device_locks[device_id] = threading.Lock()
+        return _seismic_state_device_locks[device_id]
+
+
+def _supports_select_for_update() -> bool:
+    """Check if the current database dialect supports SELECT FOR UPDATE."""
+    dialect_name = db.engine.dialect.name
+    # MySQL, PostgreSQL, and MariaDB support FOR UPDATE
+    # SQLite does not support FOR UPDATE in a useful way for this race condition
+    return dialect_name in ('mysql', 'postgresql', 'mariadb')
 
 
 def _db_state_to_enum(db_state: str) -> SeismicState:
@@ -62,16 +87,67 @@ def load_state(device_id: int) -> SeismicDeviceEvent:
 
     Returns a SeismicDeviceEvent populated from the database.
     Does NOT commit — caller owns the transaction.
+
+    Concurrency safety:
+    - For MySQL/PostgreSQL/MariaDB: uses SELECT FOR UPDATE to lock the row
+    - For SQLite: uses a per-device mutex to serialize access
+    - Handles race condition where row is created between SELECT and INSERT
     """
-    db_state = db.session.query(SeismicEventState).filter_by(device_id=device_id).first()
+    # Maximum retries for handling race conditions
+    max_retries = 3
 
-    if db_state is None:
-        # No persistent state: create initial QUIET state in DB
-        db_state = SeismicEventState(device_id=device_id, state='quiet')
-        db.session.add(db_state)
-        db.session.flush()
+    for attempt in range(max_retries):
+        try:
+            if _supports_select_for_update():
+                # For MySQL/PostgreSQL/MariaDB: use SELECT FOR UPDATE to lock the row
+                db_state = db.session.query(SeismicEventState).filter_by(device_id=device_id).with_for_update(nowait=True).first()
+            else:
+                # SQLite: use per-device mutex to serialize access
+                device_lock = _get_device_lock(device_id)
+                with device_lock:
+                    db_state = db.session.query(SeismicEventState).filter_by(device_id=device_id).first()
 
-    return _db_row_to_device_event(db_state)
+            if db_state is None:
+                # No persistent state: create initial QUIET state in DB
+                db_state = SeismicEventState(device_id=device_id, state='quiet')
+                db.session.add(db_state)
+                db.session.flush()
+
+            return _db_row_to_device_event(db_state)
+
+        except OperationalError:
+            # Database doesn't support NOWAIT (some MySQL configurations)
+            # Fall back to waiting lock
+            if _supports_select_for_update():
+                try:
+                    db_state = db.session.query(SeismicEventState).filter_by(device_id=device_id).with_for_update().first()
+                    if db_state is None:
+                        db_state = SeismicEventState(device_id=device_id, state='quiet')
+                        db.session.add(db_state)
+                        db.session.flush()
+                    return _db_row_to_device_event(db_state)
+                except OperationalError:
+                    # Still fails, try without lock as last resort
+                    pass
+            # For SQLite or if FOR UPDATE failed, fall through to mutex approach
+            device_lock = _get_device_lock(device_id)
+            with device_lock:
+                db_state = db.session.query(SeismicEventState).filter_by(device_id=device_id).first()
+                if db_state is None:
+                    db_state = SeismicEventState(device_id=device_id, state='quiet')
+                    db.session.add(db_state)
+                    db.session.flush()
+                return _db_row_to_device_event(db_state)
+
+        except IntegrityError:
+            # Race condition: another transaction created the row between our SELECT and INSERT
+            db.session.rollback()
+            if attempt < max_retries - 1:
+                continue  # Retry
+            raise SeismicStatePersistenceError(f"Failed to load/create state for device {device_id} after {max_retries} attempts") from None
+
+    # Should not reach here
+    raise SeismicStatePersistenceError(f"Failed to load/create state for device {device_id} after {max_retries} attempts")
 
 
 def _db_row_to_device_event(db_state: SeismicEventState) -> SeismicDeviceEvent:
@@ -85,6 +161,7 @@ def _db_row_to_device_event(db_state: SeismicEventState) -> SeismicDeviceEvent:
     event.recovery_window_count = db_state.recovery_window_count
     event.recovery_started_at = db_state.recovery_started_at
     event.gap_entered_at = db_state.gap_entered_at
+    event.active_incident_id = db_state.active_incident_id
     return event
 
 
@@ -111,6 +188,8 @@ def save_state(device_id: int, device_event: SeismicDeviceEvent) -> SeismicEvent
     # recovery_confirmed_at = event_ended_at when recovery completes
     db_state.recovery_confirmed_at = device_event.event_ended_at
     db_state.gap_entered_at = device_event.gap_entered_at
+    # Phase 4A: active incident association
+    db_state.active_incident_id = device_event.active_incident_id
 
     db.session.flush()
     return db_state
@@ -159,3 +238,16 @@ def restore_state_machine(
     # Replace the machine's internal device_event with the loaded one
     machine._device_event = device_event
     return machine
+
+def claim_event_start(device_id: int) -> bool:
+    """Phase 4A: atomically claim QUIET -> ACTIVE for this device. Does NOT commit.
+
+    Compare-and-set at the database: the UPDATE matches only while the persisted row is still
+    QUIET, and the row/write lock is held until the caller commits. Of two concurrent requests
+    that both loaded QUIET, exactly one gets True; the loser must not start a second Device Event
+    (nor correlate a second Incident). Works on SQLite, PostgreSQL and MySQL alike.
+    """
+    claimed = db.session.query(SeismicEventState) \
+        .filter(SeismicEventState.device_id == device_id, SeismicEventState.state == 'quiet') \
+        .update({'state': 'active'}, synchronize_session=False)
+    return claimed == 1

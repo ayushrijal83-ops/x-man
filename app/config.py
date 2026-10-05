@@ -80,6 +80,10 @@ class TestingConfig(Config):
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     WTF_CSRF_ENABLED = False
     VISION_ENABLED = False  # M06 tests enable it with a stub classifier
+    # Tests assume shipped defaults, not the developer's local .env (tests set these explicitly)
+    MOTION_VIBRATION_THRESHOLD_MG = None
+    MOTION_TILT_CHANGE_THRESHOLD_DEG = None
+    EMERGENCY_MIN_SEVERITY = 'high'
 
 class ProductionConfig(Config):
     DEBUG = False

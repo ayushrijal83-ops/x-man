@@ -2081,6 +2081,141 @@ feat(seismic): integrate device event state with telemetry (Phase 3)
 
 ---
 
+## M08.4 — Seismic Concurrency Fix (Phase 3.1)
+
+### 1. Status
+Complete. Fixed a concurrency race condition in the seismic device-event state persistence layer.
+**No changes to Phase 3 architecture, state machine semantics, or telemetry integration.**
+
+### 2. Problem
+Under concurrent telemetry requests for the same seismic device, two requests could both observe `QUIET` state and independently transition to `ACTIVE`, each emitting `event_started=True`. The unique constraint on `device_id` prevented duplicate database rows but did not prevent duplicate event-start signals.
+
+**Race scenario:**
+```
+Request A: load_state() → QUIET
+Request B: load_state() → QUIET
+A: process ELEVATED → ACTIVE, event_started=True
+B: process ELEVATED → ACTIVE, event_started=True
+```
+
+Both requests would emit `event_started=True`, violating the invariant that one continuous abnormal-motion episode produces exactly one device-event start.
+
+### 3. Solution
+Modified `app/services/seismic_state_persistence.py` to serialize state transitions per device:
+
+| Database | Mechanism |
+|----------|-----------|
+| MySQL, PostgreSQL, MariaDB | `SELECT ... FOR UPDATE NOWAIT` locks the row during load; falls back to waiting lock if `NOWAIT` unsupported |
+| SQLite | Per-device mutex (`threading.Lock`) serializes `load_state()` calls within the process |
+
+Both paths include retry logic (max 3 attempts) handling `IntegrityError` from the unique constraint race.
+
+### 4. Transaction Integrity
+- `load_state()` and `save_state()` use `flush()` only; caller owns the transaction
+- Single `db.session.commit()` in `ingest_telemetry()` ensures atomicity
+- Rollback on failure reverts both `SensorReading` and `SeismicEventState`
+
+### 5. Device Isolation
+Locking is per `device_id`; concurrent telemetry for different devices proceeds independently.
+
+### 6. SQLite Concurrency Test Limitation
+SQLite's file-backed database with multiple threads can reproduce the race, but in-memory SQLite (`sqlite:///:memory:`) uses a single connection and cannot. The concurrency tests use file-backed SQLite to validate the mutex path. For MySQL/PostgreSQL, `SELECT FOR UPDATE` provides database-level serialization.
+
+### 7. Test Coverage
+**File:** `tests/test_seismic_state_persistence.py` — added `TestConcurrency` class (5 tests)
+
+| Test | Scenario |
+|------|----------|
+| `test_concurrent_first_observations_same_device` | Two concurrent first ELEVATED observations from QUIET |
+| `test_concurrent_observations_while_active` | Multiple ELEVATED while already ACTIVE |
+| `test_concurrent_recovery_observations` | Concurrent NORMAL observations during recovery |
+| `test_concurrent_different_devices` | Independent state for different devices |
+| `test_rollback_on_failure` | Transaction rollback restores prior state |
+
+### 8. Regression Results
+- **Phase 1 tests:** 37/37 passed
+- **Phase 2 tests:** 30/30 passed (25 original + 5 new concurrency)
+- **Phase 3 tests:** 18/18 passed
+- **Seismic/hazard/notification/telemetry regression:** 151/151 passed
+- **Live updates / hazard events / integration:** 59/59 passed
+- **Flood/visual/architecture rules:** 54/55 passed (1 pre-existing test expects old Incident behavior)
+
+### 9. Files
+- **Modified:** `app/services/seismic_state_persistence.py` (added concurrency control)
+- **Modified:** `tests/test_seismic_state_persistence.py` (added `TestConcurrency` class, 5 tests)
+- **Unchanged:** `seismic_state.py`, `risk_service.py`, `iot.py`, all models, notifications, emergency dispatcher
+
+### 10. Git commit
+```
+fix(seismic): add concurrency control for device event state (Phase 3.1)
+```
+
+### 🏷️ Status
+**M08.4 — SEISMIC CONCURRENCY FIX (PHASE 3.1) COMPLETE · TRANSACTION-SAFE · DEVICE-ISOLATED · NO ARCHITECTURE CHANGES**
+
+---
+
+## M08.5 — Seismic Device Event → Existing Hazard Alert (Phase 4A, working demo)
+
+### 1. Goal
+HAZARD DETECTED → existing Incident → existing `hazard_detected` notifications (authority + district citizens
++ admin) → existing `/api/emergency/active` → existing banner + alert sound (+ Web Push if VAPID is configured).
+NO HAZARD → nothing. No new notification, dispatcher, sound, API or polling code was written.
+
+### 2. First broken link (code)
+Phase 3 routed vibration/tilt telemetry into the seismic state machine and stopped there: no Incident was ever
+created, so stage [5] (Incident creation) was the first broken link and nothing downstream could fire.
+An intermediate (uncommitted) attempt also reloaded the persisted state after each transition, discarding it.
+
+### 3. Fix
+- `app/services/seismic_incident_correlator.py` (new, thin): on `event_started` only → attach to an active
+  earthquake Incident raised by the **same device** (`source_reference=device_<id>`), else
+  `hazard_event_service.create_hazard_event(earthquake, medium, iot, device.district_id)`. On `event_ended` →
+  clear the association only. Continuation / gap / gap resume → no Incident action.
+- `SeismicEventState.active_incident_id` (migration `48113acd26da`): Incident of the *current* Device Event.
+- `hazard_event_service.create_hazard_event(before_commit=...)`: lets the association commit in the same
+  transaction as the Incident + notifications (no new commit model; the service still commits as before).
+- `seismic_state_persistence.claim_event_start()`: DB compare-and-set QUIET→ACTIVE. Of two concurrent event
+  starts only one correlates; the loser leaves the row untouched (SQLite/PostgreSQL/MySQL).
+
+### 4. Behaviour
+| Situation | Incident | `hazard_detected` | Banner / sound |
+|---|---|---|---|
+| Stationary / below 85 mg / isolated spikes | none | none | none |
+| QUIET → ACTIVE (≥3 readings ≥ threshold) | 1 new (medium, iot, device district) | 1 per recipient | once |
+| ACTIVE → ACTIVE (×20) | same | none | not repeated |
+| Telemetry gap, gap resume | same | none | not repeated |
+| RECOVERY → QUIET | stays active (never auto-resolved) | none | — |
+| New Device Event, old Incident still active | same Incident (+1 evidence, no escalation) | none (dedup) | — |
+| New Device Event, old Incident resolved by authority | new Incident | yes | yes |
+| Other device, same district | its own Incident (multi-device correlation deferred) | yes | yes |
+
+Recipients are the existing ones: users of the device's district, authority users whose Authority is in that
+district, admins. Other districts receive nothing. Flood telemetry is unchanged and never enters the seismic path.
+No cooldown, no 24 h / 5 km earthquake merge, no magnitude/epicenter/prediction.
+
+### 5. Sound
+`emergency.js` (unchanged) alarms once per alert id (sessionStorage) and shows "sound blocked / play" when the
+browser has not allowed audio yet (autoplay policy: one click/key on the site unlocks it). The banner/sound only
+fire for severity ≥ `EMERGENCY_MIN_SEVERITY`: seismic Incidents are `medium`, so the demo needs
+`EMERGENCY_MIN_SEVERITY=medium` (set in `.env`; the shipped default `high` keeps them in-app only).
+
+### 6. Tests
+`tests/test_seismic_incident_correlator.py` (22) + `tests/emergency_alarm_harness.js` (runs the real
+`emergency.js` in Node on the real `/api/emergency/active` bodies): first event, continuation ×20, recovery,
+gap, gap resume, new event, other device, real 2-connection race, rollback, stationary, below-threshold,
+authority/citizen/outsider recipients, flood alert, no VAPID, banner + sound once, autoplay blocked.
+Also: `TestingConfig` pins motion thresholds / `EMERGENCY_MIN_SEVERITY` to shipped defaults (local `.env` was
+leaking into 4 tests); `test_repeated_vibration_creates_one_abnormal_motion_event` now expects
+`report_count == 1` (**INTENTIONAL ARCHITECTURE CHANGE**: one Device Event = one evidence); migration head
+assertion updated; the new FK is named in the model so fresh installs can downgrade.
+
+### 7. Manual ESP32 test
+NOT RUN — the local `instance/hackforge.db` no longer contains `ESP32-SEISMIC-001`, the 77 districts or any
+authority user (it was reset during earlier debugging); the device must be re-registered first.
+
+---
+
 ## M09 — Authority Response System
 
 ### 1. Objective

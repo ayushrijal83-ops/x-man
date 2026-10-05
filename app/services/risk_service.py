@@ -27,7 +27,9 @@ from app.services.seismic_state_persistence import (
     load_state,
     save_state,
     restore_state_machine,
+    claim_event_start,
 )
+from app.services.seismic_incident_correlator import correlate_device_event
 
 FLOOD_WINDOW = timedelta(minutes=30)
 MOTION_WINDOW = timedelta(seconds=60)
@@ -115,7 +117,10 @@ def evaluate_motion_with_state_machine(device):
     """Process vibration/tilt readings through the seismic device-event state machine.
     
     This is the Phase 3 path: it updates the persistent device-event state
-    but does NOT create Incidents or send notifications.
+    and correlates Device Events to Incidents via the SeismicIncidentCorrelator.
+    
+    Does NOT directly create Incidents or send notifications — that is delegated
+    to the SeismicIncidentCorrelator which uses the existing Hazard Event Service.
     
     Returns the motion assessment for visibility/debugging.
     """
@@ -160,6 +165,20 @@ def evaluate_motion_with_state_machine(device):
     # Process through state machine
     transition = machine.process_observation(observation)
     
+    if transition.event_started and not claim_event_start(device.id):
+        # A concurrent request already started this Device Event (and owns its Incident
+        # correlation). Saving our stale QUIET-based view would clobber it: leave the row alone.
+        current_app.logger.info(f"Seismic event start already claimed: device={device.device_id}")
+        return assessment
+
+    # Phase 4A: event_started -> create/attach Incident via hazard_event_service (which commits
+    # the reading, this state and the association together); event_ended -> clear association.
+    correlated = correlate_device_event(device, machine.device_event, assessment, transition)
+    if correlated:
+        incident, created = correlated
+        current_app.logger.info(f"Seismic Incident {'created' if created else 'attached'}: "
+                                f"device={device.device_id}, incident={incident.id}")
+
     # Save updated state
     save_state(device.id, machine._device_event)
     

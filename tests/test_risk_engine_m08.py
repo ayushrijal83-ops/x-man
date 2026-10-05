@@ -266,7 +266,9 @@ class TestMotion:
             event = Incident.query.one()
             assert (event.event_type, event.severity, event.source, event.status) == \
                 ('earthquake', 'medium', 'iot', 'detected')
-            assert event.district_id == world['a'] and event.report_count == 3
+            # INTENTIONAL ARCHITECTURE CHANGE (Phase 4A): one Device Event = one piece of evidence;
+            # continued ACTIVE readings no longer merge into the Incident on every telemetry.
+            assert event.district_id == world['a'] and event.report_count == 1
             assert event.title == 'Abnormal ground motion signal: Motion-A'
             assert 'not a prediction' in event.description and 'magnitude' in event.description
             assert 'predict' not in event.title.lower()

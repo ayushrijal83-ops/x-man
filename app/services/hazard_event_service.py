@@ -84,11 +84,13 @@ def _bounding_box(latitude, longitude, radius_km):
 def create_hazard_event(event_type, severity, source, district_id=None, location=None,
                         latitude=None, longitude=None, river_id=None, road_segment_id=None,
                         title=None, description=None, source_reference=None,
-                        confidence=None, detected_at=None, notify_exclude_user_ids=()):
+                        confidence=None, detected_at=None, notify_exclude_user_ids=(), before_commit=None):
     """Validate and create a new hazard event in 'detected' status. Raises ValueError.
 
     notify_exclude_user_ids: users not to send the 'detected' alert to (e.g. the
     citizen whose report created it — they get a report receipt instead).
+    before_commit(incident): caller's writes that must commit atomically with the new event
+    (Phase 4A: the seismic Device Event -> Incident association).
     """
     _validate_hazard_type(event_type)
     _validate_severity(severity)
@@ -131,6 +133,8 @@ def create_hazard_event(event_type, severity, source, district_id=None, location
     db.session.add(incident)
     db.session.flush()  # need incident.id for the notification link
     notification_service.notify_hazard_detected(incident, notify_exclude_user_ids)
+    if before_commit:
+        before_commit(incident)
     _commit_or_rollback()
     return incident
 
