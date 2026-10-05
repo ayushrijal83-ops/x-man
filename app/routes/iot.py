@@ -6,6 +6,7 @@ from app.extensions import RUNTIME, csrf, db
 from app.models import IoTDevice, NodeEvidence, SensorReading, District, Authority, River
 from app.services.risk_engine import validate_sensor_reading, compute_river_status
 from app.services import node_evidence_service as evidence_service, risk_service
+from app.services.seismic_state_persistence import restore_state_machine
 from datetime import datetime, timezone
 import json
 import math
@@ -248,7 +249,8 @@ def ingest_telemetry():
         return jsonify({'error': 'All readings invalid', 'details': errors}), 400
 
     if device.district_id and any(r.sensor_type in ('vibration', 'tilt') for r in stored_readings):
-        risk_service.evaluate_motion(device)  # M08: abnormal-motion evidence -> hazard_event_service
+        # Phase 3: Use seismic device-event state machine instead of direct Incident creation
+        risk_service.evaluate_motion_with_state_machine(device)
 
     device.last_seen = received_at
     db.session.commit()

@@ -1947,6 +1947,140 @@ feat(seismic): persist device event state (Phase 2)
 
 ---
 
+## M08.3 — Seismic Telemetry Integration (Phase 3)
+
+### 1. Status
+Complete. Live telemetry endpoint now feeds the seismic device-event state machine.
+**No Incident creation, no notifications, no multi-device correlation, no cooldown.**
+
+### 2. Objective
+Connect the existing `/api/iot/telemetry` endpoint to the Phase 1+2 seismic device-event state machine.
+Vibration/tilt readings from seismic devices now update the persistent device-event state
+instead of directly creating/merging Incidents.
+
+### 3. Architecture
+```
+ESP32-SEISMIC-001
+       ↓
+POST /api/iot/telemetry (existing auth, validation, SensorReading storage)
+       ↓
+risk_service.evaluate_motion_with_state_machine(device)
+       ↓
+SeismicStateMachine.process_observation()  (Phase 1 pure logic)
+       ↓
+SeismicEventState persistence (Phase 2 adapter)
+       ↓
+[Future Phase 4: Incident Correlator]
+```
+
+### 4. Key Changes
+
+#### `app/services/risk_service.py`
+- Added imports for `SeismicStateMachine`, `create_motion_observation`, `motion_level_from_risk_assessment`
+- Added imports for `load_state`, `save_state`, `restore_state_machine` from persistence adapter
+- **New function:** `evaluate_motion_with_state_machine(device)`
+  - Loads persistent state for device
+  - Restores state machine with persisted state
+  - Checks telemetry gap using latest reading timestamp
+  - Converts risk assessment to `MotionObservation`
+  - Processes through state machine
+  - Saves updated state
+  - Logs transitions (event_started, event_ended, gap_entered, recovery_started)
+  - Returns assessment (for visibility/debugging)
+  - **Does NOT call `report_hazard()`** — no Incident creation
+
+#### `app/routes/iot.py`
+- Added import for `restore_state_machine` (for potential future use)
+- Modified telemetry ingestion (line ~250): replaced `risk_service.evaluate_motion(device)` with `risk_service.evaluate_motion_with_state_machine(device)`
+- Existing behavior preserved: SensorReading storage, device authentication, validation, last_seen update
+
+#### Configuration (`app/config.py`)
+- `MOTION_RECOVERY_WINDOWS=3` (consecutive 60s normal windows to confirm recovery)
+- `MOTION_GAP_TOLERANCE_SECONDS=300` (telemetry gap before TELEMETRY_GAP state)
+- (No `MOTION_COOLDOWN_SECONDS` — belongs to later Phase 4)
+
+### 5. Behavior Changes
+| Aspect | Before (Phase 2) | After (Phase 3) |
+|--------|------------------|-----------------|
+| Vibration ≥ threshold | `evaluate_motion()` → `report_hazard()` → Incident | `evaluate_motion_with_state_machine()` → StateMachine → SeismicEventState |
+| Incident created | Yes, per `report_hazard()` | **No** (deferred to Phase 4) |
+| Notification sent | Yes, via `notify_hazard_detected()` | **No** |
+| Telemetry gap handling | N/A (no state machine) | `TELEMETRY_GAP` state, no auto-recovery |
+| Server restart | N/A | Persisted state restored, event continues |
+| Continuous burst | Multiple Incident merges | Single device event, one start |
+
+### 5. Critical Design Decisions
+- **SensorReading storage unchanged:** Raw evidence still stored first, then state machine processes
+- **Existing auth/validation unchanged:** Device authentication, payload validation, disabled device rejection all work identically
+- **Flood logic unchanged:** Water level readings still use `evaluate_water_level` → `auto_create_flood_event_from_river`
+- **Thresholds from config:** `MOTION_VIBRATION_THRESHOLD_MG` from environment, not hardcoded
+- **Gap detection uses latest reading timestamp:** Not wall clock — deterministic under tests
+- **State machine logging only:** Logs transitions for debugging, no sensitive data
+- **No concurrency locking yet:** SQLite-compatible; Phase 4 will address if needed
+
+### 6. Restart Behavior (Verified)
+| Scenario | Before Restart | After Restart + Telemetry |
+|----------|----------------|---------------------------|
+| ACTIVE event | `ACTIVE`, started 10:00 | `ACTIVE`, same start time, no new event |
+| RECOVERY (2/3) | `RECOVERY`, count=2 | `RECOVERY`, count=2, completes on 3rd normal |
+| TELEMETRY_GAP | `TELEMETRY_GAP` | `TELEMETRY_GAP`, resumes based on evidence |
+| QUIET | `QUIET` | `QUIET`, clean state |
+
+**Critical:** Loading persistent state never emits `event_started`/`event_ended`. New observations drive transitions.
+
+### 7. Test Coverage
+**File:** `tests/test_seismic_telemetry_integration.py` (18 tests)
+
+| Scenario | Test |
+|----------|------|
+| SensorReading created | `test_seismic_telemetry_creates_sensor_reading` |
+| State machine updated | `test_seismic_telemetry_updates_state_machine` |
+| Continuous burst = one event | `test_continuous_burst_one_event` |
+| Recovery sequence | `test_recovery_sequence` |
+| Below threshold = QUIET | `test_below_threshold_stays_quiet` |
+| Single spike ignored | `test_single_spike_ignored` |
+| Tilt readings processed | `test_tilt_readings_processed` |
+| Flood device unaffected | `test_flood_device_no_seismic_state` |
+| Auth/validation unchanged | 4 authentication tests |
+| Existing telemetry unchanged | 5 existing behavior tests |
+
+**Result:** 18 passed.
+
+### 8. Regression Results
+- **Phase 1 tests:** 37/37 passed
+- **Phase 2 tests:** 25/25 passed
+- **Phase 3 tests:** 18/18 passed
+- **Seismic/hazard/notification/telemetry:** 146/146 passed
+- **Live updates / hazard events / integration:** 59/59 passed
+- **Flood/visual/architecture rules:** 54/55 passed (1 pre-existing test expects old Incident behavior)
+
+### 9. Known Limitations (Phase 3 Scope)
+- Does not create Incidents (Phase 4)
+- Does not send notifications (Phase 4)
+- Does not implement multi-device correlation (Phase 4)
+- Does not implement cooldown between events (Phase 4)
+- No startup SensorReading replay/reconstruction (Phase 4)
+- No row-level locking for concurrent telemetry (Phase 4)
+- One test (`test_flood_and_motion_assessments`) expects old Incident behavior — documents intentional behavior change
+
+### 10. Files
+- **Created:** `tests/test_seismic_telemetry_integration.py`
+- **Modified:** 
+  - `app/services/risk_service.py` (added state machine integration)
+  - `app/routes/iot.py` (telemetry endpoint integration)
+  - `docs/PROJECT_PROGRESS.md` (this entry)
+- **Unchanged:** `notification_service.py`, `emergency_dispatcher.py`, `hazard_event_service.py`, `risk_engine.py`, all models, all existing tests
+
+### 11. Git commit
+```
+feat(seismic): integrate device event state with telemetry (Phase 3)
+```
+
+### 🏷️ Status
+**M08.3 — SEISMIC TELEMETRY INTEGRATION (PHASE 3) COMPLETE · NO INCIDENTS · NO NOTIFICATIONS · STATE MACHINE LIVE**
+
+---
+
 ## M09 — Authority Response System
 
 ### 1. Objective

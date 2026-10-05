@@ -18,6 +18,16 @@ from app.models import IoTDevice
 from app.models.iot_device import SensorReading
 from app.services import risk_engine
 from app.services.hazard_event_service import auto_create_flood_event_from_river, report_hazard
+from app.services.seismic_state import (
+    SeismicStateMachine,
+    create_motion_observation,
+    motion_level_from_risk_assessment,
+)
+from app.services.seismic_state_persistence import (
+    load_state,
+    save_state,
+    restore_state_machine,
+)
 
 FLOOD_WINDOW = timedelta(minutes=30)
 MOTION_WINDOW = timedelta(seconds=60)
@@ -78,7 +88,11 @@ def motion_assessment(device, now=None):
 
 
 def evaluate_motion(device):
-    """Called by telemetry ingestion after vibration/tilt readings from `device` were stored."""
+    """Called by telemetry ingestion after vibration/tilt readings from `device` were stored.
+    
+    This is the LEGACY path that directly creates/merges Incidents.
+    Kept for backward compatibility and explicit opt-in.
+    """
     assessment = motion_assessment(device)
     if assessment.action_warranted and device.district_id:
         has_coords = device.latitude is not None and device.longitude is not None
@@ -94,6 +108,71 @@ def evaluate_motion(device):
             description=f'{assessment.reasons[0]}. {MOTION_DISCLAIMER}',
             source_reference=f'device_{device.id}',
         )
+    return assessment
+
+
+def evaluate_motion_with_state_machine(device):
+    """Process vibration/tilt readings through the seismic device-event state machine.
+    
+    This is the Phase 3 path: it updates the persistent device-event state
+    but does NOT create Incidents or send notifications.
+    
+    Returns the motion assessment for visibility/debugging.
+    """
+    # Get the motion assessment from the risk engine (existing logic)
+    assessment = motion_assessment(device)
+    
+    # If thresholds not configured, assessment will be 'uncharacterized' — skip state machine
+    if assessment.level == 'uncharacterized':
+        return assessment
+    
+    # Load or create persistent state for this device
+    device_event = load_state(device.id)
+    
+    # Get or create the state machine with configured parameters
+    config = current_app.config
+    recovery_windows = config.get('MOTION_RECOVERY_WINDOWS', 3)
+    gap_tolerance = config.get('MOTION_GAP_TOLERANCE_SECONDS', 300)
+    
+    # Restore state machine with persisted state
+    machine = SeismicStateMachine(
+        recovery_windows=recovery_windows,
+        gap_tolerance_seconds=gap_tolerance,
+    )
+    machine._device_event = device_event
+    
+    # Check for telemetry gap before processing new observations
+    # Use the timestamp of the latest reading as "now"
+    latest_readings = SensorReading.query.filter_by(
+        device_id=device.id,
+        sensor_type='vibration'
+    ).order_by(SensorReading.recorded_at.desc()).first()
+    
+    if latest_readings:
+        machine.check_gap(latest_readings.recorded_at)
+    
+    # Convert assessment to MotionObservation and process
+    observation = create_motion_observation(
+        timestamp=latest_readings.recorded_at if latest_readings else datetime.utcnow(),
+        assessment=assessment,
+    )
+    
+    # Process through state machine
+    transition = machine.process_observation(observation)
+    
+    # Save updated state
+    save_state(device.id, machine._device_event)
+    
+    # Log transition for debugging (without sensitive data)
+    if transition.event_started:
+        current_app.logger.info(f"Seismic device event started: device={device.device_id}")
+    elif transition.event_ended:
+        current_app.logger.info(f"Seismic device event ended: device={device.device_id}")
+    elif transition.gap_entered:
+        current_app.logger.info(f"Seismic telemetry gap: device={device.device_id}")
+    elif transition.recovery_started:
+        current_app.logger.info(f"Seismic recovery started: device={device.device_id}")
+    
     return assessment
 
 
