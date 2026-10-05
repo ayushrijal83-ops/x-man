@@ -320,7 +320,8 @@ class TestPage:
         body = client.get('/monitoring').get_data(as_text=True)
         assert 'leaflet@1.9.4/dist/leaflet.js' in body
         assert 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=' in body
-        assert 'visibilitychange' in body and 'POLL_MS = 30 * 1000' in body
+        # H03.10: 10 s through the shared visibility-aware scheduler (live.js), was 30 s
+        assert 'visibilitychange' in body and 'POLL_MS = 10 * 1000' in body and "XmanLive.every('dashboard'" in body
         assert 'real-time' not in body.lower()
 
     def test_nepali(self, client, world):

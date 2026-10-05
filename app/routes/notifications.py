@@ -216,7 +216,12 @@ def active_emergencies():
     lang = reader_language()
     alerts = [{**n.to_dict(), 'title': notification_service.localized_title(n, lang)}
               for n in rows if emergency_dispatcher.is_emergency(n.type, n.severity)][:5]
-    response = jsonify({'alerts': alerts, 'sound_enabled': bool(current_user.emergency_sound_enabled)})
+    # H03.10: the same per-page status poll also keeps the unread badge and notification lists current
+    # (own notifications only; two indexed queries, nothing is written).
+    latest = db.session.query(db.func.max(Notification.id)).filter(Notification.user_id == current_user.id).scalar()
+    response = jsonify({'alerts': alerts, 'sound_enabled': bool(current_user.emergency_sound_enabled),
+                        'unread_count': notification_service.unread_count(current_user.id),
+                        'latest_notification_id': latest})
     response.headers['Cache-Control'] = 'private, no-store'
     return response
 

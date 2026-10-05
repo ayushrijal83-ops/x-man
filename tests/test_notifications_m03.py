@@ -1,4 +1,5 @@
 """M03 notification system: model, service, targeting, dedup, API/RBAC, IoT flood flow, earthquake, UI."""
+import re
 import pytest
 
 from app.extensions import db
@@ -318,4 +319,5 @@ class TestNotificationCenterPage:
         client.get('/language/set/en')
         body = client.get('/notifications').get_data(as_text=True)
         assert 'No notifications yet.' in body
-        assert 'class="nav-badge"' not in body
+        # H03.10: the badge element always exists so the live status poll can show it, but it is hidden at 0
+        assert re.search(r'class="nav-badge" data-unread-badge[^>]*\shidden>0<', body)

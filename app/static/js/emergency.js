@@ -7,7 +7,13 @@
 (function () {
     'use strict';
 
-    var POLL_MS = 30000;
+    // H03.10: driven by XmanLive (live.js): 10 s while visible, 60 s in a hidden tab (Web Push covers the
+    // background), immediate catch-up when the tab becomes visible, no overlapping requests.
+    var POLL_MS = 10000;
+    var HIDDEN_POLL_MS = 60000;
+    // undefined = no status poll yet. NOT null: the API returns null when the user has no notification at all,
+    // and the first notification after that must count as a change (found in H03.10 browser QA).
+    var lastNotificationId;
     var ALARM_CYCLES = 10;          // beep-beep every 1.5 s, at most ~15 s, then silence
     var csrfMeta = document.querySelector('meta[name="csrf-token"]');
     var csrf = csrfMeta ? csrfMeta.content : '';
@@ -146,16 +152,32 @@
         current = null;
     }
 
+    // One request per page drives: the emergency alert (layer 2), the navbar unread badge, and
+    // pages that refresh when a new notification arrives (xman:status). It only reads; it never creates.
+    function setUnreadBadges(count) {
+        document.querySelectorAll('[data-unread-badge]').forEach(function (b) {
+            b.textContent = count;
+            b.hidden = !count;
+        });
+        var page = document.getElementById('unread-count');
+        if (page) page.textContent = count;
+    }
+
     function poll() {
-        if (!document.getElementById('xman-emergency')) return;
-        fetch('/api/emergency/active', { credentials: 'same-origin' })
-            .then(function (r) { return r.ok ? r.json() : null; })
+        if (!document.getElementById('xman-emergency')) return Promise.resolve();
+        return fetch('/api/emergency/active', { credentials: 'same-origin', cache: 'no-store' })
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
             .then(function (data) {
-                if (!data) return;
                 soundEnabled = !!data.sound_enabled;
                 render(data.alerts || []);
-            })
-            .catch(function () {});
+                if (typeof data.unread_count === 'number') setUnreadBadges(data.unread_count);
+                var latest = data.latest_notification_id;
+                var changed = lastNotificationId !== undefined && latest !== lastNotificationId;
+                lastNotificationId = latest;
+                document.dispatchEvent(new CustomEvent('xman:status', {
+                    detail: { unreadCount: data.unread_count, latestNotificationId: latest, notificationsChanged: changed }
+                }));
+            });
     }
 
     function markRead(id) {
@@ -170,7 +192,7 @@
             setTimeout(function () { if (startAlarm()) { rememberAlarmed(current.id); document.getElementById('em-sound-blocked').hidden = true; } }, 50);
             return;
         }
-        if (e.target.closest('#em-dismiss')) { stopAlarm(); markRead(current.id).then(poll); return; }
+        if (e.target.closest('#em-dismiss')) { stopAlarm(); markRead(current.id).then(refreshStatus); return; }
         var view = e.target.closest('#em-view');
         if (view) {
             e.preventDefault();
@@ -183,15 +205,16 @@
         if (e.key === 'Escape' && current) stopAlarm();
     });
 
+    var statusLoop = null;
+    function refreshStatus() { if (statusLoop) statusLoop.run(); else poll().catch(function () {}); }
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', function (e) {
-            if (e.data && e.data.type === 'xman-push') poll();
+            if (e.data && e.data.type === 'xman-push') refreshStatus();  // a push arrived: show it now
         });
     }
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
     if (document.getElementById('xman-emergency')) {
-        poll();
-        setInterval(poll, POLL_MS);
+        if (window.XmanLive) statusLoop = window.XmanLive.every('status', POLL_MS, poll, { hiddenMs: HIDDEN_POLL_MS });
+        else poll().catch(function () {});
     }
 
     // ------------------------------------------------------------------ layer 3: Web Push opt-in

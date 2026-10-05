@@ -1,0 +1,20 @@
+# Local secrets
+secrets.h
+
+# Arduino generated files
+*.hex
+*.bin
+*.elf
+*.eep
+
+# Build/output directories
+build/
+dist/
+
+# IDE/editor files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

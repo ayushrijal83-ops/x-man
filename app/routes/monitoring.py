@@ -17,7 +17,7 @@ from app.services import authority_response_service as response_service, dashboa
 
 monitoring_bp = Blueprint('monitoring', __name__)
 
-POLL_SECONDS = 30
+POLL_SECONDS = 10  # H03.10: live telemetry/device status (was 30)
 
 
 @monitoring_bp.route('/monitoring')
@@ -52,7 +52,8 @@ def dashboard_data():
     raw = request.args.get('district_id', '').strip()
     district_id = None
     if raw:
-        if not (raw.isascii() and raw.isdigit()) or int(raw) < 1:
+        # bounded: a 20-digit id overflowed SQLite (500) on this frequently polled endpoint (H03.10)
+        if not (raw.isascii() and raw.isdigit()) or not 1 <= int(raw) <= 2**31 - 1:
             return jsonify({'error': 'district_id must be a positive integer'}), 400
         district_id = int(raw)
     try:

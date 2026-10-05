@@ -38,6 +38,11 @@ class Config:
     MOTION_TILT_CHANGE_THRESHOLD_DEG = float(os.environ['MOTION_TILT_CHANGE_THRESHOLD_DEG']) \
         if os.getenv('MOTION_TILT_CHANGE_THRESHOLD_DEG') else None
 
+    # Seismic device-event state machine (Phase 1). Pure in-memory tracking of one device's
+    # abnormal-motion episode. Does not create incidents or notifications.
+    MOTION_RECOVERY_WINDOWS = int(os.getenv('MOTION_RECOVERY_WINDOWS', '3'))
+    MOTION_GAP_TOLERANCE_SECONDS = int(os.getenv('MOTION_GAP_TOLERANCE_SECONDS', '300'))
+
     # M-LIVE-02 camera-node field evidence (POST /api/iot/evidence). Engineering defaults, not validated
     # field values: a mounted phone should sit within NODE_MAX_DISTANCE_KM of its registered location.
     NODE_MAX_DISTANCE_KM = float(os.getenv('NODE_MAX_DISTANCE_KM', '1.0'))

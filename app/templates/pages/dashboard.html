@@ -2,6 +2,8 @@
 {% import "components/ui.html" as ui with context %}
 {% from "components/photo.html" import photo, photo_credit with context %}
 
+{# H03.10: summary cards refresh in place every 30s (live.js); forms and maps are left alone #}
+{% block body_attrs %} data-live-interval="30000"{% endblock %}
 {% block title %}{{ t('dashboard') }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
@@ -43,7 +45,7 @@
     <div class="bento">
         {% include "components/emergency_optin.html" %}
         {# ---------------- local status hero #}
-        <section class="card span-8 depth-scene" aria-labelledby="h-status">
+        <section class="card span-8 depth-scene" aria-labelledby="h-status" data-live="h-status">
             <h2 class="card-title" id="h-status"><i data-lucide="shield-alert"></i> {{ 'Local hazard status'|t }}</h2>
             {% if o %}
                 {% if o.hazards %}
@@ -84,7 +86,7 @@
         </div>
 
         {# ---------------- local hazards + map #}
-        <section class="card span-7" aria-labelledby="h-hazards">
+        <section class="card span-7" aria-labelledby="h-hazards" data-live="h-hazards">
             <h2 class="card-title" id="h-hazards"><i data-lucide="triangle-alert"></i> {{ 'Active hazards in your district'|t }}</h2>
             {% if o and o.hazards %}
             <div class="list">{% for h in o.hazards[:6] %}{{ ui.hazard_row(h) }}{% endfor %}</div>
@@ -103,7 +105,7 @@
         </section>
 
         {# ---------------- alerts + my reports #}
-        <section class="card span-6" aria-labelledby="h-alerts">
+        <section class="card span-6" aria-labelledby="h-alerts" data-live="h-alerts">
             <h2 class="card-title" id="h-alerts"><i data-lucide="bell-ring"></i> {{ 'Recent alerts'|t }} <a class="card-action" href="/notifications">{{ 'View all'|t }}</a></h2>
             {% if home.alerts %}
             <div class="list">
@@ -119,7 +121,7 @@
             </div>
             {% else %}{{ ui.empty('bell', 'No alerts yet.', 'You will be notified about hazards affecting your district.') }}{% endif %}
         </section>
-        <section class="card span-6" aria-labelledby="h-reports">
+        <section class="card span-6" aria-labelledby="h-reports" data-live="h-reports">
             <h2 class="card-title" id="h-reports"><i data-lucide="camera"></i> {{ 'My reports'|t }} <a class="card-action" href="/reports/mine">{{ 'View all'|t }}</a></h2>
             {% if home.my_reports %}
             <div class="list">
@@ -142,7 +144,7 @@
 
         {# ---------------- rivers + roads in the district #}
         {% if o %}
-        <section class="card span-6" aria-labelledby="h-rivers">
+        <section class="card span-6" aria-labelledby="h-rivers" data-live="h-rivers">
             <h2 class="card-title" id="h-rivers"><i data-lucide="waves"></i> {{ 'Rivers'|t }} · {{ home.district.name }}</h2>
             {% if o.rivers %}
             <div class="list">
@@ -154,7 +156,7 @@
             </div>
             {% else %}{{ ui.empty('waves', 'No rivers recorded for this district.') }}{% endif %}
         </section>
-        <section class="card span-6" aria-labelledby="h-roads">
+        <section class="card span-6" aria-labelledby="h-roads" data-live="h-roads">
             <h2 class="card-title" id="h-roads"><i data-lucide="route"></i> {{ 'Road Segments'|t }} · {{ home.district.name }}
                 {% if o.road_total %}<span class="card-action">{{ o.road_total }} {{ 'segments'|t }}</span>{% endif %}</h2>
             {% if o.road_total %}

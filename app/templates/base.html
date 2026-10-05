@@ -25,7 +25,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/xman.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body{% block body_attrs %}{% endblock %}>
     <a class="skip-link" href="#main-content">{{ 'Skip to main content'|t }}</a>
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -40,6 +40,8 @@
     {% block content %}{% endblock %}
 
     {% if current_user.is_authenticated and not current_user.must_change_password %}
+    {# H03.10: one scheduler for all polling on the page (visibility-aware, no overlap, silent backoff) #}
+    <script src="{{ url_for('static', filename='js/live.js') }}"></script>
     {% include "components/emergency_alert.html" %}
     {% endif %}
 

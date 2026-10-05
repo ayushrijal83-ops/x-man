@@ -2,6 +2,8 @@
 {% import "components/ui.html" as ui with context %}
 {% import "components/admin_ui.html" as aui with context %}
 
+{# H03.10: summary cards refresh in place every 30s (live.js); forms and maps are left alone #}
+{% block body_attrs %} data-live-interval="30000"{% endblock %}
 {% block title %}{{ 'Super Admin Control Center'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
@@ -30,7 +32,7 @@
     </div>
 
     <div class="bento">
-        <section class="card span-4" aria-labelledby="h-users">
+        <section class="card span-4" aria-labelledby="h-users" data-live="h-users">
             <h2 class="card-title" id="h-users"><i data-lucide="user-cog"></i> {{ 'Users'|t }}</h2>
             <dl class="kv">
                 <dt>{{ 'Citizens'|t }}</dt><dd>{{ uc.citizen.total }} ({{ uc.citizen.active }} {{ 'active'|t }}, {{ uc.citizen.disabled }} {{ 'disabled'|t }})</dd>
@@ -40,7 +42,7 @@
             <p style="margin-top:12px;"><a href="/admin/users">{{ 'All users'|t }} →</a></p>
         </section>
 
-        <section class="card span-8" aria-labelledby="h-iot">
+        <section class="card span-8" aria-labelledby="h-iot" data-live="h-iot">
             <h2 class="card-title" id="h-iot"><i data-lucide="cpu"></i> {{ 'IoT devices'|t }}</h2>
             {% set i = o.iot %}
             <div class="grid grid-4" style="margin-bottom:12px;">
@@ -58,7 +60,7 @@
             <p class="meta" style="margin-top:8px;">{{ 'Last telemetry received'|t }}: {{ aui.when(i.last_telemetry) }}</p>
         </section>
 
-        <section class="card span-6" aria-labelledby="h-haz">
+        <section class="card span-6" aria-labelledby="h-haz" data-live="h-haz">
             <h2 class="card-title" id="h-haz"><i data-lucide="siren"></i> {{ 'Hazards'|t }}</h2>
             {% set hz = o.hazards %}
             <div class="grid grid-2">
@@ -71,7 +73,7 @@
             <ul class="count-list">{% for name, n in hz.by_district[:8] %}<li><span>{{ name }}</span><strong>{{ n }}</strong></li>{% else %}<li class="meta">{{ 'No active hazards.'|t }}</li>{% endfor %}</ul>
         </section>
 
-        <section class="card span-6" aria-labelledby="h-rep">
+        <section class="card span-6" aria-labelledby="h-rep" data-live="h-rep">
             <h2 class="card-title" id="h-rep"><i data-lucide="camera"></i> {{ 'Citizen reports'|t }}</h2>
             {% set r = o.reports %}
             <ul class="count-list">
@@ -83,7 +85,7 @@
             </ul>
         </section>
 
-        <section class="card span-7" aria-labelledby="h-emerg">
+        <section class="card span-7" aria-labelledby="h-emerg" data-live="h-emerg">
             <h2 class="card-title" id="h-emerg"><i data-lucide="triangle-alert"></i> {{ 'Recent emergency events'|t }}</h2>
             {% if o.recent_emergencies %}
             <div class="list">
@@ -91,7 +93,7 @@
             </div>
             {% else %}{{ ui.empty('shield-check', 'No emergency-level hazards recorded.') }}{% endif %}
         </section>
-        <section class="card span-5" aria-labelledby="h-delivery">
+        <section class="card span-5" aria-labelledby="h-delivery" data-live="h-delivery">
             <h2 class="card-title" id="h-delivery"><i data-lucide="radio-tower"></i> {{ 'Notification delivery'|t }}</h2>
             <dl class="kv">
                 <dt>{{ 'In-app notifications'|t }}</dt><dd><span class="badge badge-success"><i data-lucide="circle-check"></i>{{ 'Active'|t }}</span></dd>
@@ -105,7 +107,7 @@
             <p style="margin-top:12px;"><a href="/admin/notifications">{{ 'Notification status'|t }} →</a> · <a href="/admin/push">{{ 'Web Push'|t }} →</a></p>
         </section>
 
-        <section class="card span-5" aria-labelledby="h-health">
+        <section class="card span-5" aria-labelledby="h-health" data-live="h-health">
             <h2 class="card-title" id="h-health"><i data-lucide="heart-pulse"></i> {{ 'System health'|t }}</h2>
             {% set h = o.health %}
             <dl class="kv">
@@ -117,7 +119,7 @@
             </dl>
             <p style="margin-top:12px;"><a href="/admin/health">{{ 'System health'|t }} →</a></p>
         </section>
-        <section class="card span-7" aria-labelledby="h-audit">
+        <section class="card span-7" aria-labelledby="h-audit" data-live="h-audit">
             <h2 class="card-title" id="h-audit"><i data-lucide="scroll-text"></i> {{ 'Recent administrative actions'|t }}</h2>
             {{ aui.audit_table(o.recent_audit) }}
             <p style="margin-top:12px;"><a href="/admin/audit">{{ 'Full audit log'|t }} →</a></p>

@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% import "components/ui.html" as ui with context %}
 
+{# H03.10: list + actions refresh in place when the status poll reports a new notification #}
+{% block body_attrs %} data-live-on="notifications"{% endblock %}
 {% block title %}{{ 'Notifications'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block extra_css %}
@@ -30,10 +32,13 @@
             <h1><i data-lucide="bell"></i> {{ 'Notifications'|t }}</h1>
             <p style="color: var(--text-muted);"><span id="unread-count">{{ unread_notifications }}</span> {{ 'unread'|t }}</p>
         </div>
+        <div data-live="notif-actions">
         {% if unread_notifications %}
         <button type="button" class="btn btn-outline" id="read-all">{{ 'Mark all as read'|t }}</button>
         {% endif %}
+        </div>
     </div>
+    <div data-live="notif-list">
 
     {% if notifications %}
     <div class="notif-list">
@@ -64,6 +69,7 @@
         <p>{{ 'No notifications yet.'|t }}</p>
     </div>
     {% endif %}
+    </div>
 </div>
 {% endblock %}
 
@@ -73,7 +79,8 @@
     var csrf = document.querySelector('meta[name="csrf-token"]').content;
 
     // "5 minutes ago" in the page language; the absolute UTC time stays as the tooltip.
-    if (window.Intl && Intl.RelativeTimeFormat) {
+    function relativeTimes() {
+        if (!(window.Intl && Intl.RelativeTimeFormat)) return;
         var lang = document.documentElement.lang === 'en' ? 'en' : 'ne';
         var rtf = new Intl.RelativeTimeFormat(lang, {numeric: 'auto'});
         var steps = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60], ['second', 1]];
@@ -88,6 +95,8 @@
             }
         });
     }
+    relativeTimes();
+    document.addEventListener('xman:regions-updated', relativeTimes);  // new cards arrived (live.js)
 
     function post(url) {
         return fetch(url, {
@@ -99,9 +108,7 @@
 
     function setUnread(count) {
         document.getElementById('unread-count').textContent = count;
-        document.querySelectorAll('.nav-badge').forEach(function (b) {
-            if (count) { b.textContent = count; } else { b.remove(); }
-        });
+        document.querySelectorAll('[data-unread-badge]').forEach(function (b) { b.textContent = count; b.hidden = !count; });
         if (!count) { var all = document.getElementById('read-all'); if (all) all.remove(); }
     }
 
@@ -111,25 +118,25 @@
         if (btn) btn.remove();
     }
 
-    document.querySelectorAll('.mark-read').forEach(function (btn) {
-        btn.addEventListener('click', function () {
+    // Delegated: the list can be replaced by a live refresh, so handlers are not bound to the old nodes.
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.mark-read');
+        if (btn) {
             var card = btn.closest('.notif');
             btn.disabled = true;
             post('/api/notifications/' + card.dataset.id + '/read')
                 .then(function (data) { markCardRead(card); setUnread(data.unread_count); })
                 .catch(function () { btn.disabled = false; });
-        });
-    });
-
-    var all = document.getElementById('read-all');
-    if (all) {
-        all.addEventListener('click', function () {
+            return;
+        }
+        var all = e.target.closest('#read-all');
+        if (all) {
             all.disabled = true;
             post('/api/notifications/read-all')
                 .then(function () { document.querySelectorAll('.notif.unread').forEach(markCardRead); setUnread(0); })
                 .catch(function () { all.disabled = false; });
-        });
-    }
+        }
+    });
 })();
 </script>
 {% endblock %}

@@ -257,8 +257,15 @@ def devices():
 
 @admin_bp.route('/devices/status.json')
 def device_status():
-    """Polled by /admin/devices every 30 s: derived UI state only, nothing is written."""
-    return jsonify({'states': {str(k): v for k, v in admin_service.device_states(IoTDevice.query.all()).items()}})
+    """Polled by /admin/devices every 10 s (H03.10): derived state + last-seen text only, nothing written.
+    One query; no key, hash or reading values."""
+    devices = IoTDevice.query.all()
+    response = jsonify({
+        'states': {str(k): v for k, v in admin_service.device_states(devices).items()},
+        'last_seen': {str(d.id): d.last_seen.strftime('%Y-%m-%d %H:%M') if d.last_seen else None for d in devices},
+    })
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 
 def _device_page(device, new_key=None):

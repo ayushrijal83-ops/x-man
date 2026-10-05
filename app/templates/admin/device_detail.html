@@ -2,6 +2,9 @@
 {% import "components/ui.html" as ui with context %}
 {% import "components/admin_ui.html" as aui with context %}
 
+{# H03.10: state, readings, evidence and history refresh in place every 5 s (live.js); the control forms
+   and the one-time key box are never refreshed. #}
+{% block body_attrs %} data-live-interval="5000"{% endblock %}
 {% block title %}{{ device.device_id }} - {{ 'Super Admin'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
@@ -21,6 +24,7 @@
     </section>
     {% endif %}
 
+    <div data-live="device-banner">
     {% if d.state == 'disabled' %}
     <div class="alert alert-error" role="status" style="margin-bottom:16px;">
         <i data-lucide="shield-off"></i>
@@ -32,10 +36,12 @@
     <div class="alert alert-warning" role="status" style="margin-bottom:16px;"><i data-lucide="wifi-off"></i> {{ 'Offline — no telemetry received recently.'|t }}</div>
     {% endif %}
 
+    </div>
+
     <div class="bento">
         <section class="card span-7" aria-labelledby="h-device">
             <h2 class="card-title" id="h-device"><i data-lucide="info"></i> {{ 'Device'|t }}</h2>
-            <dl class="kv">
+            <dl class="kv" data-live="device-info">
                 <dt>{{ 'Device ID'|t }}</dt><dd><code>{{ device.device_id }}</code></dd>
                 <dt>{{ 'Device kind'|t }}</dt><dd>{{ kinds.get(device.kind, device.kind)|t }}</dd>
                 <dt>{{ 'Status'|t }}</dt><dd>{{ aui.device_state(d.state) }}</dd>
@@ -95,7 +101,8 @@
 
         {% if device.kind == 'camera_node' or d.evidence.total %}
         <section class="card span-12" aria-labelledby="h-evidence">
-            <h2 class="card-title" id="h-evidence"><i data-lucide="camera"></i> {{ 'Field evidence'|t }} · {{ d.evidence.total }}</h2>
+            <h2 class="card-title" id="h-evidence" data-live="evidence-total"><i data-lucide="camera"></i> {{ 'Field evidence'|t }} · {{ d.evidence.total }}</h2>
+            <div data-live="evidence">
             <p class="meta">{{ 'Last evidence'|t }}: {{ aui.when(d.evidence.latest) }}{% for s, n in d.evidence.by_status.items() %} · {{ s|t }} {{ n }}{% endfor %}.
                 {{ 'Evidence never sets severity or confirms a hazard; use the hazard lifecycle for decisions.'|t }}</p>
             {% if d.evidence.recent %}
@@ -112,11 +119,13 @@
                 {% endfor %}</tbody>
             </table></div>
             {% else %}{{ ui.empty('camera', 'No field evidence received.') }}{% endif %}
+            </div>
         </section>
         {% endif %}
 
         <section class="card span-12" aria-labelledby="h-latest">
             <h2 class="card-title" id="h-latest"><i data-lucide="gauge"></i> {{ 'Latest reading per sensor'|t }}</h2>
+            <div data-live="latest">
             {% if d.latest %}
             <div class="table-wrap"><table>
                 <thead><tr><th scope="col">{{ 'Sensor'|t }}</th><th scope="col">{{ 'Value'|t }}</th><th scope="col">{{ 'Quality'|t }}</th><th scope="col">{{ 'Received'|t }}</th></tr></thead>
@@ -125,10 +134,11 @@
                 {% endfor %}</tbody>
             </table></div>
             {% else %}{{ ui.empty('gauge', 'This device has not sent telemetry.') }}{% endif %}
+            </div>
         </section>
 
         <section class="card span-12" aria-labelledby="h-telemetry">
-            <h2 class="card-title" id="h-telemetry"><i data-lucide="list"></i> {{ 'Telemetry history'|t }} · {{ d.readings.total }}</h2>
+            <h2 class="card-title" id="h-telemetry" data-live="history-total"><i data-lucide="list"></i> {{ 'Telemetry history'|t }} · {{ d.readings.total }}</h2>
             <form method="get" class="filter-bar">
                 <div class="form-group"><label for="sensor_type">{{ 'Sensor type'|t }}</label>
                     <select id="sensor_type" name="sensor_type" class="form-input"><option value="">{{ 'Any'|t }}</option>
@@ -138,6 +148,7 @@
                         {% for hr in windows %}<option value="{{ hr }}" {% if f.hours == hr %}selected{% endif %}>{{ 'Last'|t }} {{ hr if hr < 168 else 7 }} {{ 'hours'|t if hr < 168 else 'days'|t }}</option>{% endfor %}</select></div>
                 <button class="btn btn-primary" type="submit"><i data-lucide="filter"></i> {{ 'Filter'|t }}</button>
             </form>
+            <div data-live="history">
             {% if d.readings.items %}
             <div class="table-wrap"><table>
                 <thead><tr><th scope="col">{{ 'Received'|t }}</th><th scope="col">{{ 'Recorded'|t }}</th><th scope="col">{{ 'Sensor'|t }}</th><th scope="col">{{ 'Value'|t }}</th><th scope="col">{{ 'Unit'|t }}</th><th scope="col">{{ 'Quality'|t }}</th></tr></thead>
@@ -147,11 +158,14 @@
             </table></div>
             {{ aui.pager(d.readings, 'admin.device_detail', f) }}
             {% else %}{{ ui.empty('list', 'No readings in this period.') }}{% endif %}
+            </div>
         </section>
 
         <section class="card span-12" aria-labelledby="h-audit">
             <h2 class="card-title" id="h-audit"><i data-lucide="scroll-text"></i> {{ 'Administrative history'|t }}</h2>
+            <div data-live="audit">
             {{ aui.audit_table(d.audit, show_target=False) }}
+            </div>
         </section>
     </div>
 </div>

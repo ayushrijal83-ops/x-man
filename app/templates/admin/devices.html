@@ -51,7 +51,7 @@
                 <td>{{ dev.district.name if dev.district else '—' }}</td>
                 <td>{{ dev.river.name if dev.river else '—' }}</td>
                 <td>{{ aui.device_state(states[dev.id], dev.id) }}</td>
-                <td>{{ aui.when(dev.last_seen) }}</td>
+                <td data-last-seen="{{ dev.id }}">{{ aui.when(dev.last_seen) }}</td>
                 <td>{{ dev.firmware_version or '—' }}</td>
                 <td>{% if dev.authority %}<a href="{{ url_for('admin.authority_detail', authority_id=dev.authority_id) }}">{{ dev.authority.name }}</a>{% else %}—{% endif %}</td>
             </tr>
@@ -68,20 +68,22 @@
     var LABELS = {{ {'online': 'Online'|t, 'stale': 'Stale'|t, 'offline': 'Offline — no telemetry received recently'|t,
                      'never': 'Never reported'|t, 'disabled': 'Disabled — telemetry refused'|t}|tojson }};
     var KIND = {online: 'success', stale: 'warning', offline: 'danger', never: 'neutral', disabled: 'neutral'};
+    // H03.10: XmanLive (live.js): every 10 s while visible, paused when hidden, no overlap, silent backoff.
     function poll() {
-        fetch('{{ url_for("admin.device_status") }}', {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (data) {
-                if (!data) { return; }
-                document.querySelectorAll('[data-device-state]').forEach(function (el) {
-                    var state = data.states[el.getAttribute('data-device-state')];
-                    if (!state) { return; }
-                    el.className = 'badge badge-' + KIND[state];
-                    el.querySelector('span').textContent = LABELS[state];
-                });
-            }).catch(function () {});
+        return window.XmanLive.fetchJson('{{ url_for("admin.device_status") }}').then(function (data) {
+            document.querySelectorAll('[data-device-state]').forEach(function (el) {
+                var state = data.states[el.getAttribute('data-device-state')];
+                if (!state) { return; }
+                el.className = 'badge badge-' + KIND[state];
+                el.querySelector('span').textContent = LABELS[state];
+            });
+            document.querySelectorAll('[data-last-seen]').forEach(function (el) {
+                var id = el.getAttribute('data-last-seen');
+                if (id in data.last_seen) { el.textContent = data.last_seen[id] || '—'; }
+            });
+        });
     }
-    setInterval(poll, 30000);
+    window.XmanLive.every('device-states', 10000, poll);
 })();
 </script>
 {% endblock %}

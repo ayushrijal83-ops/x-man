@@ -1676,6 +1676,277 @@ feat(m08): add multi-signal risk engine
 
 ---
 
+## M08.1 — Seismic Device-Event State Machine (Phase 1)
+
+### 1. Status
+Complete. Pure, deterministic in-memory state machine for tracking a single seismic device's
+abnormal-motion episode. **No database changes, no incident creation, no notifications, no
+telemetry endpoint modifications.** This is the foundational layer that later phases will use for
+event/incident correlation.
+
+### 2. Objective
+Separate **device event** (one continuous abnormal-motion episode from one device) from **Incident**
+(the authoritative real-world hazard record that correlates multiple evidence sources). Phase 1
+provides the device-event state machine; Phase 2+ will handle incident correlation.
+
+### 3. Architecture
+```
+SensorReading (vibration/tilt)
+         ↓
+risk_engine.assess_motion() → RiskAssessment (level: elevated_motion | normal_motion | uncharacterized)
+         ↓
+SeismicStateMachine (pure, deterministic, no DB/Flask/HTTP deps)
+         ↓
+Device Event signals: event_started, event_ended, recovery_started, recovery_completed, gap_entered, gap_resumed
+         ↓
+[Future Phase: Incident Correlator]
+```
+
+### 4. States
+| State | Meaning |
+|-------|---------|
+| `QUIET` | No active abnormal-motion event. First `elevated_motion` → `ACTIVE`. |
+| `ACTIVE` | Device experiencing abnormal motion. Continued `elevated_motion` stays `ACTIVE`. `normal_motion` → `RECOVERY`. Telemetry gap → `TELEMETRY_GAP`. |
+| `RECOVERY` | Normal evidence after `ACTIVE`. Counts consecutive recovery windows (default 3). Third consecutive `normal_motion` → `QUIET` (event ended). `elevated_motion` during recovery → back to `ACTIVE` (same event, counter reset). |
+| `TELEMETRY_GAP` | No telemetry for > `MOTION_GAP_TOLERANCE_SECONDS` (default 300s). **Never assumes physical recovery.** Resumed `elevated_motion` → `ACTIVE` (same event, no new start). Resumed `normal_motion` → `RECOVERY` (starts recovery based on actual evidence). |
+
+### 5. State Machine Implementation
+**File:** `app/services/seismic_state.py`
+
+**Core classes:**
+- `SeismicState` (Enum): `QUIET`, `ACTIVE`, `RECOVERY`, `TELEMETRY_GAP`
+- `MotionLevel` (Enum): `NORMAL`, `ELEVATED`, `UNCHARACTERIZED`
+- `MotionObservation` (dataclass): timestamp, level, peak_vibration_mg, vibration_over_threshold, tilt_change_deg
+- `StateTransition` (dataclass): previous_state, new_state, event_started, event_ended, recovery_started, recovery_completed, gap_entered, gap_resumed, abnormal_during_gap, normal_during_gap
+- `SeismicDeviceEvent` (dataclass): in-memory event tracking (state, event_started_at, event_ended_at, peak_vibration_mg, last_observation_at, recovery_window_count, recovery_started_at, gap_entered_at)
+- `SeismicStateMachine`: deterministic processor with `process_observation()` and `check_gap()` methods
+
+**Helpers:**
+- `motion_level_from_risk_assessment()`: converts `RiskAssessment.level` → `MotionLevel`
+- `create_motion_observation()`: builds `MotionObservation` from `RiskAssessment` + optional overrides
+
+### 6. Configuration (`app/config.py`)
+```python
+MOTION_RECOVERY_WINDOWS = int(os.getenv('MOTION_RECOVERY_WINDOWS', '3'))           # consecutive 60s normal windows to confirm recovery
+MOTION_GAP_TOLERANCE_SECONDS = int(os.getenv('MOTION_GAP_TOLERANCE_SECONDS', '300')) # telemetry gap before TELEMETRY_GAP state
+```
+(No `MOTION_COOLDOWN_SECONDS` — cooldown belongs to later event/incident separation.)
+
+### 7. Key Design Decisions
+- **Pure functions only:** No database, no Flask, no HTTP, no wall-clock calls (`datetime.utcnow()`). Caller supplies timestamps.
+- **Deterministic under tests:** Same observations → same transitions. Out-of-order timestamps raise `ValueError`.
+- **Telemetry gap ≠ recovery:** `TELEMETRY_GAP` state explicitly represents uncertainty. No assumption that silence = event ended.
+- **Peak tracking:** Only updates on `ELEVATED` observations. Normal readings don't affect peak.
+- **No multi-device correlation:** One state machine per device. Correlation is a later phase.
+- **Compatible with existing risk engine:** Consumes `RiskAssessment` objects without changing their semantics.
+
+### 8. Test Coverage
+**File:** `tests/test_seismic_state.py` (37 tests)
+
+| Scenario | Test |
+|----------|------|
+| Quiet remains quiet on normal | `test_quiet_remains_quiet_on_normal` |
+| First abnormal starts event | `test_first_abnormal_starts_event` |
+| Continuous abnormal = one event | `test_continuous_abnormal_is_one_event` |
+| Peak tracked | `test_peak_is_tracked` |
+| Recovery begins after active | `test_recovery_begins_on_normal_after_active` |
+| Recovery completes (3 windows) | `test_recovery_completes_after_required_windows` |
+| Recovery interrupted by abnormal | `test_recovery_interrupted_by_abnormal` |
+| No second event on recovery interruption | `test_recovery_interruption_does_not_create_second_event` |
+| Gap is not recovery | `test_telemetry_gap_is_not_recovery` |
+| Abnormal after gap continues event | `test_abnormal_after_gap_continues_event` |
+| Normal after gap enters recovery | `test_normal_after_gap_enters_recovery` |
+| Large timestamp jump | `test_large_timestamp_jump_deterministic` |
+| Out-of-order timestamp rejected | `test_out_of_order_timestamp_raises` |
+| Repeated identical timestamps | `test_repeated_identical_timestamp_accepted` |
+| Extreme vibration values | `test_extreme_vibration_values` |
+| Configurable recovery windows | `test_custom_recovery_windows` |
+| Configurable gap tolerance | `test_custom_gap_tolerance` |
+| All transition signals verified | `test_state_transition_signals_complete` |
+
+**Result:** 37 passed.
+
+### 9. Integration Status
+- **No existing code modified:** `risk_service.py`, `risk_engine.py`, `iot.py`, `hazard_event_service.py`, `notification_service.py` all unchanged.
+- **Existing tests pass:** 103/103 tests pass for seismic/hazard/notification/telemetry modules.
+- **Environment-dependent test:** `test_risk_engine_m08.py::test_disabled_by_default` expects `MOTION_VIBRATION_THRESHOLD_MG` to be `None` by default; the dev `.env` has it set to `85`. This is a pre-existing environment configuration, not a regression.
+
+### 10. Limitations (Phase 1 scope)
+- Does not create Incidents or notifications.
+- Does not handle multi-device correlation (same earthquake on multiple devices).
+- Does not persist state across server restarts (Phase 2 will add `SeismicEventState` model).
+- Does not implement cooldown between events (Phase 2).
+- Does not modify `/api/iot/telemetry` ingestion logic.
+
+### 11. Next Phase
+**Phase 2: Incident Correlator** — will consume device-event signals from this state machine,
+manage per-device persistent state (`SeismicEventState` model), and correlate device events into
+Incidents with proper deduplication, multi-device merging, and new-event notification semantics.
+
+### 12. Files
+- **Created:** `app/services/seismic_state.py`, `tests/test_seismic_state.py`
+- **Modified:** `app/config.py` (added `MOTION_RECOVERY_WINDOWS`, `MOTION_GAP_TOLERANCE_SECONDS`)
+- **Unchanged:** All existing services, routes, models, notifications, emergency dispatcher
+
+### 13. Git commit
+```
+feat(seismic): add pure device event state machine (Phase 1)
+```
+
+### 🏷️ Status
+**M08.1 — SEISMIC DEVICE-EVENT STATE MACHINE (PHASE 1) COMPLETE · PURE · DETERMINISTIC · NO INCIDENTS · NO NOTIFICATIONS**
+
+---
+
+## M08.2 — Seismic Device-Event State Persistence (Phase 2)
+
+### 1. Status
+Complete. Persistent storage for the Phase 1 state machine, enabling restart-safe device-event tracking.
+**No telemetry endpoint modifications, no incident creation, no notifications, no multi-device correlation.**
+
+### 2. Objective
+Persist the Phase 1 `SeismicDeviceEvent` state to SQLite so that server restarts do not lose event continuity.
+The state machine itself remains pure — persistence is a separate adapter layer.
+
+### 3. Architecture
+```
+Phase 1 State Machine (pure)
+         ↓
+SeismicStatePersistence (adapter)
+         ↓
+SeismicEventState (DB model, one row per device)
+         ↓
+[Future Phase 3: telemetry integration + incident correlation]
+```
+
+### 4. Database Model (`app/models/seismic_event_state.py`)
+**Table:** `seismic_event_states` — one row per seismic device (`device_id` unique FK → `iot_devices.id`)
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | Integer | PK |
+| `device_id` | Integer | FK → `iot_devices.id`, unique, cascade delete |
+| `state` | String(20) | `quiet` \| `active` \| `recovery` \| `telemetry_gap` |
+| `event_started_at` | DateTime | When event transitioned QUIET→ACTIVE |
+| `event_ended_at` | DateTime | When recovery completed (QUIET) |
+| `peak_vibration_mg` | Float | Max vibration during current/last event |
+| `last_observation_at` | DateTime | Timestamp of last processed observation |
+| `last_observation_level` | String(20) | `normal` \| `elevated` \| `uncharacterized` (nullable, Phase 1 doesn't track) |
+| `recovery_window_count` | Integer | Consecutive normal windows in RECOVERY |
+| `recovery_started_at` | DateTime | When first normal window entered RECOVERY |
+| `recovery_confirmed_at` | DateTime | When recovery completed (= `event_ended_at`) |
+| `gap_entered_at` | DateTime | When TELEMETRY_GAP state was entered |
+| `created_at` / `updated_at` | DateTime | Standard timestamps |
+
+**Indexes:** Unique index on `device_id` (enforces one state row per device).
+**Foreign Key:** `device_id` → `iot_devices.id` with `ON DELETE CASCADE`.
+
+### 5. Persistence Adapter (`app/services/seismic_state_persistence.py`)
+Pure translation layer — **no transition logic**.
+
+| Function | Purpose |
+|----------|---------|
+| `load_state(device_id)` | Load or create initial QUIET state; returns `SeismicDeviceEvent` |
+| `save_state(device_id, device_event)` | Serialize in-memory state to DB row |
+| `get_or_create_state(device_id)` | Idempotent load/create |
+| `delete_state(device_id)` | Remove persistent state |
+| `get_state_summary(device_id)` | Debugging/monitoring summary dict |
+| `restore_state_machine(device_id, ...)` | **Main Phase 3 entry point** — returns fully initialized `SeismicStateMachine` |
+
+All functions are transaction-agnostic: they `flush()` but don't `commit()`. Caller owns the transaction.
+
+### 6. Migration
+**File:** `migrations/versions/6e2814ab4a6e_add_seismic_event_states_table.py`
+
+```bash
+flask db upgrade    # Creates table, unique index, FK
+flask db downgrade  # Drops table and index
+flask db upgrade    # Re-creates cleanly
+```
+
+Verified: upgrade → downgrade → upgrade cycle preserves all existing tables and data.
+
+### 7. Key Design Decisions
+- **State machine stays pure:** No DB/Flask deps in `seismic_state.py`. Adapter handles all serialization.
+- **No `datetime.utcnow()` in persistence:** Caller supplies timestamps; adapter only stores what Phase 1 provides.
+- **`recovery_confirmed_at` = `event_ended_at`:** Derived from Phase 1 (set when recovery completes).
+- **`last_observation_level` not persisted:** Phase 1 doesn't track it; column left for future use.
+- **TELEMETRY_GAP persists as-is:** Server restart does not auto-resolve gap to recovery or quiet.
+- **One row per device:** Enforced by unique index on `device_id`.
+- **No concurrency locking yet:** SQLite-compatible; Phase 3 will address row-level locking if needed.
+
+### 8. Restart Safety (Verified by Tests)
+| Scenario | Before Restart | After Reload | Behavior |
+|----------|----------------|--------------|----------|
+| ACTIVE event | `ACTIVE`, started 10:00 | `ACTIVE`, started 10:00 | Event continues, no new `event_started` |
+| RECOVERY (2/3) | `RECOVERY`, count=2 | `RECOVERY`, count=2 | Counter preserved, 3rd normal → QUIET |
+| TELEMETRY_GAP | `TELEMETRY_GAP` | `TELEMETRY_GAP` | Gap preserved, no auto-recovery |
+| QUIET | `QUIET` | `QUIET` | Clean state |
+
+**Critical:** Loading persistent state **never** emits `event_started` or `event_ended` signals. Those only come from `process_observation()` on new observations.
+
+### 9. Test Coverage
+**File:** `tests/test_seismic_state_persistence.py` (25 tests)
+
+| Scenario | Test |
+|----------|------|
+| Initial QUIET state | `test_create_initial_state_quiet` |
+| Idempotent get_or_create | `test_get_or_create_idempotent` |
+| State persisted in DB | `test_state_persisted_in_database` |
+| Save/reload ACTIVE | `test_save_and_reload_active` |
+| Save/reload RECOVERY | `test_save_and_reload_recovery` |
+| Recovery counter survives restart | `test_recovery_counter_survives_restart` |
+| Save/reload TELEMETRY_GAP | `test_save_and_reload_telemetry_gap` |
+| Event continues after reload | `test_event_continues_after_reload` |
+| No duplicate event_start | `test_no_new_event_start_after_reload` |
+| Recovery counter survives | `test_recovery_counter_survives` |
+| Gap persists after restart | `test_telemetry_gap_persists` |
+| Reload ACTIVE doesn't end event | `test_reload_active_does_not_end_event` |
+| `check_gap()` works after reload | `test_check_gap_still_works_after_reload` |
+| Unique device_id constraint | `test_unique_device_id_constraint` |
+| Independent devices | `test_independent_state_per_device` |
+| Out-of-order rejected after reload | `test_out_of_order_rejected_after_reload` |
+| Migration upgrade creates table | `test_migration_upgrade_creates_table` |
+| Migration downgrade removes table | `test_migration_downgrade_removes_only_phase2_table` |
+| Delete state | `test_delete_state` |
+| Delete nonexistent | `test_delete_nonexistent_state` |
+| State summary | `test_get_state_summary` |
+| State summary nonexistent | `test_get_state_summary_nonexistent` |
+| Restore state machine helper | `test_restore_state_machine_returns_configured_machine` |
+| Restore QUIET machine | `test_restore_state_machine_QUIET` |
+
+**Result:** 25 passed.
+
+### 10. Integration Status
+- **Phase 1 tests:** 37/37 passed
+- **Phase 2 tests:** 25/25 passed
+- **Regression suite (seismic/hazard/notification/telemetry):** 128/128 passed
+- **No existing code modified:** `risk_service.py`, `risk_engine.py`, `iot.py`, `hazard_event_service.py`, `notification_service.py`, `emergency_dispatcher.py` all unchanged.
+
+### 11. Limitations (Phase 2 Scope)
+- Does not connect to `/api/iot/telemetry` (Phase 3)
+- Does not create Incidents or notifications (Phase 3+)
+- Does not implement multi-device correlation (Phase 3+)
+- Does not implement cooldown between events (Phase 3+)
+- No startup SensorReading replay/reconstruction (Phase 3+)
+- No row-level locking for concurrent telemetry (Phase 3+)
+
+### 12. Files
+- **Created:** `app/models/seismic_event_state.py`, `app/services/seismic_state_persistence.py`, `tests/test_seismic_state_persistence.py`
+- **Modified:** `app/models/__init__.py` (added `SeismicEventState` export)
+- **Migration:** `migrations/versions/6e2814ab4a6e_add_seismic_event_states_table.py`
+- **Unchanged:** All existing services, routes, models, notifications, emergency dispatcher
+
+### 13. Git commit
+```
+feat(seismic): persist device event state (Phase 2)
+```
+
+### 🏷️ Status
+**M08.2 — SEISMIC DEVICE-EVENT STATE PERSISTENCE (PHASE 2) COMPLETE · RESTART-SAFE · NO INCIDENTS · NO NOTIFICATIONS**
+
+---
+
 ## M09 — Authority Response System
 
 ### 1. Objective
@@ -3873,3 +4144,92 @@ frozen** (critical bug fixes only); next: physical flood hardware.
 
 ### 🏷️ Status
 **M-LIVE-05 — ROI-BASED VISUAL MONITORING COMPLETE · MOBILE NODE FROZEN · NEXT: PHYSICAL FLOOD HARDWARE**
+
+
+---
+
+# H03.8 — Seismic Node: ESP32 → X-MAN Telemetry (frozen in H03.9)
+
+Physical prototype **ESP32-SEISMIC-001**: GY-521/MPU6050 (I2C `0x68`, SDA GPIO 21, SCL GPIO 22) on an
+ESP32-D0WD-V3 (Arduino board: **ESP32 Dev Module**). Abnormal-ground-motion **evidence** only — not a certified
+earthquake early-warning instrument, no magnitude, no prediction, no probability.
+
+### Firmware (`xman_seismic/xman_seismic.ino`, documented in `xman_seismic/README.md`)
+- H03.7 local detector kept intact: 200-sample baseline calibration, deviation from baseline (mg),
+  NORMAL / ELEVATED (5 × ≥ 15 mg) / ABNORMAL (8 × ≥ 30 mg), recovery (10 × < 12 mg), 30 s event timeout.
+- H03.8 telemetry layer: every ~2 s the window peak of `|‖a‖ − 1 g| × 1000` mg (clamped to X-MAN's 0–1000 mg
+  range) → `POST /api/iot/telemetry` with only `readings[]`, Bearer device auth. Non-blocking Wi-Fi reconnect
+  (sensor reading continues offline), MPU6050 presence check + recovery, no values sent without a valid sample.
+- Credentials only in `xman_seismic/secrets.h` (gitignored, never tracked); the firmware never prints the key,
+  Wi-Fi password, Authorization header or server URL.
+
+### Verified on hardware (2026-10-04)
+- Compiled for `esp32:esp32:esp32` (core 3.3.12, 0 sketch warnings), uploaded to the ESP32-D0WD-V3 on COM9.
+- Serial: MPU6050 at rest |a| ≈ 1.06 g, baseline deviation ≈ 1–10 mg, state NORMAL; `HTTP status: 201` /
+  `X-MAN telemetry: SUCCESS` every ~2 s.
+- X-MAN (dev DB, read-only check): `vibration` / `mg` / quality `good` readings linked to ESP32-SEISMIC-001,
+  district **Sindhuli**, no river; `last_seen` updated; stored payload contains only `sensor_type`, `value`,
+  `unit`; **0 earthquake incidents** (no `MOTION_*` thresholds configured → motion rule disabled by design).
+- Issues met: placeholder Wi-Fi/server values in `secrets.h`, a port typo, the X-MAN PC's DHCP address
+  changing (.68 → .70 → "connection refused"), COM9 locked by the IDE Serial Monitor, and the CLI monitor
+  holding the board in reset unless DTR/RTS are off.
+
+### Known limitations
+Plain HTTP on the LAN; flash not encrypted; server URL tied to the PC's DHCP address; the telemetry metric
+includes the sensor's static offset (~60–70 mg at rest) — the H03.7 baseline deviation is the cleaner signal
+for a later milestone; thresholds are prototype values. No server, database or migration change.
+
+### 🏷️ Status
+**H03.8 — SEISMIC NODE TELEMETRY COMPLETE · FROZEN (H03.9)**
+
+---
+
+# H03.10 — Live UI / Automatic Data Refresh
+
+**Status: complete, NOT yet committed at the time of this entry.**
+
+### Objective
+New telemetry, device state, notifications and emergency alerts appear without a manual browser refresh,
+using lightweight polling (no WebSockets, Redis, Celery or new services).
+
+### Implementation
+- `app/static/js/live.js` (new): one scheduler for all polling — one loop per data source, requests never
+  overlap, paused while the tab is hidden with immediate catch-up when visible, silent backoff (x2, capped
+  at 60 s) when the server is unreachable.
+- Server-rendered dynamic sections (`data-live`) refresh in place from the same route (same authorization and
+  scoping); forms, maps, filters, scroll position and the one-time API-key display are never refreshed.
+- No new endpoints. `/api/emergency/active` also returns the caller's own unread count and newest notification
+  id (one status poll drives the emergency alert, navbar badge and notification list);
+  `/admin/devices/status.json` also returns last-seen times (Super Admin only); `/api/dashboard` now answers an
+  out-of-range `district_id` with 400 instead of 500.
+- Intervals (visible / hidden): emergency + unread 10 s / 60 s; `/monitoring` 10 s / paused; Super Admin
+  device list 10 s / paused; admin device detail 5 s / paused; citizen, authority and admin dashboards
+  30 s / paused; notification list only when a new notification is detected.
+- The authority hazard-response page stays static on purpose: its sections contain forms, and refreshing them
+  could destroy notes being typed (`/monitoring` is the live view of the same hazards).
+
+### Security / testing
+- Polling only reads: no notification or Web Push is created by polling (tested). Role and district scoping
+  unchanged; no keys, hashes or push secrets in responses; redirects (e.g. to login) are never swapped in.
+- `tests/test_live_updates_h0310.py` + Node harnesses `tests/live_harness.js` (scheduler) and
+  `tests/emergency_status_harness.js` (status poll). Targeted live-update/notification/dashboard tests:
+  91 passed. Full suite before the final browser-QA fix: 1140 passed, 0 failed.
+- Browser QA found and fixed: a user's first notification updated the badge but not the list (null used as
+  the "not polled yet" marker); regression test added.
+
+### Browser acceptance (real system, admin session)
+A telemetry without F5: PASS · B device disable/enable without F5: PASS · C notification without F5: PASS ·
+D emergency alert with one-time sound: PASS · E hidden-tab pause and catch-up: PASS ·
+F failure recovery: automated coverage PASS, browser test not performed ·
+G role/security scoping: automated coverage PASS, browser role test not performed.
+
+### QA side effects
+- The frozen, unchanged H03.8 firmware was re-flashed (the board was running H03.7); telemetry resumed.
+- Three QA hazards titled "QA H03.10 …" were created and rejected; their notifications remain in the
+  development database (no safe test-data cleanup mechanism exists). The device disable/enable QA actions
+  remain in the audit log by design.
+
+### Known limitations
+Polling, not push-based realtime (up to one interval of delay); a disabled device that reported within
+5 minutes shows both "Online" and "Disabled"; the authority hazard-response page is not live; dashboard maps
+are not refreshed.

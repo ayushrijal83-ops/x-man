@@ -23,6 +23,7 @@ from app.models.node_evidence import NodeEvidence
 from app.models.push_subscription import PushSubscription
 from app.models.audit_log import AuditLog
 from app.models.incident_response import IncidentStatusHistory, IncidentInvestigation, IncidentResponseAction
+from app.models.seismic_event_state import SeismicEventState
 
 __all__ = [
     'User',
@@ -52,4 +53,5 @@ __all__ = [
     'IncidentResponseAction',
     'PushSubscription',
     'AuditLog',
+    'SeismicEventState',
 ]

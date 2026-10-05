@@ -123,7 +123,7 @@
     'ago': 'ago'|t, 'disabled': 'Disabled'|t, 'status': 'Status'|t, 'hazard': 'Hazard'|t,
     'ai': 'AI'|t, 'not_analyzed': 'Not analyzed'|t, 'failed': 'Analysis failed'|t, 'unknown': 'unknown'|t,
     'model_confidence': 'Model confidence'|t, 'no_hazard': 'No hazard recognised'|t, 'best_match': 'best match'|t, 'not_on_map': 'Not on the map (no coordinates):'|t,
-    'updated': 'Updated'|t, 'every': 'refreshes every'|t, 'seconds': 's'|t, 'paused': 'paused while tab is hidden'|t,
+    'updated': 'Updated'|t, 'every': 'refreshes every'|t, 'seconds': 's'|t, 'paused': 'paused while tab is hidden'|t, 'reconnecting': 'Connection lost, retrying automatically…'|t,
     'error': 'Could not load dashboard data.'|t, 'nationwide': 'Nationwide'|t, 'your_district': 'District'|t,
     'no_scope': 'Your account is not linked to an authority district.'|t,
     'fresh_rule': 'Online = reported within'|t, 'stale_rule': 'stale = within'|t, 'min': 'min'|t,
@@ -358,40 +358,36 @@
         renderStats(data.statistics);
     }
 
-    var timer = null, districtSelect = document.getElementById('mon-district');
+    // H03.10: XmanLive (live.js) runs this every POLL_MS while visible, pauses in a hidden tab, catches up
+    // on return, never overlaps requests and backs off silently on network/server errors.
+    var districtSelect = document.getElementById('mon-district');
     function status(text) { document.getElementById('mon-updated').textContent = text; }
     function load() {
-        clearTimeout(timer);
         var url = '/api/dashboard';
         if (districtSelect && districtSelect.value) { url += '?district_id=' + encodeURIComponent(districtSelect.value); }
-        fetch(url, {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
+        return fetch(url, {credentials: 'same-origin', headers: {'Accept': 'application/json'}, cache: 'no-store'})
             .then(function (response) {
+                var box = document.getElementById('mon-error');
+                if (response.status >= 400 && response.status < 500 && !response.redirected) {
+                    // a request the user can fix (e.g. a district they may not view): say so, keep polling
+                    return response.json().catch(function () { return {}; }).then(function (data) {
+                        box.textContent = tr('error') + ' ' + (data.error || response.status);
+                        box.hidden = false;
+                    });
+                }
+                if (!response.ok || response.redirected) { throw new Error(response.status); }
                 return response.json().then(function (data) {
-                    if (!response.ok) { throw new Error(data.error || response.statusText); }
-                    return data;
+                    box.hidden = true;
+                    render(data);
+                    status(tr('updated') + ' ' + new Date().toLocaleTimeString() + ' · ' + tr('every') + ' ' + POLL_MS / 1000 + ' ' + tr('seconds'));
                 });
             })
-            .then(function (data) {
-                document.getElementById('mon-error').hidden = true;
-                render(data);
-                status(tr('updated') + ' ' + new Date().toLocaleTimeString() + ' · ' + tr('every') + ' ' + POLL_MS / 1000 + ' ' + tr('seconds'));
-            })
-            .catch(function (err) {
-                var box = document.getElementById('mon-error');
-                box.textContent = tr('error') + ' ' + err.message;
-                box.hidden = false;
-            })
-            .then(schedule);
+            .catch(function (err) { status(tr('reconnecting')); throw err; });  // silent: no alert, no console spam
     }
-    function schedule() {
-        clearTimeout(timer);
-        if (document.hidden) { status(tr('paused')); return; }  // resumes on visibilitychange
-        timer = setTimeout(load, POLL_MS);
-    }
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) { load(); } else { clearTimeout(timer); } });
-    document.getElementById('mon-refresh-btn').addEventListener('click', load);
-    if (districtSelect) { districtSelect.addEventListener('change', function () { firstFit = true; load(); }); }
-    load();
+    var loop = window.XmanLive.every('dashboard', POLL_MS, load);
+    document.addEventListener('visibilitychange', function () { if (document.hidden) { status(tr('paused')); } });
+    document.getElementById('mon-refresh-btn').addEventListener('click', function () { loop.run(); });
+    if (districtSelect) { districtSelect.addEventListener('change', function () { firstFit = true; loop.run(); }); }
 })();
 </script>
 {% endblock %}

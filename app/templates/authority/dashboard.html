@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% import "components/ui.html" as ui with context %}
 
+{# H03.10: summary cards refresh in place every 30s (live.js); forms and maps are left alone #}
+{% block body_attrs %} data-live-interval="30000"{% endblock %}
 {% block title %}{{ 'Authority Dashboard'|t }} - {{ t('app_name') }}{% endblock %}
 
 {% block content %}
@@ -31,7 +33,7 @@
 
     <div class="bento">
         {# ---------------- hazards in jurisdiction #}
-        <section class="card span-7" aria-labelledby="h-hazards">
+        <section class="card span-7" aria-labelledby="h-hazards" data-live="h-hazards">
             <h2 class="card-title" id="h-hazards"><i data-lucide="triangle-alert"></i> {{ 'Active hazards in your jurisdiction'|t }}</h2>
             {% if ops.hazards %}
             <div class="list">
@@ -55,7 +57,7 @@
         </section>
 
         {# ---------------- response work #}
-        <section class="card span-6" aria-labelledby="h-actions">
+        <section class="card span-6" aria-labelledby="h-actions" data-live="h-actions">
             <h2 class="card-title" id="h-actions"><i data-lucide="list-checks"></i> {{ 'Open response actions'|t }}</h2>
             {% if ops.open_actions %}
             <div class="list">
@@ -71,7 +73,7 @@
         </section>
 
         {# ---------------- citizen reports + AI #}
-        <section class="card span-6" aria-labelledby="h-reports">
+        <section class="card span-6" aria-labelledby="h-reports" data-live="h-reports">
             <h2 class="card-title" id="h-reports"><i data-lucide="camera"></i> {{ 'Citizen photo reports'|t }} <a class="card-action" href="/reports/review">{{ 'Review'|t }}</a></h2>
             {% if ops.reports %}
             <div class="list">
@@ -96,7 +98,7 @@
         </section>
 
         {# ---------------- devices #}
-        <section class="card span-12" aria-labelledby="h-devices">
+        <section class="card span-12" aria-labelledby="h-devices" data-live="h-devices">
             <h2 class="card-title" id="h-devices"><i data-lucide="radio-tower"></i> {{ 'IoT devices'|t }}
                 <span class="card-action">{% for label, n in ops.device_freshness.items() if n %}{{ label|t }} {{ n }} {% endfor %}</span></h2>
             {% if ops.devices %}
@@ -119,14 +121,14 @@
         </section>
 
         {# ---------------- legacy civic work #}
-        <section class="card span-4" aria-labelledby="h-complaints">
+        <section class="card span-4" aria-labelledby="h-complaints" data-live="h-complaints">
             <h2 class="card-title" id="h-complaints"><i data-lucide="megaphone"></i> {{ 'Complaints'|t }} <a class="card-action" href="/authority/complaints">{{ total_complaints }}</a></h2>
             <p class="meta" style="margin-bottom:8px;">{% for s in ['pending', 'in_progress', 'resolved', 'rejected'] %}<span class="status-badge status-{{ s }}">{{ s|replace('_', ' ')|t }}: {{ complaint_counts.get(s, 0) }}</span>{% endfor %}</p>
             {% if complaints %}
             <div class="list">{% for c in complaints %}<div class="list-item"><div class="grow"><h3><a href="/authority/complaints/{{ c.id }}">{{ c.ticket_number }}</a></h3><p>{{ c.description[:80] }}</p></div></div>{% endfor %}</div>
             {% else %}{{ ui.empty('megaphone', 'No complaints.') }}{% endif %}
         </section>
-        <section class="card span-4" aria-labelledby="h-projects">
+        <section class="card span-4" aria-labelledby="h-projects" data-live="h-projects">
             <h2 class="card-title" id="h-projects"><i data-lucide="building-2"></i> {{ 'Projects'|t }} <a class="card-action" href="/authority/projects">{{ projects|length }}</a></h2>
             {% if projects %}
             <div class="list">{% for p in projects[:5] %}<div class="list-item"><div class="grow"><h3>{{ p.name }}</h3>
@@ -134,7 +136,7 @@
                 <small class="num">{{ p.progress_percent or 0 }}%</small></div></div>{% endfor %}</div>
             {% else %}{{ ui.empty('building-2', 'No projects assigned.') }}{% endif %}
         </section>
-        <section class="card span-4" aria-labelledby="h-district">
+        <section class="card span-4" aria-labelledby="h-district" data-live="h-district">
             <h2 class="card-title" id="h-district"><i data-lucide="waves"></i> {{ 'Rivers and roads'|t }}</h2>
             {% if rivers %}
             <div class="list">{% for r in rivers[:5] %}<div class="list-item"><div class="grow"><h3>{{ r.name }}</h3><div class="meta"><span class="status-badge status-{{ r.status or 'unknown' }}">{{ (r.status or 'unknown')|t }}</span>{% if r.current_level is not none %}<span class="num">{{ r.current_level }} m</span>{% endif %}</div></div></div>{% endfor %}</div>
